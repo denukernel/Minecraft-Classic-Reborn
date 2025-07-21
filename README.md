@@ -15,6 +15,11 @@ new version of minecraft Classic with more features, new version of remastered s
  - dimensions
  - new inventory
  - new mobs
-
+ - multiplayer
+ - 
  things that will be done:
  - main menu
+
+
+   - NOTE: for now on it's for private testing, check out my channel for more changes.
+   https://www.youtube.com/playlist?list=PLmAitNojbvv70QDiGiSmvXy3Lzhiodnee
