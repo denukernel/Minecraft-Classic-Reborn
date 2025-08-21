@@ -3,23 +3,21 @@ new version of minecraft Classic with more features, new version of remastered s
 
 
  Features made so far:
- - Flat world generator
+ - Main Menu screen
+ - minecraft launcher
  - Commands (spawn and gamemode commands)
  - some new features
- - new creeper ai
- - day night cycle (prototype)
+ - non-block items
+ - day night cycle
+ - new mobs
+ - md3 renderer
 
  not made yet:
  - inventory items
  - infinite terrain
  - dimensions
  - new inventory
- - new mobs
  - multiplayer
  - 
  things that will be done:
- - main menu
-
-
-   - NOTE: for now on it's for private testing, check out my channel for more changes.
-   https://www.youtube.com/playlist?list=PLmAitNojbvv70QDiGiSmvXy3Lzhiodnee
+- sound fixes, the game has no audio yet
