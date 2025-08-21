@@ -13,11 +13,14 @@ new version of minecraft Classic with more features, new version of remastered s
  - md3 renderer
 
  not made yet:
- - inventory items
+ - tile entities
  - infinite terrain
  - dimensions
  - new inventory
  - multiplayer
- - 
+ - f5 camera preview (first person third person)
+ - mods support
+   
  things that will be done:
 - sound fixes, the game has no audio yet
+- nbt data and nbt loader
