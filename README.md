@@ -25,3 +25,6 @@ new version of minecraft Classic with more features, new version of remastered s
  things that will be done:
 - sound fixes, the game has no audio yet
 - nbt data and nbt loader
+
+## License
+The original Minecraft Classic is Copyright (c) 2009-2012 Mojang AB. 
