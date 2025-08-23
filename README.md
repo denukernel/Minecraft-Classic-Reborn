@@ -20,8 +20,8 @@ new version of minecraft Classic with more features, new version of remastered s
  - new inventory
  - multiplayer
  - f5 camera preview (first person third person)
- - mods support
-   
+ - more coming soon
+ -    
  things that will be done:
 - sound fixes, the game has no audio yet
 - nbt data and nbt loader
