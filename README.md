@@ -1,4 +1,5 @@
 -credit to mcraft for srcs!
+### A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, non-block items, and more — built in Java.
 # Minecraft-Classic-Reborn
 new version of minecraft Classic with more features, new version of remastered so far
 
