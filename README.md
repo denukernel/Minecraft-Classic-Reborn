@@ -16,18 +16,17 @@ new version of minecraft Classic with more features, new version of remastered s
  - day night cycle
  - new mobs
  - md3 renderer
+ - infinite terrain
+ - new inventory
 
  not made yet:
  - tile entities
- - infinite terrain
  - dimensions
- - new inventory
  - multiplayer
  - f5 camera preview (first person third person)
  - more coming soon
  -    
  things that will be done:
-- sound fixes, the game has no audio yet
 - nbt data and nbt loader
 
 ## License
