@@ -1,7 +1,7 @@
 <img width="695" height="193" alt="image" src="https://github.com/user-attachments/assets/f506a0a2-9dad-4458-87b6-bdfdda1595f0" />
 <img width="208" height="65" alt="image" src="https://github.com/user-attachments/assets/0c6c2523-e408-453c-a15f-499c78ea5e74" />
 
--credit to mcraft for srcs!
+- credit to mcraft-client and ManiaDevelopment for SOURCES and STUFF!
 ### A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, non-block items, and more — built in Java.
 # Minecraft-Classic-Reborn
 new version of minecraft Classic with more features, new version of remastered so far
