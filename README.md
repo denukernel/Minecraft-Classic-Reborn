@@ -25,7 +25,6 @@ new version of minecraft Classic with more features, new version of remastered s
  - multiplayer
  - f5 camera preview (first person third person)
  - more coming soon
- -    
  things that will be done:
 - nbt data and nbt loader
 
