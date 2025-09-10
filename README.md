@@ -1,6 +1,11 @@
 <img width="695" height="193" alt="image" src="https://github.com/user-attachments/assets/f506a0a2-9dad-4458-87b6-bdfdda1595f0" />
 
 # Minecraft-Classic-Reborn
+⚠️ Legal Disclaimer
+
+This project is not affiliated with, endorsed by, or associated with Mojang, Microsoft, or any of their subsidiaries.
+It is an independent re-imagining of Minecraft Classic 0.30, made for educational and community purposes.
+All rights to the original game belong to Mojang AB / Microsoft.
 
 > Credit to **mcraft-client** and **ManiaDevelopment** for sources and references.  
 > A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, non-block items, infinite terrain, and much more — built in Java.
