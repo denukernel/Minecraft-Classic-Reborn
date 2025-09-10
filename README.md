@@ -49,6 +49,9 @@ All rights to the original game belong to Mojang AB / Microsoft.
 
 ---
 
+## Videos
+[![Gameplay](https://img.youtube.com/vi/0FA7ctPQWiE/0.jpg)](https://www.youtube.com/watch?v=0FA7ctPQWiE>)
+
 ## 🎮 Player Guide
 If you just want to **play the game**:
 1. Go to the [Releases](../../releases) page.
