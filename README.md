@@ -15,7 +15,7 @@ All rights to the original game belong to Mojang AB / Microsoft.
 ## Important Note for Players & Developers
 This project includes **built-in native downloaders and resource downloaders**.  
 
-You do **not** need to drag and drop LWJGL, Sound Resoureces Folder from 2014 manually.  
+You do **not** need to drag and drop LWJGL, Sound Resources Folder from 2014 manually.  
 Everything required will be downloaded automatically the first time you run the launcher.
 
 Give the launcher time to download the resources and you will start hearing audio.
