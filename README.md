@@ -11,7 +11,14 @@ All rights to the original game belong to Mojang AB / Microsoft.
 > A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, non-block items, infinite terrain, and much more — built in Java.
 > Feel free to star if you like it.
 
-### > NOTE: If you have any questions regrading the project or anything, feel free to contact me in discord: mcclassic_ 
+---
+## Important Note for Players & Developers
+This project includes **built-in native downloaders and resource downloaders**.  
+
+You do **not** need to drag and drop LWJGL, Sound Resoureces Folder from 2014 manually.  
+Everything required will be downloaded automatically the first time you run the launcher.
+
+Give the launcher time to download the resources and you will start hearing audio.
 
 ---
 
@@ -39,8 +46,6 @@ All rights to the original game belong to Mojang AB / Microsoft.
 - NBT data and NBT loader  
 
 ---
-
-### **NOTE FOR ALL PLAYERS AND DEVS:** the game has built in native downloaders and resource downloaders, no need to drag and drop anything.
 
 ## 📸 Screenshots
 <img width="1280" height="720" alt="2025-08-29_00 17 31" src="https://github.com/user-attachments/assets/4c4fae63-0340-4144-98cd-a314f379f3bb" />
