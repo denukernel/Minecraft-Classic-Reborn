@@ -9,6 +9,7 @@ All rights to the original game belong to Mojang AB / Microsoft.
 
 > Credit to **mcraft-client** and **ManiaDevelopment** for sources and references.  
 > A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, non-block items, infinite terrain, and much more — built in Java.
+> Feel free to star if you like it.
 
 ### > NOTE: If you have any questions regrading the project or anything, feel free to contact me in discord: mcclassic_ 
 
