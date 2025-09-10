@@ -32,6 +32,8 @@
 
 ---
 
+### **NOTE FOR ALL PLAYERS AND DEVS:** the game has built in native downloaders and resource downloaders, no need to drag and drop anything.
+
 ## 📸 Screenshots
 <img width="1280" height="720" alt="2025-08-29_00 17 31" src="https://github.com/user-attachments/assets/4c4fae63-0340-4144-98cd-a314f379f3bb" />
 <img width="1280" height="720" alt="2025-08-28_15 32 51" src="https://github.com/user-attachments/assets/004fd701-6649-4042-9657-f32859d8592a" />
@@ -42,7 +44,7 @@
 ## 🎮 Player Guide
 If you just want to **play the game**:
 1. Go to the [Releases](../../releases) page.
-2. Download the latest `ClassicRemastered-x.x-all.jar`.
+2. Download the latest `Minecraft-Classic-Reborn-x.x.jar`.
 3. Double-click it to run (Java 16+ required).  
 
 ---
