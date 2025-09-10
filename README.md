@@ -64,6 +64,22 @@ If you just want to **play the game**:
 3. Double-click it to run (Java 16+ required).  
 
 ---
+##  Project Lineage & Status
+
+- **Minecraft Classic 0.30 (Mojang, 2009–2012)**  
+  → The original foundation of Classic gameplay.
+
+- **MCraft-Client / Minecraft Classic Forever**  
+  → A decompiled and cleaned Java version of Classic created by ManiaDevelopment, essential in the Classic modding scene.  
+  Repo remains active on GitHub, creator ceased maintenance in March 2014.  
+  Original website (maníadevelopment.com) is now defunct (offline since ~2014).
+
+- **ClassicCube**, **OpenClassic**, and others  
+  → Built upon MCraft-Client, often beyond its original intent (e.g., ClassicCube ported to C# to focus on multiplayer).
+
+- **Classic-Reborn (this project)**  
+  → Builds directly on the Java MCraft-Client lineage. Expands Classic 0.30 with infinite terrain, mobs, commands, custom launcher — without abandoning the Classic or Java DNA.
+
 
 ## Developer Guide
 
