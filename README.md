@@ -38,7 +38,6 @@ Give the launcher time to download the resources and you will start hearing audi
 ## 🛠️ Planned / Not Yet Implemented
 - Tile entities  
 - Dimensions  
-- Multiplayer  
 - F5 camera preview (toggle between first/third person)  
 - More mobs and features  
 
