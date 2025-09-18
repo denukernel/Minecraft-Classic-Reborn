@@ -1,6 +1,9 @@
 <img width="695" height="193" alt="image" src="https://github.com/user-attachments/assets/f506a0a2-9dad-4458-87b6-bdfdda1595f0" />
 
 # Minecraft-Classic-Reborn
+
+[![GitHub Repo stars](https://img.shields.io/github/stars/denukernel/Minecraft-Classic-Reborn?style=flat-square)](https://github.com/denukernel/Minecraft-Classic-Reborn/stargazers)
+
 ⚠️ Legal Disclaimer
 
 This project is not affiliated with, endorsed by, or associated with Mojang, Microsoft, or any of their subsidiaries.
