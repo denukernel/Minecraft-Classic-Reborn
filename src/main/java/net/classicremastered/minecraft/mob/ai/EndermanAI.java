@@ -1,7 +1,7 @@
 package net.classicremastered.minecraft.mob.ai;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.item.Arrow;
+import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.particle.SmokeParticle;

@@ -2,7 +2,7 @@
 package net.classicremastered.minecraft.mob.ai;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.item.Arrow;
+import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.player.Player;
@@ -175,7 +175,7 @@ public class ThrowTntAI extends BasicAI {
         float offX = -MathHelper.sin(yawRad) * forward;
         float offZ =  MathHelper.cos(yawRad) * forward;
 
-        level.addEntity(new net.classicremastered.minecraft.item.ImpactPrimedTnt(
+        level.addEntity(new net.classicremastered.minecraft.entity.ImpactPrimedTnt(
                 level, mob,
                 mob.x + offX,
                 mob.y + mob.heightOffset + up,

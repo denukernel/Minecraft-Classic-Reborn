@@ -1,7 +1,7 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.item.Item;
+import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 

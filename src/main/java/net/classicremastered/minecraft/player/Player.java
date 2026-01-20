@@ -40,7 +40,7 @@ public class Player extends Mob {
 
     public boolean canFly = false; // set by GameMode.apply(...)
     public boolean isFlying = false; // toggled by key in Creative
-    public float flySpeed = 2.12F; // vertical step per tick while flying
+    public float flySpeed = 1.12F; // vertical step per tick while flying
 
     // --- Mind control state (used by MobControl) ---
     public int mcTicks = 0; // ticks remaining of control
@@ -59,6 +59,8 @@ public class Player extends Mob {
     private int poisonCounter = 0;
     // --- Void handling ---
     private boolean voidWarned = false; // one-shot warning when crossing below y<0 (Creative)
+    private int lastJumpTap = 0;
+    private int jumpTicks = 0;
 
     // --- Sneak (crouch) ---
     public boolean sneaking = false;
@@ -69,6 +71,55 @@ public class Player extends Mob {
 
     public boolean isSneaking() {
         return sneaking;
+    }
+
+    // Player.java
+    public void dropSelectedItem() {
+        if (this.level == null || this.inventory == null)
+            return;
+
+        int id = this.inventory.getSelected();
+        if (id < 0)
+            return; // nothing selected
+
+        int count = this.inventory.getCount(this.inventory.selected);
+        if (count <= 0)
+            return;
+
+        // remove the full stack from inventory
+        this.inventory.removeSelected(count);
+
+        // --- Modern-style drop spawn point ---
+        float eyeHeight = this.heightOffset;
+        float dirX = -MathHelper.sin(this.yRot * (float) Math.PI / 180.0F)
+                * MathHelper.cos(this.xRot * (float) Math.PI / 180.0F);
+        float dirY = -MathHelper.sin(this.xRot * (float) Math.PI / 180.0F);
+        float dirZ = MathHelper.cos(this.yRot * (float) Math.PI / 180.0F)
+                * MathHelper.cos(this.xRot * (float) Math.PI / 180.0F);
+
+        // spawn ~0.5 blocks in front of eyes
+        float spawnX = this.x + dirX * 0.5F;
+        float spawnY = this.y + eyeHeight - 0.3F; // a bit below eyes, like modern MC
+        float spawnZ = this.z + dirZ * 0.5F;
+
+        Entity dropped;
+        if (id >= 256) {
+            dropped = new net.classicremastered.minecraft.entity.DroppedItem(this.level, spawnX, spawnY, spawnZ,
+                    id - 256);
+        } else {
+            dropped = new net.classicremastered.minecraft.entity.DroppedBlock(this.level, spawnX, spawnY, spawnZ, id);
+        }
+
+        // --- Modern throw velocity ---
+        float throwPower = 0.35F;
+        dropped.xd = dirX * throwPower;
+        dropped.yd = dirY * throwPower + 0.1F;
+        dropped.zd = dirZ * throwPower;
+
+        this.level.addEntity(dropped);
+
+        // play sound
+        this.level.playSound("random/pop", this, 0.2F, 1.0F);
     }
 
     /**
@@ -122,6 +173,34 @@ public class Player extends Mob {
             this.bb.z0 = this.z - hw;
             this.bb.z1 = this.z + hw;
         }
+    }
+
+    private void moveRelativeFlying(float strafe, float forward, float accel) {
+        // Creative flight style: horizontal only (pitch ignored)
+        float yawRad = this.yRot * (float) Math.PI / 180F;
+
+        float sinYaw = MathHelper.sin(yawRad);
+        float cosYaw = MathHelper.cos(yawRad);
+
+        // horizontal forward/strafe
+        float fx = -sinYaw * forward + cosYaw * strafe;
+        float fz = cosYaw * forward + sinYaw * strafe;
+
+        // normalize & scale
+        float len = MathHelper.sqrt(fx * fx + fz * fz);
+        if (len < 1e-4f)
+            return;
+        fx /= len;
+        fz /= len;
+        fx *= accel;
+        fz *= accel;
+
+        this.xd += fx;
+        this.zd += fz;
+    }
+
+    private static float lerp(float a, float b, float t) {
+        return a + (b - a) * t;
     }
 
     @Override
@@ -217,31 +296,67 @@ public class Player extends Mob {
         this.setSneaking(sneakHeld && !this.isFlying);
 
         // ===== Movement / physics =====
+
+        // ===== Modern Creative Flight Controls =====
+        boolean jumpHeld = this.input.jumping; // Space
+        boolean ctrlHeld = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL); // Ctrl
+                                                                                                                   // =
+                                                                                                                   // down
+        boolean shiftHeld = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT); // Shift
+                                                                                                                // =
+                                                                                                                // boost
+
+
         if (this.isFlying && this.canFly) {
             this.fallDistance = 0.0F;
-
-            float baseV = this.flySpeed < 0.18F ? 0.18F : this.flySpeed;
-            float vSpeed = boostHeld ? baseV * 2.2F : baseV;
-
-            float dy = 0.0F;
-            if (this.input.jumping)
-                dy += vSpeed;
-            if (descendHeld)
-                dy -= vSpeed;
-
-            this.yd = dy;
-            super.aiStep();
-
-            if (boostHeld) {
-                this.xd *= 1.35F;
-                this.zd *= 1.35F;
-            }
-
-            this.yd = 0.0F;
             this.onGround = false;
 
-            this.xd *= 0.91F;
-            this.zd *= 0.91F;
+            // --- Speeds ---
+            float base = Math.max(0.05F, this.flySpeed);
+            float accel = shiftHeld ? base * 3.0F : base * 2.0F; // Shift = faster
+
+            float strafe = this.input.xxa;
+            float forward = this.input.yya;
+            boolean up = jumpHeld;
+            boolean down = ctrlHeld;
+
+            // --- Directional flight (yaw/pitch aware) ---
+            this.moveRelativeFlying(strafe, forward, accel * 0.35F);
+
+            // --- Vertical control (fixed) ---
+            float vertSpeed = accel * 0.55F;
+            if (up && !down)
+                this.yd = lerp(this.yd, vertSpeed, 0.3F);
+            if (down && !up)
+                this.yd = lerp(this.yd, -vertSpeed, 0.3F);
+            if (!up && !down)
+                this.yd *= 0.6F; // hover
+
+         // --- Move ---
+            this.move(this.xd, this.yd, this.zd);
+
+            // --- Stop instantly if no input ---
+            if (strafe == 0.0F && forward == 0.0F && !up && !down) {
+                this.xd = 0.0F;
+                this.yd = 0.0F;
+                this.zd = 0.0F;
+            } else {
+                // otherwise apply normal damping
+                this.xd *= 0.90F;
+                this.yd *= 0.90F;
+                this.zd *= 0.90F;
+            }
+
+
+            // --- Clamp speed ---
+            float max = shiftHeld ? 1.4F : 0.9F;
+            float mag = MathHelper.sqrt(this.xd * this.xd + this.yd * this.yd + this.zd * this.zd);
+            if (mag > max) {
+                float s = max / mag;
+                this.xd *= s;
+                this.yd *= s;
+                this.zd *= s;
+            }
         } else {
             super.aiStep();
         }

@@ -35,7 +35,7 @@ public class MinecraftApplet extends Applet
 
 		if(getParameter("username") != null && getParameter("sessionid") != null)
 		{
-			minecraft.session = new SessionData(getParameter("username"), getParameter("sessionid"));
+			minecraft.session = new CreativeInventoryBlocks(getParameter("username"), getParameter("sessionid"));
 
 			if(getParameter("mppass") != null)
 			{

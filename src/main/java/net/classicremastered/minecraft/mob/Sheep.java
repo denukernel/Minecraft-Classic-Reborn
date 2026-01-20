@@ -5,7 +5,7 @@ import java.util.Random;
 import org.lwjgl.opengl.GL11;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.item.Item;
+import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.AnimalModel;
@@ -82,7 +82,7 @@ public class Sheep extends QuadrupedMob {
            this.hasFur = false;
            int dropCount = (int)(Math.random() * 3.0D + 1.0D);
            for (int i = 0; i < dropCount; ++i) {
-               this.level.addEntity(new Item(this.level, this.x, this.y, this.z, Block.WHITE_WOOL.id));
+               this.level.addEntity(new DroppedBlock(this.level, this.x, this.y, this.z, Block.WHITE_WOOL.id));
            }
            return;
        } else {

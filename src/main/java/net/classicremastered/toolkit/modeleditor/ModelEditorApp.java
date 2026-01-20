@@ -25,7 +25,7 @@ public final class ModelEditorApp {
         new ModelEditorApp().run();
     }
 
-    private EditableModel model = new EditableModel();
+    private static EditableModel model = new EditableModel();
     private EditablePart selected = null;
 
     // camera
@@ -55,6 +55,10 @@ public final class ModelEditorApp {
 
     // guard to avoid feedback loops when pushing model→UI
     private volatile boolean updatingUI = false;
+ // ---- Hot reload watcher ----
+    private java.nio.file.WatchService watchService;
+    private Thread watcherThread;
+    private volatile boolean watcherRunning = false;
 
     // --- texture state ---
     private int glTextureId = 0;
@@ -110,6 +114,8 @@ public final class ModelEditorApp {
         fd.setFile(ensureExt(defaultName, ext));
         fd.setVisible(true);
         owner.dispose();
+        restoreFocusAfterDialog();
+
         if (fd.getFile() == null)
             return null;
         File chosen = new File(fd.getDirectory(), fd.getFile());
@@ -124,6 +130,8 @@ public final class ModelEditorApp {
         fd.setFile("*" + ext);
         fd.setVisible(true);
         owner.dispose();
+        restoreFocusAfterDialog();
+
         if (fd.getFile() == null)
             return null;
         return new File(fd.getDirectory(), fd.getFile());
@@ -181,13 +189,110 @@ public final class ModelEditorApp {
 
     // True while the mouse cursor is over the GL canvas (updated on EDT)
     private volatile boolean canvasHover = false;
+    private void startHotReloadWatcher() {
+        try {
+            java.nio.file.Path dir = getDefaultDir().toPath();
+            watchService = dir.getFileSystem().newWatchService();
+            dir.register(watchService,
+                    java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY,
+                    java.nio.file.StandardWatchEventKinds.ENTRY_CREATE);
+
+            watcherRunning = true;
+            watcherThread = new Thread(() -> {
+                System.out.println("[watcher] Hot reload active on " + dir);
+                while (watcherRunning) {
+                    java.nio.file.WatchKey key;
+                    try {
+                        key = watchService.take();
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                    for (java.nio.file.WatchEvent<?> ev : key.pollEvents()) {
+                        java.nio.file.WatchEvent.Kind<?> kind = ev.kind();
+                        if (kind == java.nio.file.StandardWatchEventKinds.OVERFLOW)
+                            continue;
+
+                        String fname = ev.context().toString().toLowerCase();
+                        if (fname.endsWith(".png") || fname.endsWith(".jpg")) {
+                            if (texturePath != null && fname.equalsIgnoreCase(new java.io.File(texturePath).getName())) {
+                                System.out.println("[hot-reload] Texture changed → reloading...");
+                                reloadTextureAsync();
+                            }
+                        } else if (fname.endsWith(".mmdl")) {
+                            if (model != null && model.name != null && fname.startsWith(model.name.toLowerCase())) {
+                                System.out.println("[hot-reload] Model changed → reloading...");
+                                reloadModelAsync(fname);
+                            }
+                        }
+                    }
+                    key.reset();
+                }
+            }, "HotReloadWatcher");
+            watcherThread.setDaemon(true);
+            watcherThread.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void stopHotReloadWatcher() {
+        watcherRunning = false;
+        try {
+            if (watchService != null)
+                watchService.close();
+        } catch (Exception ignored) {}
+    }
+    private void reloadTextureAsync() {
+        new Thread(() -> {
+            try {
+                BufferedImage raw = ImageIO.read(new File(texturePath));
+                if (raw == null) return;
+                BufferedImage img = new BufferedImage(raw.getWidth(), raw.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                img.getGraphics().drawImage(raw, 0, 0, null);
+                textureImage = img;
+                glTasks.add(() -> {
+                    int newTex = uploadTexture(img);
+                    if (glTextureId != 0)
+                        GL11.glDeleteTextures(glTextureId);
+                    glTextureId = newTex;
+                    System.out.println("[hot-reload] Texture refreshed OK");
+                });
+                SwingUtilities.invokeLater(() -> {
+                    if (uvPanel != null) uvPanel.setTexture(img);
+                    if (textureLabel != null) textureLabel.setText(textureName);
+                });
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+        }, "ReloadTexture").start();
+    }
+
+    private void reloadModelAsync(String fname) {
+        new Thread(() -> {
+            try {
+                File f = new File(getDefaultDir(), fname);
+                EditableModel loaded = ModelIO.load(f);
+                SwingUtilities.invokeLater(() -> {
+                    pushHistory();
+                    model = loaded;
+                    selected = model.parts.isEmpty() ? null : model.parts.get(0);
+                    refreshPartListSelect(selected);
+                    syncModelFieldsToUI();
+                    if (animText != null)
+                        animText.setText(model.setRotationAnglesCode == null ? "" : model.setRotationAnglesCode);
+                    System.out.println("[hot-reload] Model reloaded from " + f.getName());
+                });
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+        }, "ReloadModel").start();
+    }
 
     public void run() throws Exception {
-        // starter: atlas size like Classic
+        // Initialize default model
         model.name = "new_model";
         model.atlasW = 64;
         model.atlasH = 32;
-        // start with one cube (a head)
         EditablePart head = new EditablePart("head");
         head.u = 0;
         head.v = 0;
@@ -200,35 +305,82 @@ public final class ModelEditorApp {
         selected = head;
         model.parts.add(head);
 
-        // --- Build UI first (EDT) ---
-        SwingUtilities.invokeAndWait(this::buildUI);
-        SwingUtilities.invokeLater(this::installHoverTracking);
-        SwingUtilities.invokeLater(this::installFocusHandlers);
-        SwingUtilities.invokeLater(this::installFocusTracking); // <<< required
-        SwingUtilities.invokeLater(this::installGlobalTabToggle);
-        SwingUtilities.invokeLater(this::installGlobalHotkeys);
+        // --- Build UI safely on Swing EDT ---
+        SwingUtilities.invokeAndWait(() -> {
+            buildUI();
+            installHoverTracking();
+            installFocusHandlers();
+            installFocusTracking();
+            installGlobalTabToggle();
+            installGlobalHotkeys();
+            frame.setVisible(true);
+            startHotReloadWatcher();
+        });
 
-        // Create LWJGL inside AWT Canvas
-        Display.setParent(glCanvas);
-        Display.setDisplayMode(new DisplayMode(glCanvas.getWidth(), glCanvas.getHeight()));
-        Display.setTitle("Model Editor (N new, Del delete, S save, L load, E export, F6 template, J import .java)");
-        Display.create();
-        Keyboard.create();
-        Mouse.create();
+        // Ensure AWT Canvas peer exists before GL
+        SwingUtilities.invokeAndWait(() -> {
+            glCanvas.addNotify();
+        });
 
-        initGL();
+        // --- Start OpenGL render thread ---
+        Thread glThread = new Thread(() -> {
+            try {
+                Display.setParent(glCanvas);
+                Display.setDisplayMode(new DisplayMode(glCanvas.getWidth(), glCanvas.getHeight()));
+                Display.setTitle("Model Editor (Ctrl+S save, Ctrl+L load, Ctrl+E export, TAB toggle)");
+                Display.create();
+                Keyboard.create();
+                Mouse.create();
 
-        while (!Display.isCloseRequested()) {
-            input();
-            render();
-            Display.update();
-            Display.sync(60);
-        }
-        // cleanup
-        if (glTextureId != 0)
-            GL11.glDeleteTextures(glTextureId);
-        Display.destroy();
-        frame.dispose();
+                initGL();
+
+                // --- Main render loop ---
+                while (!Display.isCloseRequested()) {
+                    try {
+                        if (!Display.isVisible()) {
+                            Thread.sleep(50);
+                            continue;
+                        }
+
+                        input();
+                        render();
+                        Display.update();
+                     // Auto-reclaim focus if dialogs stole it
+                        if (Display.isActive() && canvasEdit && frame.isActive() && !glCanvas.isFocusOwner()) {
+                            glCanvas.requestFocusInWindow();
+                        }
+
+                        Display.sync(60);
+
+                    } catch (Throwable loopErr) {
+                        loopErr.printStackTrace();
+                        try {
+                            Thread.sleep(50);
+                        } catch (InterruptedException ignored) {
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                t.printStackTrace();
+            } finally {
+                stopHotReloadWatcher();
+                try {
+                    if (glTextureId != 0)
+                        GL11.glDeleteTextures(glTextureId);
+                    if (Display.isCreated())
+                        Display.destroy();
+                } catch (Throwable ignored) {
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    if (frame != null)
+                        frame.dispose();
+                });
+            }
+        }, "GLThread");
+
+        glThread.setDaemon(false);
+        glThread.start();
     }
 
     private boolean restoring = false; // suppress listeners while restoring snapshots
@@ -239,6 +391,7 @@ public final class ModelEditorApp {
 
     private void doLoad() {
         File in = showOpenDialog("Load Model (.mmdl)", ".mmdl");
+        restoreFocusAfterDialog();
         if (in == null)
             return;
         safe(() -> {
@@ -258,6 +411,7 @@ public final class ModelEditorApp {
 
     private void doImportJava() {
         File in = showOpenDialog("Open Classic Java Model (.java)", ".java");
+        restoreFocusAfterDialog();
         if (in == null)
             return;
         safe(() -> {
@@ -464,6 +618,24 @@ public final class ModelEditorApp {
             }
         });
     }
+    private void restoreFocusAfterDialog() {
+        new javax.swing.Timer(150, e -> {
+            try {
+                installGlobalTabToggle(); // re-register dispatcher
+                if (frame != null) {
+                    frame.toFront();
+                    frame.requestFocus();
+                }
+                if (glCanvas != null && canvasEdit) {
+                    glCanvas.requestFocusInWindow();
+                }
+            } catch (Throwable ignored) {}
+        }) {{
+            setRepeats(false);
+            start();
+        }};
+    }
+
 
     // Enable/disable list keyboard navigation so it won't steal arrow keys while
     // typing
@@ -990,7 +1162,7 @@ public final class ModelEditorApp {
     }
 
     private EditablePart copyPart(EditablePart p) {
-        EditablePart c = new EditablePart(p.name + "_copy");
+        EditablePart c = new EditablePart(safeCopyName(p.name));
         c.u = p.u;
         c.v = p.v;
         c.x = p.x;
@@ -1010,6 +1182,34 @@ public final class ModelEditorApp {
         for (EditablePart ch : p.children)
             c.children.add(copyPart(ch));
         return c;
+    }
+    private static String safeCopyName(String original) {
+        String base = original;
+        if (base.endsWith("_copy")) {
+            int idx = base.lastIndexOf("_copy");
+            base = base.substring(0, idx);
+        }
+        int count = 1;
+        String newName = base + "_copy";
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (EditablePart p : getAllParts(model))
+            existing.add(p.name);
+        while (existing.contains(newName))
+            newName = base + "_copy" + (count++ == 1 ? "" : "_" + count);
+        return newName;
+    }
+
+    private static java.util.List<EditablePart> getAllParts(EditableModel m) {
+        java.util.List<EditablePart> all = new java.util.ArrayList<>();
+        for (EditablePart p : m.parts)
+            collect(all, p);
+        return all;
+    }
+
+    private static void collect(java.util.List<EditablePart> list, EditablePart p) {
+        list.add(p);
+        for (EditablePart c : p.children)
+            collect(list, c);
     }
 
     private EditablePart parentOf(EditablePart target) {
@@ -1074,100 +1274,105 @@ public final class ModelEditorApp {
     // Call once after buildUI() shows the frame (or at end of buildUI()).
 
     private void input() {
-        // Always allow ESC to exit
-        if (Keyboard.isKeyDown(Keyboard.KEY_ESCAPE))
-            System.exit(0);
-
-        // --- Handle global LWJGL keys that must work in BOTH modes ---
-        while (Keyboard.next()) {
-            if (!Keyboard.getEventKeyState())
-                continue;
-            int k = Keyboard.getEventKey();
-
-            if (k == Keyboard.KEY_TAB) {
-                if (canvasEdit) {
-                    enterSwingTypingMode();
-                } else {
-                    enterCanvasEditMode();
-                }
-                updateModeTitle();
-                continue; // skip further handling of this event
-            }
-
-            if (!canvasEdit)
-                continue; // ignore all other LWJGL keys while in Swing typing mode
-
-            // --- Edge-triggered hotkeys while in canvas edit mode ---
-            boolean ctrl = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
-            boolean shift = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
-
-            switch (k) {
-            case Keyboard.KEY_Z:
-                if (ctrl) {
-                    undoAction();
-                }
-                break;
-            case Keyboard.KEY_X:
-            case Keyboard.KEY_Y:
-                if (ctrl) {
-                    redoAction();
-                }
-                break;
-            case Keyboard.KEY_N:
-                if (ctrl && shift)
-                    newProject();
-                break;
-            case Keyboard.KEY_DELETE:
-                if (selected != null) {
-                    pushHistory();
-                    deleteSelected();
-                    refreshPartListSelect(selected);
-                }
-                break;
-
-            // Duplicated hotkeys for when canvas has focus
-            case Keyboard.KEY_S:
-                if (ctrl) {
-                    requestSave();
-                }
-                break;
-            case Keyboard.KEY_L:
-                if (ctrl) {
-                    requestLoad();
-                }
-                break;
-            case Keyboard.KEY_E:
-                if (ctrl) {
-                    requestExportJava();
-                }
-                break;
-            case Keyboard.KEY_F6: {
-                requestExportTemplate();
-            }
-                break;
-            case Keyboard.KEY_J:
-                if (ctrl) {
-                    requestImportJava();
-                }
-                break;
-            }
+        if (!keyboardActive || !Keyboard.isCreated()) {
+            return; // skip polling when typing in Swing
         }
 
-        if (!canvasEdit)
-            return; // stop here if not in canvas mode
+        try {
+            // Always allow ESC to exit
+            if (Keyboard.isKeyDown(Keyboard.KEY_ESCAPE)) {
+                System.exit(0);
+            }
 
+            // --- Handle global LWJGL keys that must work in BOTH modes ---
+            while (Keyboard.isCreated() && Keyboard.next()) {
+                if (!Keyboard.getEventKeyState())
+                    continue;
+
+                int k = Keyboard.getEventKey();
+
+                // TAB toggles between Canvas and Swing typing modes
+                if (k == Keyboard.KEY_TAB) {
+                    if (canvasEdit) {
+                        enterSwingTypingMode();
+                    } else {
+                        enterCanvasEditMode();
+                    }
+                    updateModeTitle();
+                    continue;
+                }
+
+                // Ignore all other keys when in Swing typing mode
+                if (!canvasEdit)
+                    continue;
+
+                boolean ctrl = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+                boolean shift = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+
+                switch (k) {
+                case Keyboard.KEY_Z:
+                    if (ctrl)
+                        undoAction();
+                    break;
+                case Keyboard.KEY_X:
+                case Keyboard.KEY_Y:
+                    if (ctrl)
+                        redoAction();
+                    break;
+                case Keyboard.KEY_N:
+                    if (ctrl && shift)
+                        newProject();
+                    break;
+                case Keyboard.KEY_DELETE:
+                    if (selected != null) {
+                        pushHistory();
+                        deleteSelected();
+                        refreshPartListSelect(selected);
+                    }
+                    break;
+                case Keyboard.KEY_S:
+                    if (ctrl)
+                        requestSave();
+                    break;
+                case Keyboard.KEY_L:
+                    if (ctrl)
+                        requestLoad();
+                    break;
+                case Keyboard.KEY_E:
+                    if (ctrl)
+                        requestExportJava();
+                    break;
+                case Keyboard.KEY_F6:
+                    requestExportTemplate();
+                    break;
+                case Keyboard.KEY_J:
+                    if (ctrl)
+                        requestImportJava();
+                    break;
+                }
+            }
+        } catch (IllegalStateException ignored) {
+            // Happens if keyboard was destroyed mid-frame
+            return;
+        }
+
+        // Skip all camera/movement input if not in canvas mode
+        if (!canvasEdit)
+            return;
+
+        // --- Camera orbit and zoom ---
         final boolean anyMouseDown = Mouse.isButtonDown(0) || Mouse.isButtonDown(1) || Mouse.isButtonDown(2);
         final boolean allow3DInput = canvasHover || anyMouseDown;
 
         if (!allow3DInput)
             return;
 
-        // Camera orbit/zoom
         if (Mouse.isButtonDown(0)) {
             yaw += Mouse.getDX() * 0.4f;
             pitch -= Mouse.getDY() * 0.4f;
             pitch = clamp(pitch, -89, 89);
         }
+
         int wheel = Mouse.getDWheel();
         if (wheel != 0) {
             dist -= wheel * 0.01f;
@@ -1177,7 +1382,7 @@ public final class ModelEditorApp {
         if (selected == null)
             return;
 
-        // Continuous edit keys (unchanged)
+        // Continuous edit keys
         boolean ctrlDown = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
         boolean editingKeys = !ctrlDown && (Keyboard.isKeyDown(Keyboard.KEY_I) || Keyboard.isKeyDown(Keyboard.KEY_K)
                 || Keyboard.isKeyDown(Keyboard.KEY_J) || Keyboard.isKeyDown(Keyboard.KEY_L)
@@ -1200,16 +1405,13 @@ public final class ModelEditorApp {
         }
         if (!editingKeys)
             inKeyEdit = false;
-
-        // (your existing continuous transforms go here)
     }
 
-    // ---- Mode switches ----
-    // ---- Mode switches ----
     private void enterCanvasEditMode() {
         canvasEdit = true;
         typingInSwing = false;
         setListInteractive(true); // re-enable list navigation
+        enableKeyboard(); // reattach LWJGL keyboard
         if (!glCanvas.isFocusable())
             glCanvas.setFocusable(true);
         if (!glCanvas.isFocusOwner())
@@ -1222,11 +1424,26 @@ public final class ModelEditorApp {
         canvasEdit = false;
         typingInSwing = true;
         setListInteractive(false); // prevent list from eating arrow keys
+        disableKeyboard(); // release LWJGL keyboard grab
         if (glCanvas.isFocusable())
             glCanvas.setFocusable(false);
-        focusSidePanel(); // won't override what you just clicked
+        focusSidePanel(); // focus text field
         updateModeTitle();
     }
+
+    // Disable and enable LWJGL keyboard grabbing
+    private boolean keyboardActive = true;
+
+    private void disableKeyboard() {
+        keyboardActive = false;
+        System.out.println("[keyboard] paused for Swing input");
+    }
+
+    private void enableKeyboard() {
+        keyboardActive = true;
+        System.out.println("[keyboard] resumed for Canvas input");
+    }
+
 
     // Run a task on EDT
     private static void onEDT(Runnable r) {
@@ -1504,6 +1721,7 @@ public final class ModelEditorApp {
 
     private void doSave() {
         File out = showSaveDialog("Save Model (.mmdl)", model.name == null ? "model" : model.name, ".mmdl");
+        restoreFocusAfterDialog();
         if (out != null)
             safe(() -> {
                 if (animText != null)
@@ -1546,6 +1764,7 @@ public final class ModelEditorApp {
 
     private void doImportTexture() {
         File in = showOpenDialog("Import Texture (.png/.jpg)", ".png");
+        restoreFocusAfterDialog();
         if (in == null)
             return;
 

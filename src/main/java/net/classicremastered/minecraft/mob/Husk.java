@@ -21,6 +21,6 @@ public final class Husk extends Zombie {
 
     @Override
     protected boolean isSunImmune() {
-        return true; // husks never burn in daylight
+        return true;
     }
 }

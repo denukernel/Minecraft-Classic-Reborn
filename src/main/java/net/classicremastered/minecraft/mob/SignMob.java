@@ -125,7 +125,7 @@ public final class SignMob extends Mob {
     public void die(Entity killer) {
         super.die(killer);
         // Drop wood when killed
-        this.level.addEntity(new net.classicremastered.minecraft.item.Item(
+        this.level.addEntity(new net.classicremastered.minecraft.entity.DroppedBlock(
             this.level, this.x, this.y, this.z,
             net.classicremastered.minecraft.level.tile.Block.WOOD.id
         ));

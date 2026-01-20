@@ -18,82 +18,70 @@ public abstract class HumanoidMob extends Mob {
         super(var1);
         this.setPos(var2, var3, var4);
     }
+ // In HumanoidMob.java
+    public void renderArmorLayer(TextureManager tm, float anim, float runAmt, float age, float yaw, float pitch, float scale) {
+        if (!(helmet || armor)) return;
+
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, tm.load("/armor/plate.png"));
+        GL11.glDisable(GL11.GL_CULL_FACE);
+
+        boolean isBaby = (this instanceof BabyZombie);
+        HumanoidModel armorModel = (HumanoidModel) modelCache
+                .getModel(isBaby ? "humanoid.armor.baby" : "humanoid.armor");
+
+        // Visibility flags
+        armorModel.head.render = helmet;
+        armorModel.body.render = armor;
+        armorModel.rightArm.render = armor;
+        armorModel.leftArm.render = armor;
+        armorModel.rightLeg.render = false;
+        armorModel.leftLeg.render = false;
+
+        if (modelCache.getModel(this.modelName) instanceof HumanoidModel base) {
+            armorModel.head.yaw = base.head.yaw;
+            armorModel.head.pitch = base.head.pitch;
+            armorModel.rightArm.pitch = base.rightArm.pitch;
+            armorModel.rightArm.roll  = base.rightArm.roll;
+            armorModel.leftArm.pitch  = base.leftArm.pitch;
+            armorModel.leftArm.roll   = base.leftArm.roll;
+            armorModel.rightLeg.pitch = base.rightLeg.pitch;
+            armorModel.leftLeg.pitch  = base.leftLeg.pitch;
+        }
+
+        GL11.glPushMatrix();
+        if (isBaby) {
+            float childScale = BabyZombieModel.CHILD_SCALE;
+            float lift = (1.8f * (1.0f - childScale));
+            GL11.glTranslatef(0.0f, lift, 0.0f);
+            GL11.glScalef(childScale, childScale, childScale);
+        }
+
+        armorModel.head.render(scale);
+        armorModel.body.render(scale);
+        armorModel.rightArm.render(scale);
+        armorModel.leftArm.render(scale);
+        GL11.glPopMatrix();
+
+        GL11.glEnable(GL11.GL_CULL_FACE);
+    }
 
     @Override
-    public void renderModel(TextureManager textures, float limbSwing, float limbSwingAmount, float ageInTicks,
-            float netHeadYaw, float headPitch, float scale) {
-        // --- Render base mob (uses its modelName: zombie / zombie_baby etc.) ---
+    public void renderModel(TextureManager textures, float limbSwing, float limbSwingAmount,
+                            float ageInTicks, float netHeadYaw, float headPitch, float scale) {
+        // --- Render base mob ---
         super.renderModel(textures, limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, scale);
 
         Model model = modelCache.getModel(this.modelName);
         GL11.glEnable(GL11.GL_ALPHA_TEST);
+        if (this.allowAlpha) GL11.glEnable(GL11.GL_CULL_FACE);
 
-        if (this.allowAlpha) {
-            GL11.glEnable(GL11.GL_CULL_FACE);
-        }
-
-        // ---- Hair layer (Humanoid only) ----
+        // ---- Hair layer ----
         if (this.hasHair && model instanceof HumanoidModel) {
             GL11.glDisable(GL11.GL_CULL_FACE);
             HumanoidModel h = (HumanoidModel) model;
             h.headwear.yaw = h.head.yaw;
             h.headwear.pitch = h.head.pitch;
             h.headwear.render(scale);
-            GL11.glEnable(GL11.GL_CULL_FACE);
-        }
-
-        // ---- Armor layer ----
-        if (this.armor || this.helmet) {
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, textures.load("/armor/plate.png"));
-            GL11.glDisable(GL11.GL_CULL_FACE);
-
-            // Decide armor model: adult vs baby
-            boolean isBaby = (this instanceof BabyZombie); // extend check if you add other babies
-            HumanoidModel armorModel = (HumanoidModel) modelCache
-                    .getModel(isBaby ? "humanoid.armor.baby" : "humanoid.armor");
-
-            // Which parts are visible
-            armorModel.head.render = this.helmet;
-            armorModel.body.render = this.armor;
-            armorModel.rightArm.render = this.armor;
-            armorModel.leftArm.render = this.armor;
-            armorModel.rightLeg.render = false;
-            armorModel.leftLeg.render = false;
-
-            // Sync rotations if the base model is humanoid-like
-            if (model instanceof HumanoidModel) {
-                HumanoidModel base = (HumanoidModel) model;
-                armorModel.head.yaw = base.head.yaw;
-                armorModel.head.pitch = base.head.pitch;
-
-                armorModel.rightArm.pitch = base.rightArm.pitch;
-                armorModel.rightArm.roll = base.rightArm.roll;
-                armorModel.leftArm.pitch = base.leftArm.pitch;
-                armorModel.leftArm.roll = base.leftArm.roll;
-
-                armorModel.rightLeg.pitch = base.rightLeg.pitch;
-                armorModel.leftLeg.pitch = base.leftLeg.pitch;
-            }
-
-            // === Render armor ===
-            GL11.glPushMatrix();
-            if (isBaby) {
-                // same scale/lift as BabyZombieModel
-                float childScale = BabyZombieModel.CHILD_SCALE;
-                float lift = (1.8f * (1.0f - childScale));
-                GL11.glTranslatef(0.0f, lift, 0.0f);
-                GL11.glScalef(childScale, childScale, childScale);
-            }
-
-            armorModel.head.render(scale);
-            armorModel.body.render(scale);
-            armorModel.rightArm.render(scale);
-            armorModel.leftArm.render(scale);
-            armorModel.rightLeg.render(scale);
-            armorModel.leftLeg.render(scale);
-
-            GL11.glPopMatrix();
-
             GL11.glEnable(GL11.GL_CULL_FACE);
         }
 

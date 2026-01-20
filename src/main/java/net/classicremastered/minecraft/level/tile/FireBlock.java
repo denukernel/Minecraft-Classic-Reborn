@@ -34,27 +34,44 @@ public final class FireBlock extends Block {
         return id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id;
     }
 
-    private static boolean isFlammable(int id) {
+
+    public static boolean isFlammable(int id) {
         if (id <= 0 || id >= Block.blocks.length) return false;
         Block b = Block.blocks[id];
         if (b == null) return false;
-        return b == Block.WOOD || b == Block.LOG || b == Block.LEAVES || b == Block.BOOKSHELF
-                || b == Block.TNT || isWool(id) || b == Block.DANDELION || b == Block.ROSE;
+
+        // Core flammables only
+        if (b == Block.WOOD || b == Block.LOG || b == Block.LEAVES
+            || b == Block.BOOKSHELF || b == Block.TNT
+            || b == Block.DANDELION || b == Block.ROSE
+            || b == Block.BROWN_MUSHROOM || b == Block.RED_MUSHROOM)
+            return true;
+
+        // Wool variants
+        return id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id;
     }
+
 
     private static float burnChance(int id) {
         if (id <= 0) return 0f;
-        if (id == Block.DANDELION.id || id == Block.ROSE.id) return 0.65f;
-        if (id == Block.LEAVES.id) return 0.90f;
-        if (isWool(id)) return 0.85f;
-        if (id == Block.BOOKSHELF.id) return 0.75f;
-        if (id == Block.WOOD.id) return 0.55f;
-        if (id == Block.LOG.id) return 0.35f;
-        if (id == Block.TNT.id) return 1.00f;
-        return 0.40f;
+        Block b = Block.blocks[id];
+        if (b == null) return 0f;
+        if (b == Block.LEAVES) return 0.9f;
+        if (b == Block.LOG) return 0.4f;
+        if (b == Block.WOOD) return 0.55f;
+        if (b == Block.TNT) return 1.0f;
+        if (b == Block.BOOKSHELF) return 0.75f;
+        if (id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id) return 0.85f;
+        if (b == Block.GRASS) return 0.15f;
+        if (b == Block.DIRT) return 0.05f;
+        if (b == Block.DANDELION || b == Block.ROSE) return 0.65f;
+        return 0.35f;
     }
 
+
     private void tryIgniteAir(Level level, int x, int y, int z) {
+        if (Block.blocks[level.getTile(x, y - 1, z)] == Block.BEDROCK) return;
+
         if (!level.isInBounds(x, y, z)) return;
         if (level.getTile(x, y, z) != 0) return;
         if (canStay(level, x, y, z)) level.setTile(x, y, z, this.id);
@@ -95,10 +112,27 @@ public final class FireBlock extends Block {
     }
 
     private boolean canStay(Level level, int x, int y, int z) {
-        return level.isSolidTile(x, y - 1, z) || level.isSolidTile(x + 1, y, z)
-            || level.isSolidTile(x - 1, y, z) || level.isSolidTile(x, y, z + 1)
-            || level.isSolidTile(x, y, z - 1);
+        if (!level.isInBounds(x, y, z)) return false;
+
+        int below = level.getTile(x, y - 1, z);
+
+        // Fire can stay on any solid floor OR any flammable block below (like leaves)
+        if (level.isSolidTile(x, y - 1, z) || isFlammable(below))
+            return true;
+
+        // Side attachments: fire stuck to flammable blocks on the sides
+        if (isFlammable(level.getTile(x + 1, y, z))) return true;
+        if (isFlammable(level.getTile(x - 1, y, z))) return true;
+        if (isFlammable(level.getTile(x, y, z + 1))) return true;
+        if (isFlammable(level.getTile(x, y, z - 1))) return true;
+
+        // Fire sitting directly *inside* flammable block (like leaves cluster)
+        if (isFlammable(level.getTile(x, y, z))) return true;
+
+        return false;
     }
+
+
 
     public static void extinguish(Level level, int x, int y, int z) {
         if (level != null) level.setTile(x, y, z, 0);
@@ -110,10 +144,25 @@ public final class FireBlock extends Block {
             level.setTile(x, y, z, 0);
             return;
         }
+        if (!hasFlammableNeighbor(level, x, y, z) && level.random.nextInt(6) == 0) {
+            level.setTile(x, y, z, 0);
+            return;
+        }
+
         level.addToTickNextTick(x, y, z, this.id);
         if (level.minecraft != null && level.minecraft.levelRenderer != null) {
             int cx = x >> 4, cy = y >> 4, cz = z >> 4;
             level.minecraft.levelRenderer.markDirty(cx, cy, cz);
+        }
+        if (level.minecraft != null && level.minecraft.levelRenderer != null) {
+            int cx = x >> 4, cy = y >> 4, cz = z >> 4;
+            level.minecraft.levelRenderer.markDirty(cx, cy, cz);
+
+            // NEW: also refresh the chunk slice below so ground gets re-lit
+            if (y > 0) {
+                int cyBelow = (y - 1) >> 4;
+                level.minecraft.levelRenderer.markDirty(cx, cyBelow, cz);
+            }
         }
     }
 
@@ -123,14 +172,41 @@ public final class FireBlock extends Block {
             int cx = x >> 4, cy = y >> 4, cz = z >> 4;
             level.minecraft.levelRenderer.markDirty(cx, cy, cz);
         }
+        if (level.minecraft != null && level.minecraft.levelRenderer != null) {
+            int cx = x >> 4, cy = y >> 4, cz = z >> 4;
+            level.minecraft.levelRenderer.markDirty(cx, cy, cz);
+
+            // NEW: also refresh the chunk slice below so ground gets re-lit
+            if (y > 0) {
+                int cyBelow = (y - 1) >> 4;
+                level.minecraft.levelRenderer.markDirty(cx, cyBelow, cz);
+            }
+        }
     }
 
     @Override
     public void update(Level level, int x, int y, int z, Random rand) {
+     // if standing on non-flammable and no flammable neighbor, burn out quickly
+        int below = level.getTile(x, y - 1, z);
+        if (!isFlammable(below) && !hasFlammableNeighbor(level, x, y, z)) {
+            if (rand.nextInt(4) == 0) { // about 1-in-4 chance per tick ≈ few seconds lifetime
+                level.setTile(x, y, z, 0);
+                return;
+            }
+        }
+
         if (!canStay(level, x, y, z)) {
             level.setTile(x, y, z, 0);
             return;
         }
+
+        // Extinguish if near water (rain or adjacent water blocks)
+        if (isNearWater(level, x, y, z)) {
+            level.setTile(x, y, z, 0);
+            return;
+        }
+
+        // Try consuming flammables nearby
         tryConsumeFlammable(level, x + 1, y, z, rand);
         tryConsumeFlammable(level, x - 1, y, z, rand);
         tryConsumeFlammable(level, x, y + 1, z, rand);
@@ -138,21 +214,49 @@ public final class FireBlock extends Block {
         tryConsumeFlammable(level, x, y, z + 1, rand);
         tryConsumeFlammable(level, x, y, z - 1, rand);
 
-        if (rand.nextInt(12) == 0) {
-            tryIgniteAirIfNextToFlammable(level, x + 1, y, z);
-            tryIgniteAirIfNextToFlammable(level, x - 1, y, z);
-            tryIgniteAirIfNextToFlammable(level, x, y + 1, z);
-            if (rand.nextInt(3) == 0) tryIgniteAirIfNextToFlammable(level, x, y - 1, z);
-            tryIgniteAirIfNextToFlammable(level, x, y, z + 1);
-            tryIgniteAirIfNextToFlammable(level, x, y, z - 1);
+        // Chance to spread
+        if (rand.nextInt(15) == 0) {
+            spreadIfNearFlammable(level, x + 1, y, z, rand);
+            spreadIfNearFlammable(level, x - 1, y, z, rand);
+            spreadIfNearFlammable(level, x, y + 1, z, rand);
+            spreadIfNearFlammable(level, x, y - 1, z, rand);
+            spreadIfNearFlammable(level, x, y, z + 1, rand);
+            spreadIfNearFlammable(level, x, y, z - 1, rand);
         }
 
-        if (!hasFlammableNeighbor(level, x, y, z) && rand.nextInt(12) == 0) {
+        // Burn out if isolated
+        if (!hasFlammableNeighbor(level, x, y, z) && rand.nextInt(10) == 0) {
             level.setTile(x, y, z, 0);
             return;
         }
+
         level.addToTickNextTick(x, y, z, this.id);
     }
+
+    private boolean isNearWater(Level level, int x, int y, int z) {
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dz = -1; dz <= 1; dz++) {
+                    int id = level.getTile(x + dx, y + dy, z + dz);
+                    if (id == Block.WATER.id || id == Block.STATIONARY_WATER.id)
+                        return true;
+                }
+        return false;
+    }
+
+    private void spreadIfNearFlammable(Level level, int x, int y, int z, Random rand) {
+        if (!level.isInBounds(x, y, z) || level.getTile(x, y, z) != 0) return;
+        if (isNearWater(level, x, y, z)) return;
+
+        // Reduce speed of spread to avoid wildfire behavior
+        if (hasFlammableNeighbor(level, x, y, z) && rand.nextFloat() < 0.3f) {
+            int below = level.getTile(x, y - 1, z);
+            if (isFlammable(below) || level.isSolidTile(x, y - 1, z))
+                level.setTile(x, y, z, this.id);
+        }
+
+    }
+
 
     private boolean hasFlammableNeighbor(Level level, int x, int y, int z) {
         return isFlammable(level.getTile(x + 1, y, z)) || isFlammable(level.getTile(x - 1, y, z))
@@ -161,13 +265,24 @@ public final class FireBlock extends Block {
     }
 
     private void tryIgniteAirIfNextToFlammable(Level level, int x, int y, int z) {
+        if (Block.blocks[level.getTile(x, y - 1, z)] == Block.BEDROCK) return;
         if (!level.isInBounds(x, y, z)) return;
         if (level.getTile(x, y, z) != 0) return;
-        if (isFlammable(level.getTile(x + 1, y, z)) || isFlammable(level.getTile(x - 1, y, z))
-         || isFlammable(level.getTile(x, y + 1, z)) || isFlammable(level.getTile(x, y - 1, z))
-         || isFlammable(level.getTile(x, y, z + 1)) || isFlammable(level.getTile(x, y, z - 1))) {
-            if (canStay(level, x, y, z)) level.setTile(x, y, z, this.id);
-        }
+
+        // Check if any neighbor is flammable *and* visible to air
+        boolean nearFlammable =
+            isFlammable(level.getTile(x + 1, y, z)) ||
+            isFlammable(level.getTile(x - 1, y, z)) ||
+            isFlammable(level.getTile(x, y, z + 1)) ||
+            isFlammable(level.getTile(x, y, z - 1)) ||
+            isFlammable(level.getTile(x, y - 1, z)) ||
+            isFlammable(level.getTile(x, y + 1, z));
+
+        if (!nearFlammable) return;
+
+        // only light if can actually stay and random chance allows
+        if (canStay(level, x, y, z) && level.random.nextFloat() < 0.8f)
+            level.setTile(x, y, z, this.id);
     }
 
     @Override

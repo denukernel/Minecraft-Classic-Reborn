@@ -3,15 +3,18 @@ package net.classicremastered.minecraft.level.infinite;
 public final class SimpleChunk {
     public static final int SIZE = 16;
 
-    public final int cx, cz, height;
-    public final byte[] blocks;
-    public final byte[] light;
+    public final int cx;
+    public final int cz;
+    public final int height;
+
+    public byte[] blocks;
+    public byte[] light;
 
     public boolean meshed;
     public boolean loaded;
+
     public long lastAccessTick = 0;
 
-    // ✅ corruption flags per chunk
     public boolean corrupted26M = false;
     public boolean corrupted30M = false;
 
@@ -20,7 +23,7 @@ public final class SimpleChunk {
         this.cz = cz;
         this.height = height;
         this.blocks = new byte[SIZE * height * SIZE];
-        this.light  = new byte[SIZE * height * SIZE];
+        this.light = new byte[SIZE * height * SIZE];
         this.meshed = false;
         this.loaded = false;
     }
@@ -35,7 +38,7 @@ public final class SimpleChunk {
     }
 
     public boolean isActive(long currentTick, int timeout) {
-        return loaded && (currentTick - lastAccessTick) <= timeout;
+        return loaded && currentTick - lastAccessTick <= timeout;
     }
 
     public int getLight(int x, int y, int z) {
@@ -47,5 +50,28 @@ public final class SimpleChunk {
         if (value > 15) value = 15;
         light[idx(x, y, z, height)] = (byte) value;
     }
-}
 
+    public void clearCorruptionFlags() {
+        corrupted26M = false;
+        corrupted30M = false;
+    }
+
+    public void resetArrays() {
+        this.blocks = new byte[SIZE * height * SIZE];
+        this.light = new byte[SIZE * height * SIZE];
+        this.meshed = false;
+        this.loaded = false;
+        this.lastAccessTick = 0;
+        corrupted26M = false;
+        corrupted30M = false;
+    }
+
+    public void dispose() {
+        this.blocks = null;
+        this.light = null;
+        this.loaded = false;
+        this.meshed = false;
+        corrupted26M = false;
+        corrupted30M = false;
+    }
+}

@@ -65,6 +65,7 @@ public abstract class Entity implements Serializable {
         this.level = var1;
         this.setPos(0.0F, 0.0F, 0.0F);
     }
+    private int fireTicks = 0;
 
     // --- sound throttling (per tick) ---
     private static int STEP_SOUND_FRAME = -1;
@@ -93,50 +94,6 @@ public abstract class Entity implements Serializable {
     /**
      * Play a positional sound with distance attenuation and (for steps) throttling.
      */
-    public void playPositionalSound(String key, float baseVolume, float pitch) {
-        if (this.level == null || key == null)
-            return;
-
-        // reset “10 per tick” counter each tick
-        int frame = this.level.tickCount;
-        if (frame != STEP_SOUND_FRAME) {
-            STEP_SOUND_FRAME = frame;
-            STEP_SOUND_COUNT = 0;
-        }
-
-        // throttle ONLY footsteps from non-players
-        if (isStepPool(key) && !(this instanceof net.classicremastered.minecraft.player.Player)) {
-            if (STEP_SOUND_COUNT >= 10)
-                return;
-            STEP_SOUND_COUNT++;
-        }
-
-        // distance attenuation relative to nearest player
-        net.classicremastered.minecraft.player.Player listener = this.level.getNearestPlayer(this.x, this.y, this.z, 64f); // search
-                                                                                                                // radius
-        if (listener == null)
-            return;
-
-        float dx = listener.x - this.x;
-        float dy = listener.y - this.y;
-        float dz = listener.z - this.z;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-        // full volume within 8 blocks, fade to 0 by 32 blocks
-        final float fullVolDist = 8f;
-        final float maxHearDist = 32f;
-        if (dist >= maxHearDist)
-            return;
-
-        float vol = baseVolume;
-        if (dist > fullVolDist) {
-            float t = (dist - fullVolDist) / (maxHearDist - fullVolDist); // 0..1
-            vol *= (1f - t); // linear fade (simple and cheap)
-        }
-
-        // hand off to level -> Paulscode
-        this.level.playSound(key, this, vol, pitch);
-    }
 
     public void resetPos() {
         if (this.level != null) {
@@ -368,22 +325,27 @@ public abstract class Entity implements Serializable {
             this.yo = this.y;
             this.zo = this.z;
         }
-        // === Per-tick fire damage (fast crossing burns) ===
         if (this.level != null && this.isInFire()) {
-            // Skip creative-invulnerable players
             if (!(this instanceof net.classicremastered.minecraft.player.Player
                     && net.classicremastered.minecraft.player.Player.creativeInvulnerable)) {
 
-                // Shorten i-frames for fire so repeated ticks can land quickly
-                if (this instanceof net.classicremastered.minecraft.mob.Mob) {
-                    net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) this;
-                    if (m.invulnerableTime > 7)
-                        m.invulnerableTime = 7; // ~0.1s window
+                if (fireTicks <= 0) {
+                    this.hurt(null, 1);   // deal 1 HP
+                    fireTicks = 7;       // 10 ticks = 0.5s at 20 TPS
                 }
 
-                this.hurt(null, 1); // 1 HP every game tick while inside fire
+                // keep short invulnerability window for mobs
+                if (this instanceof net.classicremastered.minecraft.mob.Mob) {
+                    net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) this;
+                    if (m.invulnerableTime > 8)
+                        m.invulnerableTime = 8;
+                }
             }
+        } else {
+            fireTicks = 0; // stop burn timer when leaving fire
         }
+
+        if (fireTicks > 0) fireTicks--;
 
         this.xRotO = this.xRot;
         this.yRotO = this.yRot;
@@ -676,30 +638,30 @@ public abstract class Entity implements Serializable {
         this.level = var1;
     }
 
-    public void playSound(String key, float volume, float pitch) {
-        if (this.level == null)
-            return;
+    public void playPositionalSound(String key, float baseVolume, float pitch) {
+        if (this.level == null || key == null) return;
 
-        Player nearest = this.level.getNearestPlayer(this.x, this.y, this.z, 32f); // 32 block radius
-        if (nearest == null)
-            return;
+        // Step sound throttling only
+        int frame = this.level.tickCount;
+        if (frame != STEP_SOUND_FRAME) {
+            STEP_SOUND_FRAME = frame;
+            STEP_SOUND_COUNT = 0;
+        }
+        if (isStepPool(key) && !(this instanceof net.classicremastered.minecraft.player.Player)) {
+            if (STEP_SOUND_COUNT >= 10) return;
+            STEP_SOUND_COUNT++;
+        }
 
-        float dx = nearest.x - this.x;
-        float dy = nearest.y - this.y;
-        float dz = nearest.z - this.z;
-        float distSq = dx * dx + dy * dy + dz * dz;
-
-        float maxDist = 16f; // full volume within 16 blocks
-        float fadeDist = 32f; // beyond this, silent
-
-        float dist = (float) Math.sqrt(distSq);
-        if (dist > fadeDist)
-            return; // too far, don't play
-
-        float attenuatedVol = volume * (1f - Math.min(1f, (dist - maxDist) / (fadeDist - maxDist)));
-
-        this.level.playSound(key, this, attenuatedVol, pitch);
+        // Hand off unmodified to the sound system (Paulscode handles attenuation itself)
+        this.level.playSound(key, this, baseVolume, pitch);
     }
+
+    public void playSound(String key, float volume, float pitch) {
+        if (this.level == null) return;
+        this.level.playSound(key, this, volume, pitch);
+    }
+
+
 
     private static int stepSoundsThisTick = 0;
 

@@ -403,10 +403,10 @@ public final class ClassicLauncher {
             }
             // Another instance is running → request it to close, then wait and retry.
             requestTakeover();
-            long deadline = System.currentTimeMillis() + 4000; // up to 4s
+            long deadline = System.currentTimeMillis() + 1500; // up to 4s
             while (System.currentTimeMillis() < deadline) {
                 try {
-                    Thread.sleep(150);
+                    Thread.sleep(100);
                 } catch (InterruptedException ignored) {
                 }
                 if (si.tryBind(app))

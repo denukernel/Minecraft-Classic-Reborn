@@ -15,7 +15,7 @@ public final class ModelManager {
    private TNTThrowerModel tntthrower  = new TNTThrowerModel();
    private VillagerModel villager      = new VillagerModel();
    private AnimalModel chicken         = new ChickenModel();
-   private IronGolemModel ironGolem = new IronGolemModel();
+   private IronGolemModel ironGolem    = new IronGolemModel();
 
    private BabyZombieModel   zombieBaby    = new BabyZombieModel();
    private BabyVillagerModel villagerBaby  = new BabyVillagerModel();
@@ -30,6 +30,9 @@ public final class ModelManager {
    // NEW: Bee model
    private BeeModel bee               = new BeeModel();
 
+   // NEW: ShulkerMan model
+   private ModelShulkerMan shulkerman = new ModelShulkerMan();
+
    public final Model getModel(String key) {
       if (key == null) return null;
       switch (key) {
@@ -39,7 +42,7 @@ public final class ModelManager {
          case "skeleton":              return this.skeleton;
          case "zombie":                return this.zombie;
          case "zombiebuilder":         return this.zombie;
-         case "irongolem": return this.ironGolem;
+         case "irongolem":             return this.ironGolem;
 
          case "pig":                   return this.pig;
          case "sheep":                 return this.sheep;
@@ -67,6 +70,9 @@ public final class ModelManager {
 
          // NEW: Bee mapping
          case "bee":                   return this.bee;
+
+         // NEW: ShulkerMan mapping
+         case "shulkerman":            return this.shulkerman;
 
          default:                      return null;
       }

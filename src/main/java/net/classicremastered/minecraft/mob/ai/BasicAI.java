@@ -7,6 +7,8 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ScaryMindZombie;
+import net.classicremastered.minecraft.mob.ai.goal.goal.Goal;
+import net.classicremastered.minecraft.mob.ai.goal.goal.GoalSelector;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 public class BasicAI extends AI {
@@ -31,11 +33,13 @@ public class BasicAI extends AI {
     public float lavaSpeed    = 0.02f;
     public float runMultiplier= 1.40f; // applied when running == true
     public float speedScale   = 1.00f; // global multiplier
-
+    private final GoalSelector selector = new GoalSelector();
+    
     @Override
     public void tick(Level level, Mob mob) {
         ++this.noActionTime;
         Entity player;
+        selector.tick(); // runs active goal
         if (this.noActionTime > 600 && this.random.nextInt(800) == 0 && (player = level.getPlayer()) != null) {
             float dx = player.x - mob.x;
             float dy = player.y - mob.y;
@@ -92,7 +96,9 @@ public class BasicAI extends AI {
             }
         }
     }
-
+    public void addGoal(Goal g) {
+        selector.addGoal(g);
+    }
     protected void jumpFromGround() {
         this.mob.yd = 0.42F;
     }

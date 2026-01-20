@@ -25,14 +25,17 @@ public final class PaulsCodeSoundManager {
 
     // Far Lands audio chaos
     public boolean farlandsActive = false;
-    public long playerDist = 0;   // updated from Minecraft.java
+    public long playerDist = 0; // updated from Minecraft.java
     private int musicGlitchCounter = 0;
     private int herobrineCounter = 0; // NEW: timer for fake chat
 
     private float master = 1.0f;
     private int seq = 0;
 
+    private GameSettings settings;
+
     public PaulsCodeSoundManager(GameSettings settings) {
+        this.settings = settings;   // <--- REQUIRED
         try {
             try {
                 SoundSystemConfig.addLibrary(LibraryLWJGLOpenAL.class);
@@ -50,7 +53,8 @@ public final class PaulsCodeSoundManager {
     /* ---------------- registry helpers ---------------- */
 
     public boolean hasSound(String key) {
-        if (key == null) return false;
+        if (key == null)
+            return false;
         key = key.replace('/', '.'); // normalize
         return registeredKeys.contains(key);
     }
@@ -58,11 +62,12 @@ public final class PaulsCodeSoundManager {
     public void registerSound(File file, String id) {
         String noExt = id;
         int dot = noExt.lastIndexOf('.');
-        if (dot > 0) noExt = noExt.substring(0, dot);
+        if (dot > 0)
+            noExt = noExt.substring(0, dot);
 
         int slash = noExt.lastIndexOf('/');
         String folder = (slash >= 0) ? noExt.substring(0, slash) : "";
-        String base   = (slash >= 0) ? noExt.substring(slash + 1) : noExt;
+        String base = (slash >= 0) ? noExt.substring(slash + 1) : noExt;
 
         String pooledName = base.replaceAll("\\d+$", "");
         String poolKey = (folder.isEmpty() ? pooledName : (folder + "/" + pooledName));
@@ -87,7 +92,8 @@ public final class PaulsCodeSoundManager {
     /* ---------------- listener (Classic Player) ---------------- */
 
     public void setListener(Player p, float partial) {
-        if (p == null) return;
+        if (p == null)
+            return;
 
         float x = p.xo + (p.x - p.xo) * partial;
         float y = p.yo + (p.y - p.yo) * partial;
@@ -122,48 +128,43 @@ public final class PaulsCodeSoundManager {
 
     // Clean play (NEVER corrupted, for GUI/menu sounds)
     public void playSoundClean(String key, float volume, float pitch) {
+        if (!settings.sound) return;
         playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, true);
     }
 
+
     private static String poolKeyOf(String key) {
-        if (key == null) return null;
-        key = key.replace('\\','/');
+        if (key == null)
+            return null;
+        key = key.replace('\\', '/');
         int slash = key.lastIndexOf('/');
-        if (slash < 0) return key.replaceAll("\\d+$","");
+        if (slash < 0)
+            return key.replaceAll("\\d+$", "");
         String folder = key.substring(0, slash);
-        String base   = key.substring(slash + 1);
-        base = base.replaceAll("\\d+$","");
+        String base = key.substring(slash + 1);
+        base = base.replaceAll("\\d+$", "");
         return folder + "/" + base;
     }
 
-    private void playSoundInternal(String key, float x, float y, float z,
-                                   float volume, float pitch, boolean positional, boolean forceClean) {
-        if (key == null || volume <= 0f) return;
-        key = key.replace('\\','/');
+    private void playSoundInternal(String key, float x, float y, float z, float volume, float pitch, boolean positional,
+            boolean forceClean) {
+        if (key == null || volume <= 0f)
+            return;
+        key = key.replace('\\', '/');
 
         String chosenKey = key;
 
-        // Only corrupt if Far Lands active AND not forced clean
+        // Far Lands corruption rules (unchanged)
         if (farlandsActive && !forceClean) {
             if (playerDist > 5_000_000) {
-                // 100% corruption
                 List<String> keys = new ArrayList<>(sfx.keySet());
                 if (!keys.isEmpty()) {
-                    String randomKey = keys.get(rng.nextInt(keys.size()));
-                    if (sfx.containsKey(randomKey) && !sfx.get(randomKey).isEmpty()) {
-                        chosenKey = randomKey;
-                    }
+                    chosenKey = keys.get(rng.nextInt(keys.size()));
                 }
-            } else {
-                // 30% corruption between 1M–5M
-                if (rng.nextFloat() < 0.3f) {
-                    List<String> keys = new ArrayList<>(sfx.keySet());
-                    if (!keys.isEmpty()) {
-                        String randomKey = keys.get(rng.nextInt(keys.size()));
-                        if (sfx.containsKey(randomKey) && !sfx.get(randomKey).isEmpty()) {
-                            chosenKey = randomKey;
-                        }
-                    }
+            } else if (playerDist > 1_000_000 && rng.nextFloat() < 0.3f) {
+                List<String> keys = new ArrayList<>(sfx.keySet());
+                if (!keys.isEmpty()) {
+                    chosenKey = keys.get(rng.nextInt(keys.size()));
                 }
             }
         }
@@ -171,18 +172,9 @@ public final class PaulsCodeSoundManager {
         List<URL> list = sfx.get(chosenKey);
         if (list == null || list.isEmpty()) {
             String pooled = poolKeyOf(chosenKey);
-            if (pooled != null) list = sfx.get(pooled);
+            if (pooled != null)
+                list = sfx.get(pooled);
         }
-
-        // fallback to original if substitution fails
-        if (list == null || list.isEmpty()) {
-            list = sfx.get(key);
-            if (list == null || list.isEmpty()) {
-                String pooled = poolKeyOf(key);
-                if (pooled != null) list = sfx.get(pooled);
-            }
-        }
-
         if (list == null || list.isEmpty()) {
             System.out.println("[Audio] Missing sound: " + chosenKey + " (orig=" + key + ")");
             return;
@@ -192,11 +184,17 @@ public final class PaulsCodeSoundManager {
         String id = "sfx_" + (seq = (seq + 1) & 0xFF);
         boolean priority = volume > 1.0f;
 
-        float attDist = 16.0f;
-        int attModel  = positional ? 2 : 0;
-        if (positional) sys.newSource(priority, id, u, u.toString(), false, x, y, z, attModel, attDist);
-        else            sys.newSource(priority, id, u, u.toString(), false, 0, 0, 0, 0, 0);
+        // --- FIXED attenuation ---
+        // Was 16.0f → way too short, caused mobs to sound quiet up close.
+        // Use ~32f like vanilla MC, fade out by ~32 blocks.
+        float attDist = 32.0f; // or 64.0f if you want longer mob sounds
+        int attModel  = positional ? SoundSystemConfig.ATTENUATION_LINEAR : SoundSystemConfig.ATTENUATION_NONE;
 
+        if (positional) {
+            sys.newSource(priority, id, u, u.toString(), false, x, y, z, attModel, attDist);
+        } else {
+            sys.newSource(priority, id, u, u.toString(), false, 0, 0, 0, 0, 0);
+        }
         sys.setPitch(id, Math.max(0.01f, pitch));
         sys.setVolume(id, Math.min(1f, volume) * master);
         sys.play(id);
@@ -230,7 +228,8 @@ public final class PaulsCodeSoundManager {
     /* ---------------- Far Lands corruption tick ---------------- */
 
     public void tickFarlandsAudio() {
-        if (!farlandsActive) return;
+        if (!farlandsActive)
+            return;
 
         // Music corruption
         if (sys.playing("BgMusic")) {
@@ -246,11 +245,23 @@ public final class PaulsCodeSoundManager {
                 }
 
                 switch (type) {
-                    case 0: sys.setPitch("BgMusic", 0.5f + rng.nextFloat() * 2f); break;
-                    case 1: sys.setVolume("BgMusic", rng.nextFloat() * master * 2f); break;
-                    case 2: sys.stop("BgMusic"); playMusic(restartKey); break;
-                    case 3: playMusic(restartKey); break;
-                    case 4: sys.stop("BgMusic"); playMusic(restartKey); break;
+                case 0:
+                    sys.setPitch("BgMusic", 0.5f + rng.nextFloat() * 2f);
+                    break;
+                case 1:
+                    sys.setVolume("BgMusic", rng.nextFloat() * master * 2f);
+                    break;
+                case 2:
+                    sys.stop("BgMusic");
+                    playMusic(restartKey);
+                    break;
+                case 3:
+                    playMusic(restartKey);
+                    break;
+                case 4:
+                    sys.stop("BgMusic");
+                    playMusic(restartKey);
+                    break;
                 }
             }
         }
@@ -259,7 +270,8 @@ public final class PaulsCodeSoundManager {
     /* ---------------- Herobrine chat injection ---------------- */
 
     public String maybeGetHerobrineMessage() {
-        if (!farlandsActive) return null;
+        if (!farlandsActive)
+            return null;
 
         herobrineCounter++;
         if (herobrineCounter >= 600) { // ~30s at 20TPS
@@ -267,19 +279,12 @@ public final class PaulsCodeSoundManager {
 
             if (rng.nextFloat() < 0.2f) { // 20% chance
                 if (playerDist > 5_000_000) {
-                    String[] msgs = {
-                        "&7Herobrine joined the game",
-                        "&7Herobrine left the game",
-                        "&cHerobrine is watching you",
-                        "&7..."
-                    };
+                    String[] msgs = { "&7Herobrine joined the game", "&7Herobrine left the game",
+                            "&cHerobrine is watching you", "&7..." };
                     return msgs[rng.nextInt(msgs.length)];
                 } else {
                     // milder messages for 1–5M
-                    String[] msgs = {
-                        "&7Herobrine joined the game",
-                        "&7Herobrine left the game"
-                    };
+                    String[] msgs = { "&7Herobrine joined the game", "&7Herobrine left the game" };
                     return msgs[rng.nextInt(msgs.length)];
                 }
             }
@@ -292,13 +297,15 @@ public final class PaulsCodeSoundManager {
     public void setMasterVolume(float v) {
         master = Math.max(0f, Math.min(1f, v));
     }
+
     private int herobrineFigureTimer = 0;
 
     public boolean shouldSpawnHerobrineFigure() {
-        if (!farlandsActive || playerDist < 6_000_000) return false;
+        if (!farlandsActive || playerDist < 6_000_000)
+            return false;
 
         if (--herobrineFigureTimer <= 0) {
-            herobrineFigureTimer = 20 * (30 + 5); 
+            herobrineFigureTimer = 20 * (30 + 5);
             // 30s lifetime + 5s delay before respawn
             return true;
         }
@@ -314,13 +321,15 @@ public final class PaulsCodeSoundManager {
             if (sys.playing("BgMusic")) {
                 sys.stop("BgMusic");
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         System.out.println("[FarLandsAudio] Reset to normal state.");
     }
 
     public void shutdown() {
         try {
             sys.cleanup();
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
     }
 }

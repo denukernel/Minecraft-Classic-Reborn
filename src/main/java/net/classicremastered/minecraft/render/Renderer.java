@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.model.HumanoidModel;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Inventory;
 import net.classicremastered.minecraft.player.Player;
@@ -44,6 +45,76 @@ public final class Renderer {
         float z = p.zo + (p.z - p.zo) * var1;
         return new Vec3D(x, y, z);
     }
+
+// Renderer.java
+public void setupCamera(float partial) {
+    Player p = this.minecraft.player;
+    if (p == null) return;
+
+    float yaw   = p.yRotO + (p.yRot - p.yRotO) * partial;
+    float pitch = p.xRotO + (p.xRot - p.xRotO) * partial;
+
+    if (minecraft.cameraMode == 0) {
+        // ===== First Person =====
+        GL11.glRotatef(pitch, 1.0F, 0.0F, 0.0F);
+        GL11.glRotatef(yaw,   0.0F, 1.0F, 0.0F);
+
+        float camX = p.xo + (p.x - p.xo) * partial;
+        float camY = p.yo + (p.y - p.yo) * partial;
+        float camZ = p.zo + (p.z - p.zo) * partial;
+        GL11.glTranslatef(-camX, -camY, -camZ);
+        return;
+    }
+
+    // ===== Third Person =====
+    float dist = 4.0F;
+    float lookYaw = yaw;
+    if (minecraft.cameraMode == 2) { // front view
+        lookYaw += 180.0F;
+    }
+
+    double dirX = -MathHelper.sin(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(pitch * (float)Math.PI / 180.0F);
+    double dirY = -MathHelper.sin(pitch * (float)Math.PI / 180.0F);
+    double dirZ =  MathHelper.cos(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(pitch * (float)Math.PI / 180.0F);
+
+    float camX = p.xo + (p.x - p.xo) * partial - (float)(dirX * dist);
+    float camY = p.yo + (p.y - p.yo) * partial + p.heightOffset + 0.2F - (float)(dirY * dist);
+    float camZ = p.zo + (p.z - p.zo) * partial - (float)(dirZ * dist);
+
+    GL11.glRotatef(pitch, 1.0F, 0.0F, 0.0F);
+    GL11.glRotatef(yaw,   0.0F, 1.0F, 0.0F);
+    GL11.glTranslatef(-camX, -camY, -camZ);
+
+    // ===== Render the player model in third person =====
+    HumanoidModel model = p.getModel();
+    if (model != null) {
+        GL11.glPushMatrix();
+
+        // move to interpolated player position
+        float px = p.xo + (p.x - p.xo) * partial;
+        float py = p.yo + (p.y - p.yo) * partial;
+        float pz = p.zo + (p.z - p.zo) * partial;
+        GL11.glTranslatef(px, py - 1.62F, pz);
+
+        // rotate body to face correctly
+        GL11.glRotatef(-p.yRot, 0F, 1F, 0F);
+        GL11.glScalef(0.9375F, 0.9375F, 0.9375F);
+        GL11.glScalef(1F, -1F, 1F); // flip Y axis like normal entity rendering
+
+        // animate and render
+        float limbSwing       = p.walkDist;
+        float limbSwingAmount = p.walkDist - p.walkDistO;
+        float ageInTicks      = p.tickCount + partial;
+        float netHeadYaw      = yaw - p.yRot;
+        float headPitch       = -pitch;
+
+        p.bindTexture(minecraft.textureManager);
+        model.render(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, 0.0625F);
+
+        GL11.glPopMatrix();
+    }
+}
+
 
     public void hurtEffect(float partial) {
         Player pl = this.minecraft.player;
@@ -231,7 +302,8 @@ public final class Renderer {
     public void renderHeldItem() {
         if (minecraft == null || minecraft.player == null)
             return;
-
+        if (minecraft.cameraMode != 0)
+            return;
         int selId = minecraft.player.inventory.getSelected();
         if (selId < 256)
             return; // only items here

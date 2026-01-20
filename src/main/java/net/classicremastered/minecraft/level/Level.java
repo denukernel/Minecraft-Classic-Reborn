@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.IronGolem;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.phys.AABB;
@@ -67,6 +68,8 @@ public class Level implements Serializable {
     public float renderPartial = 0f; // set each frame before rendering
     // === Apocalypse overrides ===
     public boolean forceRainbowSky = false;
+    public transient LightEngine lightEngine = new LightEngine(this);
+    public final LevelHelper helper;
 
     public Level() {
         this.randId = this.random.nextInt();
@@ -75,6 +78,7 @@ public class Level implements Serializable {
         this.unprocessed = 0;
         this.tickCount = 0;
         this.growTrees = false;
+        this.helper = new LevelHelper(this);
 
         // --- ensure visuals match the 8:00 AM start ---
         this.lastTimeOfDay = this.timeOfDay; // avoid a big first-frame wrap
@@ -181,8 +185,8 @@ public class Level implements Serializable {
 
                 for (int i = 0; i < this.pendingEntities.size(); i++) {
                     SavedMob s = this.pendingEntities.get(i);
-                    net.classicremastered.minecraft.mob.Mob m = net.classicremastered.minecraft.mob.MobRegistry.create(s.id, this, s.x, s.y,
-                            s.z);
+                    net.classicremastered.minecraft.mob.Mob m = net.classicremastered.minecraft.mob.MobRegistry
+                            .create(s.id, this, s.x, s.y, s.z);
                     if (m == null)
                         continue; // SAFETY: refuse unregistered/missing
                     m.yRot = s.yRot;
@@ -271,9 +275,6 @@ public class Level implements Serializable {
 
     public void addListener(LevelRenderer var1) {
         this.listeners.add(var1);
-    }
-
-    public void finalize() {
     }
 
     public void removeListener(LevelRenderer var1) {
@@ -386,14 +387,72 @@ public class Level implements Serializable {
         }
     }
 
-    public boolean setTile(int var1, int var2, int var3, int var4) {
+    public boolean setTile(int x, int y, int z, int id) {
         if (this.networkMode) {
             return false;
-        } else if (this.setTileNoNeighborChange(var1, var2, var3, var4)) {
-            this.updateNeighborsAt(var1, var2, var3, var4);
+        } else if (this.setTileNoNeighborChange(x, y, z, id)) {
+            this.updateNeighborsAt(x, y, z, id);
+
+            // === Iron Golem creation check ===
+            if (id == Block.PUMPKIN.id) {
+                trySpawnIronGolem(x, y, z);
+            }
+
             return true;
         } else {
             return false;
+        }
+    }
+
+    // added helper
+    private void trySpawnIronGolem(int x, int y, int z) {
+        // check block below is iron
+        if (getTile(x, y - 1, z) != Block.IRON_BLOCK.id)
+            return;
+
+        // check body below
+        if (getTile(x, y - 2, z) != Block.IRON_BLOCK.id)
+            return;
+
+        // check arms (X-axis)
+        boolean xArms = getTile(x - 1, y - 1, z) == Block.IRON_BLOCK.id
+                && getTile(x + 1, y - 1, z) == Block.IRON_BLOCK.id;
+
+        // check arms (Z-axis)
+        boolean zArms = getTile(x, y - 1, z - 1) == Block.IRON_BLOCK.id
+                && getTile(x, y - 1, z + 1) == Block.IRON_BLOCK.id;
+
+        if (!xArms && !zArms)
+            return;
+
+        // Clear structure
+        setTileNoUpdate(x, y, z, 0); // pumpkin
+        setTileNoUpdate(x, y - 1, z, 0); // chest iron
+        setTileNoUpdate(x, y - 2, z, 0); // base iron
+        if (xArms) {
+            setTileNoUpdate(x - 1, y - 1, z, 0);
+            setTileNoUpdate(x + 1, y - 1, z, 0);
+        }
+        if (zArms) {
+            setTileNoUpdate(x, y - 1, z - 1, 0);
+            setTileNoUpdate(x, y - 1, z + 1, 0);
+        }
+
+        // Spawn golem
+        IronGolem g = new IronGolem(this, x + 0.5f, y - 1, z + 0.5f);
+        g.builtByPlayer = true; // mark as defender
+        this.addEntity(g);
+
+        // Sound / particles
+        playSound("random/anvil_use", x + 0.5f, y, z + 0.5f, 1.0f, 1.0f);
+        if (this.particleEngine != null) {
+            for (int i = 0; i < 20; i++) {
+                double px = x + 0.5 + (this.random.nextDouble() - 0.5);
+                double py = y + 0.5 + this.random.nextDouble();
+                double pz = z + 0.5 + (this.random.nextDouble() - 0.5);
+                this.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.TerrainParticle(this,
+                        (float) px, (float) py, (float) pz, 0, 0.1f, 0, Block.IRON_BLOCK));
+            }
         }
     }
 
@@ -489,12 +548,20 @@ public class Level implements Serializable {
     public void tick() {
         ++this.tickCount;
 
-        // Update per-tick lighting context
-        updateLightingContext();
+        // Update per-tick lighting context (cached)
+        maybeUpdateLightingContext(tickCount);
+
+        // === Day/Night cycle & light engine update ===
         if (doDayNightCycle) {
             tickTime();
             updateDayNightColorsSmooth();
-            notifyLightingDelta();
+
+            // Ask LightEngine if skylight changed enough to rebuild chunks
+            if (lightEngine.shouldRefreshChunks()) {
+                for (int i = 0; i < listeners.size(); i++) {
+                    ((net.classicremastered.minecraft.render.LevelRenderer) listeners.get(i)).refresh();
+                }
+            }
         }
 
         int var1 = 1;
@@ -990,42 +1057,7 @@ public class Level implements Serializable {
     }
 
     public float getBrightness(int x, int y, int z) {
-        // Base: outside follows day/night, caves have a steady baseline
-        final float outside = getDayFactorSmooth();
-        final float caveBase = 0.35f;
-
-        float b = isLit(x, y, z) ? outside : caveBase;
-
-        // Local cave darkening bubble (your existing code) ...
-        float cave = light_caveFactor;
-        if (cave > 0f) {
-            float dx = (x + 0.5f) - light_px;
-            float dy = (y + 0.5f) - light_py;
-            float dz = (z + 0.5f) - light_pz;
-            float d2 = dx * dx + dy * dy + dz * dz;
-            final float R = 24f, R2 = R * R;
-            float falloff = 1f - (d2 / R2);
-            if (falloff < 0f)
-                falloff = 0f;
-            else if (falloff > 1f)
-                falloff = 1f;
-            falloff = falloff * falloff * (3f - 2f * falloff);
-            float targetDark = light_insideOpaque ? 0.10f : 0.18f;
-            float strength = cave * falloff;
-            b = b + (targetDark - b) * strength;
-        }
-
-        // === NEW: emissive blocks (fire, lava, etc.) ===
-        float glow = getEmissiveBoost(x, y, z); // 0..1
-        if (glow > 0f) {
-            b = b + (1f - b) * glow; // pull toward fullbright
-        }
-
-        if (b < 0.05f)
-            b = 0.05f;
-        if (b > 1.0f)
-            b = 1.0f;
-        return b;
+        return lightEngine.getBrightness(x, y, z);
     }
 
     /**
@@ -1508,18 +1540,17 @@ public class Level implements Serializable {
         }
     }
 
-    // put with other fields near top of class
-    private static final class SavedMob implements java.io.Serializable {
+    public static final class SavedMob implements java.io.Serializable {
         private static final long serialVersionUID = 1L;
-        short id; // MobRegistry ID
-        float x, y, z;
-        float yRot, xRot;
-        int health;
+        public short id;
+        public float x, y, z;
+        public float yRot, xRot;
+        public int health;
 
-        SavedMob() {
+        public SavedMob() {
         }
 
-        SavedMob(short id, float x, float y, float z, float yRot, float xRot, int health) {
+        public SavedMob(short id, float x, float y, float z, float yRot, float xRot, int health) {
             this.id = id;
             this.x = x;
             this.y = y;
@@ -1530,7 +1561,7 @@ public class Level implements Serializable {
         }
     }
 
-    private transient java.util.List<SavedMob> pendingEntities;
+    public transient java.util.List<SavedMob> pendingEntities;
 
     // Add to Level (anywhere in the class)
     private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
@@ -1677,9 +1708,25 @@ public class Level implements Serializable {
     }
 
     public void addEntity(Entity var1) {
+        if (this.blockMap == null)
+            return;
+
         this.blockMap.insert(var1);
         var1.setLevel(this);
+
+        // Force chunk rebuild near the entity for renderer sync
+        if (this.listeners != null) {
+            for (int i = 0; i < listeners.size(); i++) {
+                Object o = listeners.get(i);
+                if (o instanceof net.classicremastered.minecraft.render.LevelRenderer) {
+                    ((net.classicremastered.minecraft.render.LevelRenderer) o)
+                            .queueChunks((int) var1.x - 1, (int) var1.y - 1, (int) var1.z - 1,
+                                         (int) var1.x + 1, (int) var1.y + 1, (int) var1.z + 1);
+                }
+            }
+        }
     }
+
 
     public void removeEntity(Entity var1) {
         this.blockMap.remove(var1);

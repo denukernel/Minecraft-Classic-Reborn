@@ -110,7 +110,6 @@ public final class LevelInfiniteTerrain extends Level {
         }
     }
 
-
     @Override
     public boolean setTileNoUpdate(int x, int y, int z, int id) {
         if (y < 0 || y >= this.depth)
@@ -423,15 +422,24 @@ public final class LevelInfiniteTerrain extends Level {
     private boolean bossBattleMessage2 = false;
 
     private void cleanupInactiveChunks(int timeout) {
+        // Run only once every 5 seconds (100 ticks at 20 TPS)
+        if (this.tickCount % 100 != 0) return;
+
+        int removed = 0;
+        int maxPerTick = 4; // limit how many chunks get removed per cycle
+
         var it = chunks.getAllChunks().entrySet().iterator();
-        while (it.hasNext()) {
+        while (it.hasNext() && removed < maxPerTick) {
             var e = it.next();
             SimpleChunk c = e.getValue();
             if (!c.isActive(this.tickCount, timeout)) {
-                it.remove(); // drop from map to free memory
+                c.dispose(); // clear arrays before removal
+                it.remove();
+                removed++;
             }
         }
     }
+
 
     @Override
     public void addToTickNextTick(int x, int y, int z, int blockId) {
@@ -605,6 +613,35 @@ public final class LevelInfiniteTerrain extends Level {
         markSliceAndNeighbors(x, y, z);
         return true;
     }
+    @Override
+    public void initTransient() {
+        // skip finite Level logic
+        this.listeners = new ArrayList<>();
+        this.random = new java.util.Random();
+        this.tickCount = 0;
+
+        // keep the existing infinite-aware blockMap
+        if (this.blockMap == null) {
+            this.blockMap = new BlockMap(1, 1, 1);
+            this.blockMap.infiniteMode = true;
+        }
+
+        // reset entity state
+        if (this.blockMap.all != null) {
+            for (Object o : this.blockMap.all) {
+                if (o instanceof net.classicremastered.minecraft.Entity e) {
+                    e.xo = e.x;
+                    e.yo = e.y;
+                    e.zo = e.z;
+                    e.xOld = e.x;
+                    e.yOld = e.y;
+                    e.zOld = e.z;
+                    e.removed = false;
+                    e.blockMap = this.blockMap;
+                }
+            }
+        }
+    }
 
     @Override
     public boolean setTileNoNeighborChange(int x, int y, int z, int id) {
@@ -632,72 +669,11 @@ public final class LevelInfiniteTerrain extends Level {
         return true;
     }
 
-
     @Override
     public float getBrightness(int x, int y, int z) {
-        if (y < 0) return 0.05f;
-        if (y >= this.depth) return 1.0f;
-
-        // --- Reset cache each tick ---
-        if (brightnessCacheTick != tickCount) {
-            brightnessCache.clear();
-            brightnessCacheTick = tickCount;
-        }
-
-        // --- Pack coordinates into a unique key ---
-        long key = (((long)x & 0x3FFFFFF) << 38) | (((long)z & 0x3FFFFFF) << 12) | (y & 0xFFF);
-
-        Float cached = brightnessCache.get(key);
-        if (cached != null) {
-            return cached;
-        }
-
-        // --- Compute actual brightness once per tick per block ---
-        float result;
-
-        int lv = getLight(x, y, z);
-        if (lv > 0) {
-            result = 0.2f + (lv / 15.0f) * 0.8f;
-        } else {
-            // Nearby emissive fallback (lighter radius for perf)
-            final int R = 3;  // reduced from 6 → 27 checks max
-            final float R2 = R * R;
-            float maxGlow = 0f;
-
-            for (int dx = -R; dx <= R; dx++) {
-                for (int dy = -R; dy <= R; dy++) {
-                    for (int dz = -R; dz <= R; dz++) {
-                        int idn = getTile(x + dx, y + dy, z + dz);
-                        if (idn <= 0) continue;
-                        Block nb = Block.blocks[idn];
-                        if (nb == null) continue;
-
-                        int lv2 = nb.getLightValue();
-                        if (lv2 <= 0) continue;
-
-                        float dist2 = dx*dx + dy*dy + dz*dz;
-                        if (dist2 > R2) continue;
-
-                        float strength = (lv2 / 15.0f) * (1.0f - (float)Math.sqrt(dist2)/R);
-                        if (strength > maxGlow) maxGlow = strength;
-                    }
-                }
-            }
-
-            if (maxGlow > 0f) {
-                result = Math.min(1.0f, 0.25f + maxGlow * 0.75f);
-            } else {
-                // Fallback to sky/cave
-                final float outside = getDayFactorSmooth();
-                final float caveBase = 0.35f;
-                result = isLit(x, y, z) ? outside : caveBase;
-            }
-        }
-
-        brightnessCache.put(key, result);
-        return result;
+        // let LightEngine handle proper day/night and emissive mixing
+        return lightEngine.getBrightness(x, y, z);
     }
-
 
 
     // --- Liquid helpers (copied/adapted from finite Level) ---

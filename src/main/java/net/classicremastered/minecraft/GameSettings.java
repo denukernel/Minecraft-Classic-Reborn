@@ -156,20 +156,21 @@ public final class GameSettings
 			limitFramerate = !limitFramerate;
 		}
 
-		if(setting == 8)
-		{
-			if(smoothing == smoothingOptions.length - 1)
-			{
-				smoothing = 0;
-			} else {
-				smoothing++;
-			}
+		if (setting == 8) {
+		    if (smoothing == smoothingOptions.length - 1) {
+		        smoothing = 0;
+		    } else {
+		        smoothing++;
+		    }
 
-			minecraft.textureManager.textures.clear();
-			minecraft.textureManager.textureImages.clear();
+		    minecraft.textureManager.textures.clear();
+		    minecraft.textureManager.textureImages.clear();
 
-			minecraft.levelRenderer.refresh();
+		    minecraft.levelRenderer.refresh();
+
+		    minecraft.textureManager.applyBlockTilesToTerrainAtlas();
 		}
+
 
 		if(setting == 9)
 		{

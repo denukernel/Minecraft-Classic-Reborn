@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.chat;
 
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.chat.commands.AISpeedCommand;
+import net.classicremastered.minecraft.chat.commands.BotCommand;
 import net.classicremastered.minecraft.chat.commands.CommandManager;
 import net.classicremastered.minecraft.chat.commands.GameModeCommand;
 import net.classicremastered.minecraft.chat.commands.GiveCommand;
@@ -29,7 +30,9 @@ public final class CommandRegistry {
         CommandManager.register(new net.classicremastered.minecraft.chat.commands.MobVoteCommand());
         CommandManager.register(new net.classicremastered.minecraft.chat.commands.CoinsCommand());
         CommandManager.register(new net.classicremastered.minecraft.chat.commands.ReputationCommand());
-
+        CommandManager.register(new BotCommand());
+        CommandManager.register(new net.classicremastered.minecraft.chat.commands.ScreenshotsCommand());
+        
         CommandManager.register(new AISpeedCommand());
         if (mc != null && mc.developer && mc.hud != null) {
             mc.hud.addChat("&7[dev] /aispeed enabled");

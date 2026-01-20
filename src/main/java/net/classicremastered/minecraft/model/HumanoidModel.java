@@ -102,21 +102,23 @@ public class HumanoidModel extends Model {
     @Override
     public void setRotationAngles(float limbSwing, float limbSwingAmount, float ageInTicks,
                                   float netHeadYaw, float headPitch, float scale) {
+        // Head follows look direction
         head.yaw   = netHeadYaw / 57.295776F;
         head.pitch = headPitch  / 57.295776F;
 
-        rightArm.pitch = MathHelper.cos(limbSwing * 0.6662F + (float)Math.PI) * 2.0F * limbSwingAmount;
-        rightArm.roll  = (MathHelper.cos(limbSwing * 0.2312F) + 1.0F) * limbSwingAmount;
+        // Arms: swing opposite each other, synced with legs
+        rightArm.pitch = MathHelper.cos(limbSwing * 0.6662F + (float)Math.PI) * 1.5F * limbSwingAmount;
+        leftArm.pitch  = MathHelper.cos(limbSwing * 0.6662F) * 1.5F * limbSwingAmount;
 
-        leftArm.pitch  = MathHelper.cos(limbSwing * 0.6662F) * 2.0F * limbSwingAmount;
-        leftArm.roll   = (MathHelper.cos(limbSwing * 0.2812F) - 1.0F) * limbSwingAmount;
-
+        // Legs: walk opposite, like vanilla
         rightLeg.pitch = MathHelper.cos(limbSwing * 0.6662F) * 1.4F * limbSwingAmount;
         leftLeg.pitch  = MathHelper.cos(limbSwing * 0.6662F + (float)Math.PI) * 1.4F * limbSwingAmount;
 
-        rightArm.roll += MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.05F;
-        leftArm.roll  -= MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.05F;
-        rightArm.pitch+= MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
-        leftArm.pitch -= MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
+        // Idle arm sway (subtle breathing)
+        rightArm.roll = MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.05F;
+        leftArm.roll  = -(MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.05F);
+        rightArm.pitch += MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
+        leftArm.pitch  -= MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
     }
+
 }

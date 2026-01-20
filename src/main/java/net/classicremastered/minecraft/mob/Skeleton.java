@@ -43,7 +43,7 @@ public class Skeleton extends Zombie {
         this.setDrawingBow(true);
 
         // Keep vanilla/classic arrow firing logic
-        lvl.addEntity(new net.classicremastered.minecraft.item.Arrow(
+        lvl.addEntity(new net.classicremastered.minecraft.entity.Arrow(
             lvl, this,
             this.x, this.y, this.z,
             this.yRot + 180.0F + (float)(Math.random() * 45.0D - 22.5D),

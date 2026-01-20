@@ -10,7 +10,7 @@ import net.classicremastered.minecraft.render.ShapeRenderer;
 
 public class InventoryScreen extends GuiScreen {
     // textures
-    private int texture; // /gui/inventory.png
+    protected int texture; // /gui/inventory.png
     private int terrainAtlas; // /terrain.png
 
     // carried stack (cursor)
@@ -406,7 +406,7 @@ public class InventoryScreen extends GuiScreen {
     }
 
     // Draw a block as a tiny 3D cube (BlockSelect transform) or a 2D item icon
-    private void drawIdIcon(int id, int sx, int sy) {
+    protected void drawIdIcon(int id, int sx, int sy) {
         if (id < 256 && Block.blocks[id] != null) {
             GL11.glPushMatrix();
             GL11.glTranslatef(sx, sy, 0f);

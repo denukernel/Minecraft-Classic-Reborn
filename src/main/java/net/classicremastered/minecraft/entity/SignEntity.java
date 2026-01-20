@@ -1,5 +1,5 @@
 // File: src/net/classicremastered/minecraft/item/SignEntity.java
-package net.classicremastered.minecraft.item;
+package net.classicremastered.minecraft.entity;
 
 import org.lwjgl.opengl.GL11;
 
@@ -99,7 +99,7 @@ public final class SignEntity extends Entity {
         if (!this.removed && this.level != null) {
             // Drop a wooden plank block when sign is destroyed
             this.level.addEntity(
-                new net.classicremastered.minecraft.item.Item(
+                new net.classicremastered.minecraft.entity.DroppedBlock(
                     this.level,
                     this.x, this.y, this.z,
                     Block.WOOD.id

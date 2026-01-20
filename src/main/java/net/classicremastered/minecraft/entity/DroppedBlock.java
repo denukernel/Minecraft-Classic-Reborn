@@ -1,4 +1,4 @@
-package net.classicremastered.minecraft.item;
+package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
@@ -11,12 +11,12 @@ import java.util.Random;
 
 import org.lwjgl.opengl.GL11;
 
-public class Item extends Entity {
+public class DroppedBlock extends Entity {
     private int pickupDelay = 10; // ~0.5s at 20 tps (tune)
     private boolean pickingUp = false; // one-shot guard
     private static final java.util.Random rand = new java.util.Random();
 
-    public Item(Level level1, float x, float y, float z, int block) {
+    public DroppedBlock(Level level1, float x, float y, float z, int block) {
         super(level1);
 
         setSize(0.25F, 0.25F);

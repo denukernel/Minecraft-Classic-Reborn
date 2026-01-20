@@ -1,5 +1,5 @@
 // com/mojang/minecraft/item/HeldBlockEntity.java
-package net.classicremastered.minecraft.item;
+package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.MovingObjectPosition;

@@ -1,7 +1,7 @@
 // com/mojang/minecraft/level/itemstack/GravityGunItem.java
 package net.classicremastered.minecraft.level.itemstack;
 
-import net.classicremastered.minecraft.item.HeldBlockEntity;
+import net.classicremastered.minecraft.entity.HeldBlockEntity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.Vec3D;

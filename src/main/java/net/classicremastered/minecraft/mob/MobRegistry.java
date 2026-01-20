@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import net.classicremastered.minecraft.bot.Bot;
 import net.classicremastered.minecraft.level.Level;
 
 /**
@@ -113,6 +114,10 @@ public final class MobRegistry {
         tryRegister((short) 26, "Bee", Bee.class, (l,x,y,z)->new Bee(l,x,y,z));
         tryRegister((short) 27, "IronGolem", IronGolem.class, (l,x,y,z) -> new IronGolem(l, x, y, z));
         tryRegister((short) 28, "SignMob", SignMob.class, (l,x,y,z)->new SignMob(l,x,y,z));
+        tryRegister((short) 60, "PlayerClone", Bot.class,
+                (l,x,y,z)->new Bot(l,x,y,z));
+        tryRegister((short) 42, "ShulkerMan", ShulkerMan.class,
+                (l, x, y, z) -> new ShulkerMan(l, x, y, z));
 
         // --- Neutrals / animals / villagers ---
         tryRegister((short) 20, "Villager",          Villager.class,          (l,x,y,z)->new Villager(l,x,y,z));

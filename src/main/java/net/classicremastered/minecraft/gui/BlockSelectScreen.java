@@ -2,7 +2,7 @@ package net.classicremastered.minecraft.gui;
 
 import org.lwjgl.opengl.GL11;
 
-import net.classicremastered.minecraft.SessionData;
+import net.classicremastered.minecraft.CreativeInventoryBlocks;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
@@ -14,7 +14,7 @@ public final class BlockSelectScreen extends GuiScreen {
    }
 
    private int getBlockOnScreen(int var1, int var2) {
-      for(int var3 = 0; var3 < SessionData.allowedBlocks.size(); ++var3) {
+      for(int var3 = 0; var3 < CreativeInventoryBlocks.allowedBlocks.size(); ++var3) {
          int var4 = this.width / 2 + var3 % 9 * 24 + -108 - 3;
          int var5 = this.height / 2 + var3 / 9 * 24 + -60 + 3;
          if(var1 >= var4 && var1 <= var4 + 24 && var2 >= var5 - 12 && var2 <= var5 + 12) {
@@ -40,8 +40,8 @@ public final class BlockSelectScreen extends GuiScreen {
       var2 = var7.load("/terrain.png");
       GL11.glBindTexture(3553, var2);
 
-      for(var2 = 0; var2 < SessionData.allowedBlocks.size(); ++var2) {
-         Block var4 = (Block)SessionData.allowedBlocks.get(var2);
+      for(var2 = 0; var2 < CreativeInventoryBlocks.allowedBlocks.size(); ++var2) {
+         Block var4 = (Block)CreativeInventoryBlocks.allowedBlocks.get(var2);
          GL11.glPushMatrix();
          int var5 = this.width / 2 + var2 % 9 * 24 + -108;
          int var6 = this.height / 2 + var2 / 9 * 24 + -60;

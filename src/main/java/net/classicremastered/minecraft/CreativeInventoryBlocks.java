@@ -5,7 +5,7 @@ import java.util.List;
 
 import net.classicremastered.minecraft.level.tile.Block;
 
-public final class SessionData {
+public final class CreativeInventoryBlocks {
 
 	public static List allowedBlocks;
 	public String username;
@@ -14,7 +14,7 @@ public final class SessionData {
 	public boolean haspaid;
 
 
-	public SessionData(String var1, String var2) {
+	public CreativeInventoryBlocks(String var1, String var2) {
 		this.username = var1;
 		this.sessionId = var2;
 	}

@@ -13,6 +13,7 @@ import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
@@ -220,11 +221,19 @@ public final class HUDScreen extends Screen {
          String diff = "&7Difficulty: &e" + this.mc.settings.difficulty.getLabel();
          font.render(diff, 2, 12, 0xFFFFFF);
      }
+     long totalMem = Runtime.getRuntime().maxMemory() / (1024L * 1024L);
+     if (totalMem < 4000) {
+         String warn = "WARNING: Your PC has less than 4 GB RAM. Expect performance issues.";
+         int color = (ticks / 20 % 2 == 0) ? 0xFF4444 : 0xFF8888;
+         drawCenteredString(this.mc.fontRenderer, warn, this.width / 2, 2, color);
+     }
      if (this.mc.settings.showFrameRate) {
          font.render("&7Minecraft &6Classic &b0.45 Pre Release 1", 2, 2, 0xFFFFFF);
          font.render(this.mc.debug, 2, 22, 0xFFFFFF);
      }
-
+     if(this.mc.settings.showFrameRate) {
+         font.render(this.mc.debug, 2, 22, 16777215);
+     }
      if (this.mc.gamemode instanceof SurvivalGameMode) {
          String score = "Score: &e" + this.mc.player.getScore();
          font.render(score, this.width - font.getWidth(score) - 2, 2, 0xFFFFFF);
@@ -248,15 +257,90 @@ public final class HUDScreen extends Screen {
         for (int i = 0; i < this.chat.size() && i < maxLines; ++i) {
             ChatLine line = this.chat.get(i);
             if (line.time < 200 || forceShow) {
-                font.render(line.message, 2, this.height - 8 - i * 9 - 20, 0xFFFFFF);
+                int yPos = this.height - 8 - i * 9 - 20;
+                String msg = line.message;
+
+                if (msg.contains("[Open folder]")) {
+                    String left = msg.substring(0, msg.indexOf("[Open folder]"));
+                    String clickable = "[Open folder]";
+                    String right = msg.substring(msg.indexOf("[Open folder]") + clickable.length());
+
+                    int x = 2;
+                    font.render(left, x, yPos, 0xFFFFFF);
+                    x += font.getWidth(left);
+
+                    // detect hover
+                    int mouseX = Mouse.getX() * this.width / this.mc.width;
+                    int mouseY = this.height - (Mouse.getY() * this.height / this.mc.height) - 1;
+                    boolean hovering = mouseX >= x && mouseX <= x + font.getWidth(clickable)
+                            && mouseY >= yPos - 1 && mouseY <= yPos + 9;
+
+                    // render clickable text (hover = underline + brighter color)
+                    int color = hovering ? 0x88FFFF : 0x55FFFF;
+                    font.render(clickable, x, yPos, color);
+                    if (hovering) {
+                        GL11.glDisable(GL11.GL_TEXTURE_2D);
+                        GL11.glColor3f(0.33F, 1.0F, 1.0F);
+                        GL11.glBegin(GL11.GL_LINES);
+                        GL11.glVertex2f(x, yPos + 9);
+                        GL11.glVertex2f(x + font.getWidth(clickable), yPos + 9);
+                        GL11.glEnd();
+                        GL11.glEnable(GL11.GL_TEXTURE_2D);
+                    }
+
+                    x += font.getWidth(clickable);
+                    font.render(right, x, yPos, 0xFFFFFF);
+                } else {
+                    font.render(msg, 2, yPos, 0xFFFFFF);
+                }
             }
         }
     }
+    public void onMouseClick(int x, int y, int button) {
+        if (button != 0) return;
+
+        // Convert from full window → HUD logical scale
+        int scaledX = (int)((x / (float)this.mc.width) * this.width);
+        int scaledY = (int)((y / (float)this.mc.height) * this.height);
+
+        int lineHeight = 9;
+        int baseY = this.height - 8 - 20;
+        int maxLines = (this.mc.currentScreen instanceof net.classicremastered.minecraft.chat.ChatInputScreen) ? 20 : 10;
+
+        for (int i = 0; i < this.chat.size() && i < maxLines; ++i) {
+            ChatLine line = this.chat.get(i);
+            if (!line.message.contains("[Open folder]")) continue;
+
+            int yTop = baseY - i * lineHeight;
+            int yBottom = yTop - lineHeight;
+
+            // check if click inside the text's Y range
+            if (scaledY >= yBottom && scaledY <= yTop) {
+                String left = line.message.substring(0, line.message.indexOf("[Open folder]"));
+                int leftW = this.mc.fontRenderer.getWidth(left);
+                int openW = this.mc.fontRenderer.getWidth("[Open folder]");
+                int openStart = 2 + leftW;
+                int openEnd = openStart + openW;
+
+                // now compare using scaledX (not raw x)
+                if (scaledX >= openStart && scaledX <= openEnd) {
+                    java.io.File dir = new java.io.File(net.classicremastered.minecraft.Minecraft.mcDir, "screenshots");
+                    net.classicremastered.minecraft.util.FileOpener.openDirectory(dir);
+                    this.mc.hud.addChat("&7Opening screenshots folder...");
+                    System.out.println("[HUD] Clicked Open folder → " + dir.getAbsolutePath());
+                    return;
+                }
+            }
+        }
+    }
+
+
 
     public final void addChat(String msg) {
         this.chat.add(0, new ChatLine(msg));
         while (this.chat.size() > 50) {
             this.chat.remove(this.chat.size() - 1);
         }
+        
     }
 }

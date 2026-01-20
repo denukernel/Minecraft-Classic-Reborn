@@ -222,11 +222,31 @@ public final class InfiniteTerrainGenerator {
     }
 
 
-    // ore + deco helpers unchanged
-    private void populateOreVeins(SimpleChunk c, int worldX, int worldZ, int blockId, int attempts, int veinSize,
-            int maxY) {
-        /* ... keep your existing code ... */ }
+    private void populateOreVeins(SimpleChunk c, int worldX, int worldZ, int blockId, int attempts, int veinSize, int maxY) {
+        Random rand = new Random(seed ^ (worldX * 341873128712L + worldZ * 132897987541L + blockId * 31L));
 
+        for (int i = 0; i < attempts; i++) {
+            int lx = rand.nextInt(CHUNK);
+            int lz = rand.nextInt(CHUNK);
+            int ly = rand.nextInt(Math.max(1, maxY));
+
+            // Try to form a small cluster / vein
+            for (int j = 0; j < veinSize; j++) {
+                int xx = lx + rand.nextInt(3) - 1;
+                int yy = ly + rand.nextInt(3) - 1;
+                int zz = lz + rand.nextInt(3) - 1;
+
+                if (xx < 0 || xx >= CHUNK || zz < 0 || zz >= CHUNK || yy < 1 || yy >= height)
+                    continue;
+
+                int idx = SimpleChunk.idx(xx, yy, zz, height);
+                byte id = c.blocks[idx];
+                if (id == (byte) Block.STONE.id) {
+                    c.blocks[idx] = (byte) blockId; // replace with ore
+                }
+            }
+        }
+    }
     private static int clamp(int v, int lo, int hi) {
         return (v < lo) ? lo : (Math.min(v, hi));
     }

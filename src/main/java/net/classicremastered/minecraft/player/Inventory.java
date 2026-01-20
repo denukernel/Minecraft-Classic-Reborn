@@ -2,7 +2,7 @@ package net.classicremastered.minecraft.player;
 
 import java.io.Serializable;
 
-import net.classicremastered.minecraft.SessionData;
+import net.classicremastered.minecraft.CreativeInventoryBlocks;
 import net.classicremastered.minecraft.level.tile.Block;
 
 public class Inventory implements Serializable {
@@ -102,7 +102,7 @@ public class Inventory implements Serializable {
         if ((s = this.getSlot(id)) >= 0) {
             this.selected = s;
         } else {
-            if (allowCheat && id > 0 && SessionData.allowedBlocks.contains(Block.blocks[id])) {
+            if (allowCheat && id > 0 && CreativeInventoryBlocks.allowedBlocks.contains(Block.blocks[id])) {
                 this.replaceSlot(Block.blocks[id]);
             }
         }
@@ -121,7 +121,7 @@ public class Inventory implements Serializable {
 
     public void replaceSlot(int id) {
         if (id >= 0)
-            this.replaceSlot((Block) SessionData.allowedBlocks.get(id));
+            this.replaceSlot((Block) CreativeInventoryBlocks.allowedBlocks.get(id));
     }
 
     public void replaceSlot(Block b) {

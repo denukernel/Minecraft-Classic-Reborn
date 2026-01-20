@@ -1,5 +1,5 @@
 // File: src/com/mojang/minecraft/item/DroppedItem.java
-package net.classicremastered.minecraft.item;
+package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;

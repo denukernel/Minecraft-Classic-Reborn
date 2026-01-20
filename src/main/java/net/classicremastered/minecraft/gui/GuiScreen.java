@@ -86,6 +86,9 @@ public class GuiScreen extends Screen {
 
     protected void onButtonClick(Button btn) {
     }
+    public boolean grabsMouse() {
+        return false;
+    }
 
     public final void open(Minecraft mc, int w, int h) {
         this.minecraft = mc;
@@ -103,7 +106,7 @@ public class GuiScreen extends Screen {
         while (Keyboard.next()) this.keyboardEvent();
     }
 
-    public final void mouseEvent() {
+    public void mouseEvent() {
         if (Mouse.getEventButtonState()) {
             int x = Mouse.getEventX() * this.width / this.minecraft.width;
             int y = this.height - Mouse.getEventY() * this.height / this.minecraft.height - 1;

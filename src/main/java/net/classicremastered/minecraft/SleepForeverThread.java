@@ -1,27 +1,23 @@
 package net.classicremastered.minecraft;
 
-public class SleepForeverThread extends Thread
-{
-	public SleepForeverThread(Minecraft minecraft)
-	{
-		setDaemon(true);
+public class SleepForeverThread extends Thread {
 
-		start();
-	}
+    private final Minecraft minecraft;
 
-	@Override
-	public void run()
-	{
-		while(true)
-		{
-			try {
-				while(true)
-				{
-					Thread.sleep(2147483647L);
-				}
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-	}
+    public SleepForeverThread(Minecraft minecraft) {
+        this.minecraft = minecraft;
+        // do NOT start the thread here
+        // do NOT call setDaemon() here either — caller handles it
+    }
+
+    @Override
+    public void run() {
+        try {
+            while (true) {
+                Thread.sleep(2147483647L); // sleep "forever"
+            }
+        } catch (InterruptedException ignored) {
+            // just exit quietly
+        }
+    }
 }

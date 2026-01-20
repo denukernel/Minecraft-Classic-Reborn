@@ -5,7 +5,7 @@ import java.util.Random;
 import org.lwjgl.opengl.GL11;
 
 import net.classicremastered.minecraft.MovingObjectPosition;
-import net.classicremastered.minecraft.item.Item;
+import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -57,7 +57,7 @@ public class Block {
     public static final Block PUMPKIN;
     public static final Block CACTUS;
     public static final Block PISTON;
-
+    public static final Block WORKBENCH;
     public static final Block DIRT;
     public static final Block COBBLESTONE;
     public static final Block WOOD;
@@ -445,7 +445,7 @@ public class Block {
                     float ox = random.nextFloat() * off + (1.0F - off) * 0.5F;
                     float oy = random.nextFloat() * off + (1.0F - off) * 0.5F;
                     float oz = random.nextFloat() * off + (1.0F - off) * 0.5F;
-                    level.addEntity(new Item(level, (float) x + ox, (float) y + oy, (float) z + oz, this.getDrop()));
+                    level.addEntity(new DroppedBlock(level, (float) x + ox, (float) y + oy, (float) z + oz, this.getDrop()));
                 }
             }
         }
@@ -631,7 +631,7 @@ public class Block {
         STRUCTURE_DELTA = new StructureBlock(63, 211, "Structure Delta", StructureBlock.Type.DELTA);
         JUKEBOX = (new Block(212, 212, "Jukebox"))
                 .setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.0F);
-
+        WORKBENCH = new WorkbenchBlock(228, 35);
         var1 = var10000;
         var10000.explodes = false;
         GOLD_BLOCK = var1;

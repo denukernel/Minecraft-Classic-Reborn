@@ -2,8 +2,8 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.item.DroppedItem;
 import net.classicremastered.minecraft.level.itemstack.Item;
 
 public class Chicken extends Mob {

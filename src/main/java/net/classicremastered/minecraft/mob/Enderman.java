@@ -18,29 +18,21 @@ public final class Enderman extends Mob {
         super(level);
         this.setPos(x, y, z);
 
-        // players use heightOffset for eye/camera alignment — mobs should keep 0
         this.heightOffset = 0.0F;
-
-        this.modelName = "enderman";
-        this.textureName = "/mob/enderman.png";
         this.health = 40;
         this.speed = 0.25F;
         this.deathScore = 500;
         this.coinDrop = 6;
-        // don't tweak modelGroundOffset here — EndermanModel manages that.
-        // this.modelGroundOffset = ... (removed)
-
-        // Selection/stepping radius and collision box
         this.footSize = COLLISION_WIDTH;
         this.getAndSetAABB(COLLISION_WIDTH, COLLISION_HEIGHT);
         this.soundIdle  = "random/breath";
-        this.idlePitchMin = 0.5F; this.idlePitchMax = 0.8F; // deeper
-
+        this.idlePitchMin = 0.5F; this.idlePitchMax = 0.8F;
         this.soundHurt  = "random/breath";
         this.soundDeath = "random/breath";
         this.deathPitchMin= 0.6F; this.deathPitchMax= 0.6F;
         this.ai = new EndermanAI();
     }
+
 
     /**
      * Creates a tall slim AABB centered on the entity (uses current x/y/z).

@@ -2,8 +2,8 @@ package net.classicremastered.minecraft;
 
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.chat.ChatInputScreen;
+import net.classicremastered.minecraft.entity.SignEntity;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
-import net.classicremastered.minecraft.item.SignEntity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
@@ -134,9 +134,14 @@ public class InputManager {
                     if (mc.level.getTile(nx, ny, nz) != 0)
                         return;
 
-                    boolean canPlace = mc.level.isSolidTile(ox, oy, oz);
-                    if (!canPlace)
+                    // Allow fire on any solid OR flammable block below
+                    boolean supportOk = mc.level.isSolidTile(ox, oy, oz) || mc.level.getTile(ox, oy, oz) > 0 &&
+                                        net.classicremastered.minecraft.level.tile.FireBlock
+                                            .isFlammable(mc.level.getTile(ox, oy, oz));
+                    if (!supportOk)
                         return;
+
+                    // Ensure fire logic agrees with block attachment
                     if (!mc.fireCanStayAt(nx, ny, nz))
                         return;
 
@@ -255,17 +260,44 @@ public class InputManager {
                     mc.hud.addChat("&aSpawned Sign at player");
                 }
 
-                // Fly toggle key
                 if (Keyboard.getEventKey() == mc.settings.flyToggleKey.key) {
-                    if (mc.gamemode instanceof net.classicremastered.minecraft.gamemode.CreativeGameMode
-                            && mc.player != null && mc.player.canFly) {
+                    if (mc.gamemode instanceof net.classicremastered.minecraft.gamemode.CreativeGameMode && mc.player != null) {
+                        mc.player.canFly = true;
                         mc.player.isFlying = !mc.player.isFlying;
-                        if (!mc.player.isFlying)
+                        if (!mc.player.isFlying) {
                             mc.player.yd = 0.0F;
-                        if (mc.hud != null)
+                            mc.player.fallDistance = 0.0F;
+                            mc.player.onGround = true;
+                        }
+                        if (mc.hud != null) {
                             mc.hud.addChat(mc.player.isFlying ? "&aFlight enabled" : "&cFlight disabled");
+                        }
                     }
                 }
+
+
+             // InputManager.java (inside handleKeyboardEvent, where currentScreen == null)
+                if (Keyboard.getEventKey() == Keyboard.KEY_Q) {
+                    if (mc.player != null) {
+                        mc.player.dropSelectedItem(); // added
+                    }
+                }
+             // F5 → toggle camera
+             // F5 → toggle camera (developer only)
+                if (Keyboard.getEventKey() == Keyboard.KEY_F5) {
+                    if (mc.developer) { // only allow if developer flag is set
+                        mc.cameraMode = (mc.cameraMode + 1) % 3;
+                        if (mc.hud != null) {
+                            switch (mc.cameraMode) {
+                            }
+                        }
+                    } else {
+                        // Optional: show a short message for non-devs
+                        if (mc.hud != null) {
+                        }
+                    }
+                }
+
 
                 // F6 → fast debug toggle
                 if (Keyboard.getEventKey() == Keyboard.KEY_F6) {
@@ -298,10 +330,19 @@ public class InputManager {
                     screen.insertText("/");
                 }
 
-                // F2 → request screenshot
                 if (Keyboard.getEventKey() == Keyboard.KEY_F2) {
-                    mc.pendingScreenshot = true;
+                    java.io.File file = net.classicremastered.minecraft.util.Screenshot.take(Minecraft.mcDir);
+                    if (file != null) {
+                        if (mc.hud != null) {
+                            mc.hud.addChat("&aScreenshot saved! &7(Type &e/screenshots&7 to open folder)");
+                        }
+                    } else {
+                        if (mc.hud != null) {
+                            mc.hud.addChat("&cFailed to save screenshot.");
+                        }
+                    }
                 }
+
 
                 // Inventory
                 if (Keyboard.getEventKey() == mc.settings.inventoryKey.key) {

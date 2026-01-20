@@ -24,7 +24,7 @@ public final class EndermanModel extends Model {
 
         // Headwear
         headwear = new ModelPart(32, 0);
-        headwear.setBounds(-4, -8, -4, 8, 8, 8, 0.5F);
+        headwear.setBounds(-4, -8, -4, 8, 8, 8, 0.0F);
         headwear.setPosition(0, -14, 0);
 
         // Body

@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.ProgressBarDisplay;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
@@ -82,11 +83,51 @@ public final class LevelIO {
         out.writeLong(inf.randomSeed);
         out.writeInt(inf.depth);
 
+        // --- chunks ---
         Map<Long, SimpleChunk> map = inf.chunks().getAllChunks();
         out.writeInt(map.size());
         for (Map.Entry<Long, SimpleChunk> e : map.entrySet()) {
             out.writeLong(e.getKey());
             out.write(e.getValue().blocks);
+        }
+
+        // --- world metadata ---
+        out.writeInt(inf.timeOfDay);
+        out.writeBoolean(inf.doDayNightCycle);
+
+        // --- player ---
+        if (inf.player != null) {
+            out.writeFloat(inf.player.x);
+            out.writeFloat(inf.player.y);
+            out.writeFloat(inf.player.z);
+            out.writeFloat(inf.player.yRot);
+            out.writeFloat(inf.player.xRot);
+        } else {
+            out.writeFloat(0f); out.writeFloat(0f); out.writeFloat(0f);
+            out.writeFloat(0f); out.writeFloat(0f);
+        }
+
+        // --- entities ---
+        var all = inf.blockMap != null ? inf.blockMap.all : java.util.Collections.emptyList();
+        int nEnt = 0;
+        for (Object e : all) {
+            if (e instanceof net.classicremastered.minecraft.mob.Mob m) {
+                if (m.removed || m.health <= 0) continue;
+                nEnt++;
+            }
+        }
+        out.writeInt(nEnt);
+        for (Object e : all) {
+            if (!(e instanceof net.classicremastered.minecraft.mob.Mob m)) continue;
+            if (m.removed || m.health <= 0) continue;
+            short id = net.classicremastered.minecraft.mob.MobRegistry.idOf(m);
+            out.writeShort(id);
+            out.writeFloat(m.x);
+            out.writeFloat(m.y);
+            out.writeFloat(m.z);
+            out.writeFloat(m.yRot);
+            out.writeFloat(m.xRot);
+            out.writeInt(m.health);
         }
     }
 
@@ -94,11 +135,51 @@ public final class LevelIO {
         out.writeLong(inf.randomSeed);
         out.writeInt(inf.depth);
 
+        // --- chunks ---
         Map<Long, SimpleChunk> map = inf.chunks().getAllChunks();
         out.writeInt(map.size());
         for (Map.Entry<Long, SimpleChunk> e : map.entrySet()) {
             out.writeLong(e.getKey());
             out.write(e.getValue().blocks);
+        }
+
+        // --- world metadata ---
+        out.writeInt(inf.timeOfDay);
+        out.writeBoolean(inf.doDayNightCycle);
+
+        // --- player ---
+        if (inf.player != null) {
+            out.writeFloat(inf.player.x);
+            out.writeFloat(inf.player.y);
+            out.writeFloat(inf.player.z);
+            out.writeFloat(inf.player.yRot);
+            out.writeFloat(inf.player.xRot);
+        } else {
+            out.writeFloat(0f); out.writeFloat(0f); out.writeFloat(0f);
+            out.writeFloat(0f); out.writeFloat(0f);
+        }
+
+        // --- entities ---
+        var all = inf.blockMap != null ? inf.blockMap.all : java.util.Collections.emptyList();
+        int nEnt = 0;
+        for (Object e : all) {
+            if (e instanceof net.classicremastered.minecraft.mob.Mob m) {
+                if (m.removed || m.health <= 0) continue;
+                nEnt++;
+            }
+        }
+        out.writeInt(nEnt);
+        for (Object e : all) {
+            if (!(e instanceof net.classicremastered.minecraft.mob.Mob m)) continue;
+            if (m.removed || m.health <= 0) continue;
+            short id = net.classicremastered.minecraft.mob.MobRegistry.idOf(m);
+            out.writeShort(id);
+            out.writeFloat(m.x);
+            out.writeFloat(m.y);
+            out.writeFloat(m.z);
+            out.writeFloat(m.yRot);
+            out.writeFloat(m.xRot);
+            out.writeInt(m.health);
         }
     }
 
@@ -167,6 +248,8 @@ public final class LevelIO {
         int depth = in.readInt();
         LevelInfiniteTerrain inf = new LevelInfiniteTerrain(seed, depth);
 
+        // --- chunks ---
+     // --- chunks ---
         int n = in.readInt();
         for (int i = 0; i < n; i++) {
             long key = in.readLong();
@@ -174,6 +257,97 @@ public final class LevelIO {
             in.readFully(blocks);
             inf.chunks().restoreChunk(key, blocks);
         }
+
+        // ✅ make sure BlockMap exists before adding entities
+        inf.blockMap = new net.classicremastered.minecraft.level.BlockMap(inf.width, inf.depth, inf.height);
+        if (inf.blockMap == null) {
+            inf.blockMap = new BlockMap(1, 1, 1);
+            inf.blockMap.infiniteMode = true;
+        }
+        for (Entity e : inf.blockMap.all) {
+            e.blockMap = inf.blockMap;
+        }
+
+        // --- metadata ---
+        try {
+            inf.timeOfDay = in.readInt();
+            inf.doDayNightCycle = in.readBoolean();
+
+            float px = in.readFloat();
+            float py = in.readFloat();
+            float pz = in.readFloat();
+            float yaw = in.readFloat();
+            float pitch = in.readFloat();
+
+            if (inf.player != null) {
+                inf.player.x = px;
+                inf.player.y = py;
+                inf.player.z = pz;
+                inf.player.yRot = yaw;
+                inf.player.xRot = pitch;
+            }
+
+            int count = in.readInt();
+            for (int i = 0; i < count; i++) {
+                short id = in.readShort();
+                float x = in.readFloat();
+                float y = in.readFloat();
+                float z = in.readFloat();
+                float yRot = in.readFloat();
+                float xRot = in.readFloat();
+                int health = in.readInt();
+                var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
+                if (mob == null) continue;
+                mob.yRot = yRot;
+                mob.xRot = xRot;
+                mob.health = health;
+                inf.addEntity(mob);
+            }
+        } catch (EOFException ignored) {
+            // older saves
+        }
+
+
+        // --- metadata ---
+        try {
+            inf.timeOfDay = in.readInt();
+            
+            inf.doDayNightCycle = in.readBoolean();
+
+            float px = in.readFloat();
+            float py = in.readFloat();
+            float pz = in.readFloat();
+            float yaw = in.readFloat();
+            float pitch = in.readFloat();
+
+            if (inf.player != null) {
+                inf.player.x = px;
+                inf.player.y = py;
+                inf.player.z = pz;
+                inf.player.yRot = yaw;
+                inf.player.xRot = pitch;
+            }
+
+            int count = in.readInt();
+            for (int i = 0; i < count; i++) {
+                short id = in.readShort();
+                float x = in.readFloat();
+                float y = in.readFloat();
+                float z = in.readFloat();
+                float yRot = in.readFloat();
+                float xRot = in.readFloat();
+                int health = in.readInt();
+                var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
+                if (mob == null) continue;
+                mob.yRot = yRot;
+                mob.xRot = xRot;
+                mob.health = health;
+                inf.addEntity(mob);
+            }
+        } catch (EOFException ignored) {
+            // Compatibility with older saves
+        }
+
         return inf;
     }
 

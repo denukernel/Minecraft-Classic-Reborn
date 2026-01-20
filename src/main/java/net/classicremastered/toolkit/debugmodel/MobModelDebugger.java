@@ -45,6 +45,8 @@ public final class MobModelDebugger {
         put(5, new MobEntry("Pig",      "/mob/pig.png",      ModelAdapter.ofAnimal(new PigModel())));
         put(6, new MobEntry("Sheep",    "/mob/sheep.png",    ModelAdapter.ofAnimal(new SheepModel())));
         put(7, new MobEntry("Villager", "/mob/villager.png", ModelAdapter.ofVillager(new VillagerModel())));
+        put(8, new MobEntry("Enderman", "/mob/enderman.png",
+                ModelAdapter.ofGeneric(new EndermanModel())));
     }};
 
     private int currentKey = 1;
@@ -134,7 +136,7 @@ public final class MobModelDebugger {
         if (Keyboard.isKeyDown(Keyboard.KEY_ESCAPE)) {
             Display.destroy(); System.exit(0);
         }
-        for (int i = Keyboard.KEY_1; i <= Keyboard.KEY_7; i++) {
+        for (int i = Keyboard.KEY_1; i <= Keyboard.KEY_8; i++) {
             if (Keyboard.isKeyDown(i)) currentKey = 1 + (i - Keyboard.KEY_1);
         }
         while (Keyboard.next()) {
@@ -234,6 +236,9 @@ public final class MobModelDebugger {
             return (wp, wa, t, hy, hp) -> m.render(wp, wa, t, hy, hp, 0.0625f);
         }
         static ModelAdapter ofVillager(final VillagerModel m) {
+            return (wp, wa, t, hy, hp) -> m.render(wp, wa, t, hy, hp, 0.0625f);
+        }
+        static ModelAdapter ofGeneric(final Model m) {
             return (wp, wa, t, hy, hp) -> m.render(wp, wa, t, hy, hp, 0.0625f);
         }
     }

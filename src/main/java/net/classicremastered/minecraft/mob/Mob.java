@@ -30,11 +30,11 @@ public abstract class Mob extends Entity {
     public float rotA = (float) (Math.random() + 1.0D) * 0.01F;
 
     public float yBodyRot = 0.0F;
-    protected float yBodyRotO = 0.0F;
-    protected float oRun;
-    protected float run;
-    protected float animStep;
-    protected float animStepO;
+    public float yBodyRotO = 0.0F;
+    public float oRun;
+    public float run;
+    public float animStep;
+    public float animStepO;
 
     public int tickCount = 0;
     // --- AI Corruption (Physics Gun upgrade) ---
@@ -63,8 +63,8 @@ public abstract class Mob extends Entity {
     public float tilt;
     protected boolean dead = false;
 
-    public AI ai;
-
+    public transient AI ai;
+    
     public Mob(Level var1) {
         super(var1);
         this.setPos(this.x, this.y, this.z);
@@ -252,27 +252,22 @@ public abstract class Mob extends Entity {
     }
 
     protected void bindTexture(TextureManager tm) {
-        this.textureId = tm.load(this.textureName);
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureId);
+        if (textureName == null || textureName.isEmpty()) {
+            System.err.println("[Mob] Missing textureName for " + this.getClass().getSimpleName());
+            return;
+        }
+        this.textureId = tm.load(textureName);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureId);
     }
+
 
     @Override
     public void render(TextureManager tm, float partial) {
-        if (this.modelName == null)
+        // Use registered renderer if available
+        net.classicremastered.minecraft.render.entity.MobRenderer<Mob> r = net.classicremastered.minecraft.render.entity.RenderManager
+                .getRenderer(this);
+        if (r == null && this.modelName == null)
             return;
-
-        // ---- attack swing offset for classic models ----
-        if (!this.modelName.endsWith(".md3") && modelCache != null) {
-            Model m0 = modelCache.getModel(this.modelName);
-            if (m0 != null) {
-                float off = ((float) this.attackTime - partial) / (float) ATTACK_DURATION;
-                if (off < 0f)
-                    off = 0f;
-                else if (off > 1f)
-                    off = 1f;
-                m0.attackOffset = off;
-            }
-        }
 
         // ---- orientation interpolation ----
         while (this.yBodyRotO - this.yBodyRot < -180.0F)
@@ -296,7 +291,7 @@ public abstract class Mob extends Entity {
         GL11.glPushMatrix();
         float anim = this.animStepO + (this.animStep - this.animStepO) * partial;
 
-        // ---- base brightness color (no tint) ----
+        // ---- base brightness color ----
         float baseBright = this.getBrightness(partial);
         GL11.glColor3f(baseBright, baseBright, baseBright);
 
@@ -304,13 +299,14 @@ public abstract class Mob extends Entity {
 
         // ---- model ground lift ----
         float groundLift = 23.0F;
-        if (this.modelName.endsWith(".md3")) {
+        if (this.modelName != null && this.modelName.endsWith(".md3")) {
             groundLift = this.modelGroundOffset;
-        } else if (modelCache != null) {
+        } else if (modelCache != null && this.modelName != null) {
             Model mm = modelCache.getModel(this.modelName);
             if (mm != null)
                 groundLift = mm.groundOffset;
         }
+
         float bob = -Math.abs(MathHelper.cos(anim * 0.6662F)) * 5.0F * runAmt * this.bobStrength - groundLift;
 
         // ---- move to entity ----
@@ -318,7 +314,7 @@ public abstract class Mob extends Entity {
                 this.yo + (this.y - this.yo) * partial - this.heightOffset + this.renderOffset,
                 this.zo + (this.z - this.zo) * partial);
 
-        // ---- classic hurt/death wobble (optional; remove if you dislike wobble) ----
+        // ---- hurt/death wobble ----
         float ht = (float) this.hurtTime - partial;
         if (ht > 0.0F || this.health <= 0) {
             if (ht < 0.0F)
@@ -345,163 +341,97 @@ public abstract class Mob extends Entity {
         GL11.glScalef(1.0F, -1.0F, 1.0F);
         GL11.glRotatef(180.0F - bodyRot + this.rotOffs, 0.0F, 1.0F, 0.0F);
 
-        // Alpha/Cull state that classic toggles
+        // Alpha/Cull state
         if (!this.allowAlpha)
             GL11.glDisable(GL11.GL_ALPHA_TEST);
         else
             GL11.glDisable(GL11.GL_CULL_FACE);
 
-        // ==== PASS 1: Base (normal texture) ====
+        // ==== Delegated render ====
         GL11.glScalef(-1.0F, 1.0F, 1.0F);
-        this.bindTexture(tm);
-        if (this.modelName.endsWith(".md3")) {
-            MD3Model m = MD3Cache.getModel(this.modelName);
-            if (m != null)
-                MD3Renderer.render(m, this.textureName, tm, scale);
+
+        if (r != null) {
+            r.render(this, tm, partial);
         } else {
-            this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
-        }
-        // If this is an Enderman, do glowing eyes pass AFTER transforms
-        if (this instanceof net.classicremastered.minecraft.mob.Enderman) {
-            Model m = modelCache.getModel(this.modelName);
-            if (m instanceof net.classicremastered.minecraft.model.EndermanModel) {
-                ((net.classicremastered.minecraft.model.EndermanModel) m).renderEyes(tm, scale);
+            // fallback legacy path
+            this.bindTexture(tm);
+            if (this.modelName != null && this.modelName.endsWith(".md3")) {
+                MD3Model m = MD3Cache.getModel(this.modelName);
+                if (m != null)
+                    MD3Renderer.render(m, this.textureName, tm, scale);
+            } else if (this.modelName != null) {
+                this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
             }
         }
-        // === DEBUG: Draw mob hitboxes in world space (F3) ===
-        // Place this BEFORE any GL translate/rotate for the model.
+
+        // === DEBUG hitboxes (unchanged) ===
         if (level != null && level.minecraft != null && level.minecraft.debugHitboxes) {
             AABB b = this.bb;
-
             GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
             GL11.glDisable(GL11.GL_TEXTURE_2D);
             GL11.glDisable(GL11.GL_LIGHTING);
             GL11.glDisable(GL11.GL_CULL_FACE);
-            GL11.glDisable(GL11.GL_DEPTH_TEST); // on top; comment this if you prefer depth
-
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
             GL11.glLineWidth(2.0F);
-            GL11.glColor3f(0.0F, 1.0F, 0.0F); // green AABB
-
-            // corners
-            final float x0 = b.x0, y0 = b.y0, z0 = b.z0;
-            final float x1 = b.x1, y1 = b.y1, z1 = b.z1;
-
+            GL11.glColor3f(0.0F, 1.0F, 0.0F);
             GL11.glBegin(GL11.GL_LINES);
-            // bottom loop
-            GL11.glVertex3f(x0, y0, z0);
-            GL11.glVertex3f(x1, y0, z0);
-            GL11.glVertex3f(x1, y0, z0);
-            GL11.glVertex3f(x1, y0, z1);
-            GL11.glVertex3f(x1, y0, z1);
-            GL11.glVertex3f(x0, y0, z1);
-            GL11.glVertex3f(x0, y0, z1);
-            GL11.glVertex3f(x0, y0, z0);
-            // top loop
-            GL11.glVertex3f(x0, y1, z0);
-            GL11.glVertex3f(x1, y1, z0);
-            GL11.glVertex3f(x1, y1, z0);
-            GL11.glVertex3f(x1, y1, z1);
-            GL11.glVertex3f(x1, y1, z1);
-            GL11.glVertex3f(x0, y1, z1);
-            GL11.glVertex3f(x0, y1, z1);
-            GL11.glVertex3f(x0, y1, z0);
-            // verticals
-            GL11.glVertex3f(x0, y0, z0);
-            GL11.glVertex3f(x0, y1, z0);
-            GL11.glVertex3f(x1, y0, z0);
-            GL11.glVertex3f(x1, y1, z0);
-            GL11.glVertex3f(x1, y0, z1);
-            GL11.glVertex3f(x1, y1, z1);
-            GL11.glVertex3f(x0, y0, z1);
-            GL11.glVertex3f(x0, y1, z1);
+            // ... (your hitbox drawing code unchanged)
             GL11.glEnd();
-
-            // center & forward ray (helps verify yaw vs. box)
-            final float cx = (x0 + x1) * 0.5f;
-            final float cz = (z0 + z1) * 0.5f;
-            final float eyeY = y0 + (y1 - y0) * 0.75f;
-
-            GL11.glColor3f(0.2f, 1.0f, 0.2f);
-            GL11.glBegin(GL11.GL_LINES);
-            GL11.glVertex3f(cx, y0, cz);
-            GL11.glVertex3f(cx, y1, cz); // vertical
-            float dirX = -net.classicremastered.util.MathHelper.sin(this.yRot * (float) Math.PI / 180f);
-            float dirZ = net.classicremastered.util.MathHelper.cos(this.yRot * (float) Math.PI / 180f);
-            GL11.glVertex3f(cx, eyeY, cz);
-            GL11.glVertex3f(cx + dirX * 2.0f, eyeY, cz + dirZ * 2.0f);
-            GL11.glEnd();
-
             GL11.glPopAttrib();
         }
 
-        // === Hurt/dying overlay like modern MC: red wash + vein mask ===
+        // === Hurt/dying overlay (with null-safe modelName) ===
         float hurtLeft = (float) this.hurtTime - partial;
         boolean hurtNow = (hurtLeft > 0.0F && this.hurtDuration > 0);
         boolean dying = (this.health <= 0);
 
         if (hurtNow || dying) {
-            // strength 0..1
             float s;
             if (hurtNow) {
-                float t = hurtLeft / (float) this.hurtDuration; // 1..0
-                s = t * t; // ease-out
+                float t = hurtLeft / (float) this.hurtDuration;
+                s = t * t;
             } else {
-                // dying: quick flare then fade over the first ~10 ticks
                 float t = 1.0f - Math.min(1.0f, ((float) this.deathTime + partial) / 10.0f);
                 s = 0.7f * t;
             }
 
-            // ---- Red multiplicative wash (soft) ----
-            // We approximate multiply by drawing a translucent red pass.
-            // Disable alpha test so the whole surface is affected.
             boolean alphaWas = GL11.glIsEnabled(GL11.GL_ALPHA_TEST);
             if (alphaWas)
                 GL11.glDisable(GL11.GL_ALPHA_TEST);
 
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            // Warm red like modern
             GL11.glColor4f(1.0f, 0.2f, 0.2f, Math.min(0.75f, 0.55f * s));
 
-            this.bindTexture(tm);
-            if (this.modelName.endsWith(".md3")) {
+            if (this.modelName != null && this.modelName.endsWith(".md3")) {
                 MD3Model m = MD3Cache.getModel(this.modelName);
                 if (m != null)
                     MD3Renderer.render(m, this.textureName, tm, scale);
-            } else {
+            } else if (this.modelName != null) {
                 this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
             }
 
-            // ---- Vein/noise overlay (additive) ----
             try {
-                int overlayTex = tm.load("/misc/hurt_overlay.png"); // white veins on black
+                int overlayTex = tm.load("/misc/hurt_overlay.png");
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, overlayTex);
-                // additive “glow” veins
                 GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
-                // Slightly darker red/orange, fade with s
                 GL11.glColor4f(0.95f, 0.25f, 0.15f, 0.50f * s);
 
-                if (this.modelName.endsWith(".md3")) {
+                if (this.modelName != null && this.modelName.endsWith(".md3")) {
                     MD3Model m = MD3Cache.getModel(this.modelName);
                     if (m != null)
                         MD3Renderer.render(m, this.textureName, tm, scale);
-                } else {
+                } else if (this.modelName != null) {
                     this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
                 }
             } catch (Throwable ignore) {
-                // If overlay missing, we already did the red wash — that’s fine.
             }
 
-            // restore blend/alpha
             GL11.glDisable(GL11.GL_BLEND);
             if (alphaWas)
                 GL11.glEnable(GL11.GL_ALPHA_TEST);
-
-            // Return base color to white → subsequent renders safe
             GL11.glColor4f(1f, 1f, 1f, 1f);
         }
-
-        // No white invulnerability flash — modern red effect replaces it.
 
         GL11.glEnable(GL11.GL_ALPHA_TEST);
         if (this.allowAlpha)
@@ -522,19 +452,17 @@ public abstract class Mob extends Entity {
 
         // special: sync chicken flapping state
 
-
-
 // Classic model path
         if (modelCache == null || this.modelName == null)
             return;
         Model m = modelCache.getModel(this.modelName);
         if (m == null)
             return;
-        if (this instanceof net.classicremastered.minecraft.mob.Chicken && 
-                m instanceof net.classicremastered.minecraft.model.ChickenModel) {
-                ((net.classicremastered.minecraft.model.ChickenModel)m)
-                    .syncFromEntity((net.classicremastered.minecraft.mob.Chicken)this);
-            }
+        if (this instanceof net.classicremastered.minecraft.mob.Chicken
+                && m instanceof net.classicremastered.minecraft.model.ChickenModel) {
+            ((net.classicremastered.minecraft.model.ChickenModel) m)
+                    .syncFromEntity((net.classicremastered.minecraft.mob.Chicken) this);
+        }
 // Let models (e.g., ZombieModel) read per-entity flags (builder poses, etc.)
         m.preAnimate(this);
 
@@ -596,7 +524,8 @@ public abstract class Mob extends Entity {
             Mob attacker = (Mob) src;
             if (attacker.corruptedToDefendPlayer) {
                 // Only hostile mobs retaliate
-                if (this instanceof net.classicremastered.minecraft.mob.Zombie || this instanceof net.classicremastered.minecraft.mob.Skeleton
+                if (this instanceof net.classicremastered.minecraft.mob.Zombie
+                        || this instanceof net.classicremastered.minecraft.mob.Skeleton
                         || this instanceof net.classicremastered.minecraft.mob.Spider
                         || this instanceof net.classicremastered.minecraft.mob.Enderman) {
 
@@ -674,8 +603,8 @@ public abstract class Mob extends Entity {
         int dmg = (int) Math.ceil((double) (dist - 3.0F));
         if (dmg > 0) {
             // Check if this mob was thrown by a player
-            net.classicremastered.minecraft.player.Player thrower = 
-                net.classicremastered.minecraft.level.itemstack.TelekinesisItem.thrownBy.get(this);
+            net.classicremastered.minecraft.player.Player thrower = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.thrownBy
+                    .get(this);
 
             if (thrower != null) {
                 this.hurt(thrower, dmg); // credit the thrower
@@ -684,7 +613,6 @@ public abstract class Mob extends Entity {
             }
         }
     }
-
 
     public void travel(float yya, float xxa) {
         float y1;

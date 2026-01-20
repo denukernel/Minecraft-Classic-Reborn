@@ -1,7 +1,7 @@
 package net.classicremastered.minecraft.mob.ai;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.item.Arrow;
+import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.util.MathHelper;
 

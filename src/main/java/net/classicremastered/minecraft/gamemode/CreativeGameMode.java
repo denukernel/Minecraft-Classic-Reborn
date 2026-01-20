@@ -1,7 +1,7 @@
 package net.classicremastered.minecraft.gamemode;
 
 import net.classicremastered.minecraft.Minecraft;
-import net.classicremastered.minecraft.SessionData;
+import net.classicremastered.minecraft.CreativeInventoryBlocks;
 import net.classicremastered.minecraft.gui.BlockSelectScreen;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.MobSpawner;
@@ -35,7 +35,7 @@ public class CreativeGameMode extends GameMode {
         for (int slot = 0; slot < 9; slot++) {
             player.inventory.count[slot] = 1;
             if (player.inventory.slots[slot] <= 0) {
-                player.inventory.slots[slot] = ((Block) SessionData.allowedBlocks.get(slot)).id;
+                player.inventory.slots[slot] = ((Block) CreativeInventoryBlocks.allowedBlocks.get(slot)).id;
             }
         }
     }
