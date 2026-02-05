@@ -11,9 +11,6 @@ import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.LevelRenderer;
-import net.classicremastered.minecraft.sound.AudioInfo;
-import net.classicremastered.minecraft.sound.EntitySoundPos;
-import net.classicremastered.minecraft.sound.LevelSoundPos;
 import net.classicremastered.util.MathHelper;
 
 import java.io.Serializable;

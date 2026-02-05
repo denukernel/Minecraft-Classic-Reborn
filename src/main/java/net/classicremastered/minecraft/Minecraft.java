@@ -129,7 +129,6 @@ public final class Minecraft implements Runnable {
 
     public Minecraft(Canvas var1, MinecraftApplet var2, int var3, int var4, boolean var5) {
         this.levelIo = new LevelIO(this.progressBar);
-        this.sound = new SoundManager();
         this.ticks = 0;
         this.blockHitTime = 0;
 

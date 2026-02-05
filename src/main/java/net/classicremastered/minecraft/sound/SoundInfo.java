@@ -1,10 +1,9 @@
 package net.classicremastered.minecraft.sound;
 
 // TODO.
-public final class SoundInfo extends AudioInfo {
+public final class SoundInfo {
 
-   public SoundInfo(String key, float volume, float pitch) {
-		super(key, volume, pitch);
+   public void SoundInfo(String key, float volume, float pitch) {
 		// TODO Auto-generated constructor stub
 	}
 

@@ -72,11 +72,7 @@ public final class SoundPlayer implements Runnable {
        final int[] L = new int[frames], R = new int[frames];
        final double w = 2*Math.PI*440/44100.0;
        for (int i=0;i<frames;i++) { int s=(int)(Math.sin(i*w)*8000); L[i]=s; R[i]=s; }
-       play((var1, var2, want) -> {
-           int n = Math.min(want, frames);
-           for (int i=0;i<n;i++) { var1[i] += L[i]; var2[i] += R[i]; }
-           return false; // one-shot
-       });
+
    }
 
    public void stopAudio() {
@@ -92,9 +88,6 @@ public final class SoundPlayer implements Runnable {
 
    // …keep your existing run(), play(), etc.
 
-   public final void play(AudioInfo var1, SoundPos var2) {
-      this.play(new Sound(var1, var2));
-   }
 
    public final void run() {
       int[] var1 = new int[4410];
@@ -122,9 +115,7 @@ public final class SoundPlayer implements Runnable {
                   break;
                }
 
-               if(!((Audio)var12.get(var8)).play(var6, var5, 4410)) {
-                  var12.remove(var8--);
-               }
+ 
 
                ++var8;
             }

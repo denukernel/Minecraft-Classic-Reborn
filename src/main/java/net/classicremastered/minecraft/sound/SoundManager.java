@@ -25,10 +25,6 @@ public final class SoundManager {
     public void setMasterVolume(float volume) {}
     public void setPerKeyGain(String key, float gain) {}
 
-    // compatibility shims some Classic sources call
-    public AudioInfo getAudioInfo(String key, float volume, float pitch) {
-        return new AudioInfo(key, volume, pitch);
-    }
 
     // Some trees call playMusic(SoundPlayer, String). We just ignore the first arg.
     public void playMusic(Object ignoredSoundPlayer, String poolKey) { playMusic(poolKey); }
