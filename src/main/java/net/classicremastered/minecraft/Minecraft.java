@@ -270,6 +270,15 @@ public final class Minecraft implements Runnable {
         } catch (Throwable ignored) {
         }
 
+        // 2b) PaulsCode SoundSystem cleanup
+        try {
+            if (this.soundPC != null) {
+                this.soundPC.shutdown();
+                this.soundPC = null;
+            }
+        } catch (Throwable ignored) {
+        }
+
         // 3) Background/resource threads: mark not running
         try {
             if (this.resourceThread != null) {
@@ -409,25 +418,25 @@ public final class Minecraft implements Runnable {
                                                                         : (osName.contains("unix") ? Minecraft$OS.linux
                                                                                 : Minecraft$OS.unknown))))))
                 .ordinal()]) {
-        case 1:
-            System.out.println("UNKNOWN OS!!!");
-            return;
-        case 2:
-            minecraftFolder = new File(home, '.' + folder + '/');
-            break;
-        case 3:
-            String appData = System.getenv("APPDATA");
-            if (appData != null) {
-                minecraftFolder = new File(appData, "." + folder + '/');
-            } else {
+            case 1:
+                System.out.println("UNKNOWN OS!!!");
+                return;
+            case 2:
                 minecraftFolder = new File(home, '.' + folder + '/');
-            }
-            break;
-        case 4:
-            minecraftFolder = new File(home, "Library/Application Support/" + folder);
-            break;
-        default:
-            minecraftFolder = new File(home, folder + '/');
+                break;
+            case 3:
+                String appData = System.getenv("APPDATA");
+                if (appData != null) {
+                    minecraftFolder = new File(appData, "." + folder + '/');
+                } else {
+                    minecraftFolder = new File(home, '.' + folder + '/');
+                }
+                break;
+            case 4:
+                minecraftFolder = new File(home, "Library/Application Support/" + folder);
+                break;
+            default:
+                minecraftFolder = new File(home, folder + '/');
         }
 
         if (!minecraftFolder.exists() && !minecraftFolder.mkdirs()) {
@@ -1576,7 +1585,7 @@ public final class Minecraft implements Runnable {
     }
 
     // Minecraft.java
-// Minecraft.java
+    // Minecraft.java
     // Minecraft.java
     public void onMouseClick(int button) {
         if (this.input != null) {
@@ -2274,7 +2283,6 @@ public final class Minecraft implements Runnable {
         }
         return false;
     }
-
 
     public final void setLevel(Level var1) {
         if (isDebugger())
