@@ -11,6 +11,7 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.ProgressBarDisplay;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
+import net.classicremastered.nbt.*;
 
 /**
  * Unified level serializer:
@@ -24,6 +25,8 @@ public final class LevelIO {
     private static final int VERSION_CLASSIC  = 2;
     private static final int VERSION_INFINITE = 3; // flat
     private static final int VERSION_TERRAIN  = 4; // terrain
+    private static final int VERSION_CLASSIC_NBT  = 5;
+    private static final int VERSION_INFINITE_NBT = 6;
 
     private final ProgressBarDisplay progressBar;
 
@@ -46,15 +49,12 @@ public final class LevelIO {
 
                 out.writeInt(MAGIC);
 
-                if (level instanceof LevelInfiniteFlat) {
-                    out.writeByte(VERSION_INFINITE);
-                    saveInfinite((LevelInfiniteFlat) level, out);
-                } else if (level instanceof LevelInfiniteTerrain) {
-                    out.writeByte(VERSION_TERRAIN);
-                    saveInfinite((LevelInfiniteTerrain) level, out);
+                if (level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain) {
+                    out.writeByte(VERSION_INFINITE_NBT);
+                    saveInfiniteNBT(level, out);
                 } else {
-                    out.writeByte(VERSION_CLASSIC);
-                    saveClassic(level, gos);
+                    out.writeByte(VERSION_CLASSIC_NBT);
+                    saveClassicNBT(level, out);
                 }
             }
 
@@ -210,9 +210,11 @@ public final class LevelIO {
 
             int ver = in.readByte() & 0xFF;
             switch (ver) {
-                case VERSION_CLASSIC:  return loadClassic(gis);
-                case VERSION_INFINITE: return loadInfiniteFlat(in);
-                case VERSION_TERRAIN:  return loadInfiniteTerrain(in);
+                case VERSION_CLASSIC:      return loadClassic(gis);
+                case VERSION_INFINITE:     return loadInfiniteFlat(in);
+                case VERSION_TERRAIN:      return loadInfiniteTerrain(in);
+                case VERSION_CLASSIC_NBT:  return loadClassicNBT(in);
+                case VERSION_INFINITE_NBT: return loadInfiniteNBT(in);
                 default: throw new IOException("Unsupported version: " + ver);
             }
         } catch (Exception ex) {
@@ -384,5 +386,355 @@ public final class LevelIO {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void saveClassicNBT(Level level, DataOutputStream out) throws IOException {
+        CompoundTag root = new CompoundTag("ClassicLevel");
+        root.putByte("FormatVersion", (byte) 1);
+        root.putString("Name", level.name);
+        root.putString("Creator", level.creator);
+        root.putLong("CreateTime", level.createTime);
+
+        CompoundTag map = new CompoundTag("Map");
+        map.putShort("Width", (short) level.width);
+        map.putShort("Height", (short) level.depth);
+        map.putShort("Length", (short) level.height);
+        map.putByteArray("Blocks", level.blocks);
+        map.putShort("WaterLevel", (short) level.waterLevel);
+        map.putByte("Creative", (byte) (level.creativeMode ? 1 : 0));
+        map.putInt("SkyColor", level.skyColor);
+        map.putInt("FogColor", level.fogColor);
+        map.putInt("CloudColor", level.cloudColor);
+        map.putInt("TimeOfDay", level.timeOfDay);
+        map.putByte("DoDayNightCycle", (byte) (level.doDayNightCycle ? 1 : 0));
+
+        ListTag spawn = new ListTag("Spawn", (byte) 3); // TAG_Int
+        spawn.add(new IntTag(null, level.xSpawn));
+        spawn.add(new IntTag(null, level.ySpawn));
+        spawn.add(new IntTag(null, level.zSpawn));
+        map.put(spawn);
+        map.putFloat("SpawnRot", level.rotSpawn);
+        root.put(map);
+
+        CompoundTag player = new CompoundTag("Player");
+        if (level.player != null) {
+            ListTag pos = new ListTag("Pos", (byte) 5); // TAG_Float
+            pos.add(new FloatTag(null, level.player.x));
+            pos.add(new FloatTag(null, level.player.y));
+            pos.add(new FloatTag(null, level.player.z));
+            player.put(pos);
+
+            ListTag rot = new ListTag("Rotation", (byte) 5); // TAG_Float
+            rot.add(new FloatTag(null, level.player.yRot));
+            rot.add(new FloatTag(null, level.player.xRot));
+            player.put(rot);
+        } else {
+            ListTag pos = new ListTag("Pos", (byte) 5);
+            pos.add(new FloatTag(null, 0f));
+            pos.add(new FloatTag(null, 0f));
+            pos.add(new FloatTag(null, 0f));
+            player.put(pos);
+
+            ListTag rot = new ListTag("Rotation", (byte) 5);
+            rot.add(new FloatTag(null, 0f));
+            rot.add(new FloatTag(null, 0f));
+            rot.add(new FloatTag(null, 0f));
+            player.put(rot);
+        }
+        root.put(player);
+
+        ListTag entities = new ListTag("Entities", (byte) 10); // TAG_Compound
+        var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
+        for (Object e : all) {
+            if (!(e instanceof net.classicremastered.minecraft.mob.Mob m)) continue;
+            if (m instanceof net.classicremastered.minecraft.player.Player) continue;
+            if (m.removed || m.health <= 0) continue;
+
+            try {
+                java.lang.reflect.Field f = m.getClass().getField("persistent");
+                if (f.getType() == boolean.class && !f.getBoolean(m))
+                    continue;
+            } catch (Throwable ignored) {}
+
+            short id = net.classicremastered.minecraft.mob.MobRegistry.idOf(m);
+            if (id < 0) continue;
+
+            CompoundTag mobTag = new CompoundTag(null);
+            mobTag.putShort("Id", id);
+
+            ListTag mPos = new ListTag("Pos", (byte) 5);
+            mPos.add(new FloatTag(null, m.x));
+            mPos.add(new FloatTag(null, m.y));
+            mPos.add(new FloatTag(null, m.z));
+            mobTag.put(mPos);
+
+            ListTag mRot = new ListTag("Rotation", (byte) 5);
+            mRot.add(new FloatTag(null, m.yRot));
+            mRot.add(new FloatTag(null, m.xRot));
+            mobTag.put(mRot);
+
+            mobTag.putInt("Health", m.health);
+            entities.add(mobTag);
+        }
+        root.put(entities);
+
+        net.classicremastered.nbt.NBTIO.write(root, out);
+    }
+
+    private void saveInfiniteNBT(Level level, DataOutputStream out) throws IOException {
+        CompoundTag root = new CompoundTag("InfiniteLevel");
+        root.putByte("FormatVersion", (byte) 1);
+        root.putString("TerrainType", level instanceof LevelInfiniteFlat ? "Flat" : "Terrain");
+
+        long seed = 0;
+        int depthY = 64;
+        Map<Long, SimpleChunk> map = null;
+
+        if (level instanceof LevelInfiniteFlat flat) {
+            seed = flat.randomSeed;
+            depthY = flat.depth;
+            map = flat.chunks().getAllChunks();
+        } else if (level instanceof LevelInfiniteTerrain terrain) {
+            seed = terrain.randomSeed;
+            depthY = terrain.depth;
+            map = terrain.chunks().getAllChunks();
+        }
+
+        root.putLong("Seed", seed);
+        root.putInt("Depth", depthY);
+        root.putInt("TimeOfDay", level.timeOfDay);
+        root.putByte("DoDayNightCycle", (byte) (level.doDayNightCycle ? 1 : 0));
+
+        CompoundTag player = new CompoundTag("Player");
+        if (level.player != null) {
+            ListTag pos = new ListTag("Pos", (byte) 5);
+            pos.add(new FloatTag(null, level.player.x));
+            pos.add(new FloatTag(null, level.player.y));
+            pos.add(new FloatTag(null, level.player.z));
+            player.put(pos);
+
+            ListTag rot = new ListTag("Rotation", (byte) 5);
+            rot.add(new FloatTag(null, level.player.yRot));
+            rot.add(new FloatTag(null, level.player.xRot));
+            player.put(rot);
+        } else {
+            ListTag pos = new ListTag("Pos", (byte) 5);
+            pos.add(new FloatTag(null, 0f));
+            pos.add(new FloatTag(null, 0f));
+            pos.add(new FloatTag(null, 0f));
+            player.put(pos);
+
+            ListTag rot = new ListTag("Rotation", (byte) 5);
+            rot.add(new FloatTag(null, 0f));
+            rot.add(new FloatTag(null, 0f));
+            rot.add(new FloatTag(null, 0f));
+            player.put(rot);
+        }
+        root.put(player);
+
+        ListTag chunks = new ListTag("Chunks", (byte) 10);
+        if (map != null) {
+            for (Map.Entry<Long, SimpleChunk> e : map.entrySet()) {
+                CompoundTag chunkTag = new CompoundTag(null);
+                chunkTag.putLong("Key", e.getKey());
+                chunkTag.putByteArray("Blocks", e.getValue().blocks);
+                chunks.add(chunkTag);
+            }
+        }
+        root.put(chunks);
+
+        ListTag entities = new ListTag("Entities", (byte) 10);
+        var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
+        for (Object e : all) {
+            if (!(e instanceof net.classicremastered.minecraft.mob.Mob m)) continue;
+            if (m instanceof net.classicremastered.minecraft.player.Player) continue;
+            if (m.removed || m.health <= 0) continue;
+
+            short id = net.classicremastered.minecraft.mob.MobRegistry.idOf(m);
+            if (id < 0) continue;
+
+            CompoundTag mobTag = new CompoundTag(null);
+            mobTag.putShort("Id", id);
+
+            ListTag mPos = new ListTag("Pos", (byte) 5);
+            mPos.add(new FloatTag(null, m.x));
+            mPos.add(new FloatTag(null, m.y));
+            mPos.add(new FloatTag(null, m.z));
+            mobTag.put(mPos);
+
+            ListTag mRot = new ListTag("Rotation", (byte) 5);
+            mRot.add(new FloatTag(null, m.yRot));
+            mRot.add(new FloatTag(null, m.xRot));
+            mobTag.put(mRot);
+
+            mobTag.putInt("Health", m.health);
+            entities.add(mobTag);
+        }
+        root.put(entities);
+
+        net.classicremastered.nbt.NBTIO.write(root, out);
+    }
+
+    private Level loadClassicNBT(DataInputStream in) throws IOException {
+        CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+        Level level = new Level();
+
+        level.name = root.getString("Name");
+        level.creator = root.getString("Creator");
+        level.createTime = root.getLong("CreateTime");
+
+        CompoundTag map = root.getCompound("Map");
+        level.width = map.getShort("Width");
+        level.depth = map.getShort("Height");
+        level.height = map.getShort("Length");
+        level.blocks = map.getByteArray("Blocks");
+        level.waterLevel = map.getShort("WaterLevel");
+        level.creativeMode = map.getBoolean("Creative");
+        level.skyColor = map.getInt("SkyColor");
+        level.fogColor = map.getInt("FogColor");
+        level.cloudColor = map.getInt("CloudColor");
+        level.timeOfDay = map.getInt("TimeOfDay");
+        level.doDayNightCycle = map.getBoolean("DoDayNightCycle");
+
+        ListTag spawn = map.getList("Spawn");
+        if (spawn.size() >= 3) {
+            level.xSpawn = ((IntTag) spawn.get(0)).value;
+            level.ySpawn = ((IntTag) spawn.get(1)).value;
+            level.zSpawn = ((IntTag) spawn.get(2)).value;
+        }
+        level.rotSpawn = map.getFloat("SpawnRot");
+
+        ListTag entities = root.getList("Entities");
+        level.pendingEntities = new java.util.ArrayList<>();
+        for (int i = 0; i < entities.size(); i++) {
+            CompoundTag mobTag = (CompoundTag) entities.get(i);
+            short id = mobTag.getShort("Id");
+            ListTag mPos = mobTag.getList("Pos");
+            ListTag mRot = mobTag.getList("Rotation");
+            int health = mobTag.getInt("Health");
+
+            float mx = 0f, my = 0f, mz = 0f;
+            if (mPos.size() >= 3) {
+                mx = ((FloatTag) mPos.get(0)).value;
+                my = ((FloatTag) mPos.get(1)).value;
+                mz = ((FloatTag) mPos.get(2)).value;
+            }
+            float myRot = 0f, mxRot = 0f;
+            if (mRot.size() >= 2) {
+                myRot = ((FloatTag) mRot.get(0)).value;
+                mxRot = ((FloatTag) mRot.get(1)).value;
+            }
+
+            level.pendingEntities.add(new Level.SavedMob(id, mx, my, mz, myRot, mxRot, health));
+        }
+
+        level.initTransient();
+
+        CompoundTag player = root.getCompound("Player");
+        if (player.hasKey("Pos") && level.player != null) {
+            ListTag pos = player.getList("Pos");
+            if (pos.size() >= 3) {
+                level.player.x = ((FloatTag) pos.get(0)).value;
+                level.player.y = ((FloatTag) pos.get(1)).value;
+                level.player.z = ((FloatTag) pos.get(2)).value;
+            }
+            ListTag rot = player.getList("Rotation");
+            if (rot.size() >= 2) {
+                level.player.yRot = ((FloatTag) rot.get(0)).value;
+                level.player.xRot = ((FloatTag) rot.get(1)).value;
+            }
+        }
+
+        return level;
+    }
+
+    private Level loadInfiniteNBT(DataInputStream in) throws IOException {
+        CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+        String type = root.getString("TerrainType");
+        long seed = root.getLong("Seed");
+        int depth = root.getInt("Depth");
+
+        Level level;
+        if ("Flat".equalsIgnoreCase(type)) {
+            level = new LevelInfiniteFlat(seed, depth);
+        } else {
+            level = new LevelInfiniteTerrain(seed, depth);
+        }
+
+        level.timeOfDay = root.getInt("TimeOfDay");
+        level.doDayNightCycle = root.getBoolean("DoDayNightCycle");
+
+        ListTag chunks = root.getList("Chunks");
+        SimpleChunkManager chunkMgr = null;
+        if (level instanceof LevelInfiniteFlat) {
+            chunkMgr = ((LevelInfiniteFlat) level).chunks();
+        } else if (level instanceof LevelInfiniteTerrain) {
+            chunkMgr = ((LevelInfiniteTerrain) level).chunks();
+        }
+
+        if (chunkMgr != null) {
+            for (int i = 0; i < chunks.size(); i++) {
+                CompoundTag chunkTag = (CompoundTag) chunks.get(i);
+                long key = chunkTag.getLong("Key");
+                byte[] blocks = chunkTag.getByteArray("Blocks");
+                chunkMgr.restoreChunk(key, blocks);
+            }
+        }
+
+        level.blockMap = new net.classicremastered.minecraft.level.BlockMap(level.width, level.depth, level.height);
+        if (level.blockMap == null) {
+            level.blockMap = new BlockMap(1, 1, 1);
+            level.blockMap.infiniteMode = true;
+        }
+        for (Entity e : level.blockMap.all) {
+            e.blockMap = level.blockMap;
+        }
+
+        CompoundTag player = root.getCompound("Player");
+        if (player.hasKey("Pos") && level.player != null) {
+            ListTag pos = player.getList("Pos");
+            if (pos.size() >= 3) {
+                level.player.x = ((FloatTag) pos.get(0)).value;
+                level.player.y = ((FloatTag) pos.get(1)).value;
+                level.player.z = ((FloatTag) pos.get(2)).value;
+            }
+            ListTag rot = player.getList("Rotation");
+            if (rot.size() >= 2) {
+                level.player.yRot = ((FloatTag) rot.get(0)).value;
+                level.player.xRot = ((FloatTag) rot.get(1)).value;
+            }
+        }
+
+        ListTag entities = root.getList("Entities");
+        net.classicremastered.minecraft.mob.MobRegistry.bootstrapDefaults();
+        for (int i = 0; i < entities.size(); i++) {
+            CompoundTag mobTag = (CompoundTag) entities.get(i);
+            short id = mobTag.getShort("Id");
+            ListTag mPos = mobTag.getList("Pos");
+            ListTag mRot = mobTag.getList("Rotation");
+            int health = mobTag.getInt("Health");
+
+            float mx = 0f, my = 0f, mz = 0f;
+            if (mPos.size() >= 3) {
+                mx = ((FloatTag) mPos.get(0)).value;
+                my = ((FloatTag) mPos.get(1)).value;
+                mz = ((FloatTag) mPos.get(2)).value;
+            }
+            float myRot = 0f, mxRot = 0f;
+            if (mRot.size() >= 2) {
+                myRot = ((FloatTag) mRot.get(0)).value;
+                mxRot = ((FloatTag) mRot.get(1)).value;
+            }
+
+            var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, level, mx, my, mz);
+            if (mob != null) {
+                mob.yRot = myRot;
+                mob.xRot = mxRot;
+                mob.health = health;
+                level.addEntity(mob);
+            }
+        }
+
+        return level;
     }
 }

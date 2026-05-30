@@ -91,11 +91,16 @@ public class Player extends Mob {
 
         // --- Modern-style drop spawn point ---
         float eyeHeight = this.heightOffset;
-        float dirX = -MathHelper.sin(this.yRot * (float) Math.PI / 180.0F)
-                * MathHelper.cos(this.xRot * (float) Math.PI / 180.0F);
-        float dirY = -MathHelper.sin(this.xRot * (float) Math.PI / 180.0F);
-        float dirZ = MathHelper.cos(this.yRot * (float) Math.PI / 180.0F)
-                * MathHelper.cos(this.xRot * (float) Math.PI / 180.0F);
+        
+        // Calculate actual look vector (matching Minecraft.java camera raycast)
+        float cosYaw = MathHelper.cos(-this.yRot * (float) Math.PI / 180.0F - (float) Math.PI);
+        float sinYaw = MathHelper.sin(-this.yRot * (float) Math.PI / 180.0F - (float) Math.PI);
+        float cosPitch = MathHelper.cos(-this.xRot * (float) Math.PI / 180.0F);
+        float sinPitch = MathHelper.sin(-this.xRot * (float) Math.PI / 180.0F);
+
+        float dirX = sinYaw * cosPitch;
+        float dirY = sinPitch;
+        float dirZ = cosYaw * cosPitch;
 
         // spawn ~0.5 blocks in front of eyes
         float spawnX = this.x + dirX * 0.5F;

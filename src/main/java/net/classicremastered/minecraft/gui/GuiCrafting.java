@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.gui;
 
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.player.Inventory;
@@ -29,6 +30,10 @@ public final class GuiCrafting extends GuiScreen {
     private int carriedId = -1;
     private int carriedCnt = 0;
 
+    // Drag-paint state
+    private boolean draggingRMB = false;
+    private boolean[] painted = new boolean[45]; // 0-8=Matrix, 9-35=InvMain, 36-44=InvHotbar
+
     public GuiCrafting() {
         // Clear matrix
         for (int i = 0; i < 9; i++) {
@@ -40,6 +45,37 @@ public final class GuiCrafting extends GuiScreen {
     @Override
     public void onOpen() {
         this.texture = minecraft.textureManager.load("/gui/crafting.png");
+        draggingRMB = false;
+        for (int i = 0; i < painted.length; i++) painted[i] = false;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (draggingRMB) {
+            if (!Mouse.isButtonDown(1)) {
+                draggingRMB = false;
+                for (int i = 0; i < painted.length; i++) painted[i] = false;
+                return;
+            }
+            // Logic
+            int mx = Mouse.getX() * this.width / this.minecraft.width;
+            int my = this.height - Mouse.getY() * this.height / this.minecraft.height - 1;
+
+            int slot = getUnifiedSlotAt(mx, my);
+            if (slot != -1 && !painted[slot] && carriedId > 0 && carriedCnt > 0) {
+                 // Dispatch "Place One" (button 1)
+                 if (slot < 9) {
+                     slotClick(craftMatrix, craftCount, slot, 1);
+                     checkRecipe();
+                 } else if (slot < 36) {
+                     inventoryClick(minecraft.player.inventory, slot, 1);
+                 } else {
+                     inventoryClick(minecraft.player.inventory, slot - 36, 1);
+                 }
+                 painted[slot] = true;
+            }
+        }
     }
 
     @Override
@@ -135,7 +171,20 @@ public final class GuiCrafting extends GuiScreen {
             }
         }
 
-        // 6. Draw Carried Item (Floating)
+        // 6. Draw Highlight on Hover
+        int hover = getUnifiedSlotAt(mouseX, mouseY);
+        if (hover != -1) {
+            int[] xy = new int[2];
+            getUnifiedSlotPos(hover, xy);
+            int sx = xy[0];
+            int sy = xy[1];
+            drawBox(sx - 1, sy - 1, sx + 17, sy, 0x80FFFFFF);
+            drawBox(sx - 1, sy + 16, sx + 17, sy + 17, 0x80FFFFFF);
+            drawBox(sx - 1, sy, sx, sy + 16, 0x80FFFFFF);
+            drawBox(sx + 16, sy, sx + 17, sy + 16, 0x80FFFFFF);
+        }
+
+        // 7. Draw Carried Item (Floating)
         if (carriedId > 0 && carriedCnt > 0) {
             GL11.glPushMatrix();
             GL11.glTranslatef(0, 0, 200f); // Render above everything
@@ -160,24 +209,8 @@ public final class GuiCrafting extends GuiScreen {
     protected void onMouseClick(int mouseX, int mouseY, int button) {
         final int x0 = (width - GUI_W) / 2;
         final int y0 = (height - GUI_H) / 2;
-        Inventory inv = minecraft.player.inventory;
 
-        // Check Crafting Matrix (30, 17)
-        int gridX = x0 + 30;
-        int gridY = y0 + 17;
-        for (int i = 0; i < 9; i++) {
-            int col = i % 3;
-            int row = i / 3;
-            int sx = gridX + col * 18;
-            int sy = gridY + row * 18;
-            if (isOver(mouseX, mouseY, sx, sy)) {
-                slotClick(craftMatrix, craftCount, i, button);
-                checkRecipe();
-                return;
-            }
-        }
-
-        // Check Output Slot (124, 35)
+        // Output Slot (Not part of unified slots for dragging)
         int outX = x0 + 124;
         int outY = y0 + 35;
         if (isOver(mouseX, mouseY, outX, outY)) {
@@ -185,26 +218,24 @@ public final class GuiCrafting extends GuiScreen {
             return;
         }
 
-        // Check Main Inventory (8, 84)
-        for (int i = 0; i < 27; i++) {
-            int slotIdx = 9 + i;
-            int col = i % 9;
-            int row = i / 9;
-            int sx = x0 + 8 + col * 18;
-            int sy = y0 + 84 + row * 18; // Reverted to 84
-            if (isOver(mouseX, mouseY, sx, sy)) {
-                inventoryClick(inv, slotIdx, button);
-                return;
+        int slot = getUnifiedSlotAt(mouseX, mouseY);
+        if (slot != -1) {
+            boolean isRightClick = (button == 1);
+            
+            if (isRightClick) {
+                draggingRMB = true;
+                for(int i=0; i<painted.length; i++) painted[i] = false;
+                painted[slot] = true;
             }
-        }
-
-        // Check Hotbar (8, 142)
-        for (int i = 0; i < 9; i++) {
-            int sx = x0 + 8 + i * 18;
-            int sy = y0 + 142;
-             if (isOver(mouseX, mouseY, sx, sy)) {
-                inventoryClick(inv, i, button);
-                return;
+            
+            // Dispatch click
+            if (slot < 9) { // Matrix
+                 slotClick(craftMatrix, craftCount, slot, button);
+                 checkRecipe();
+            } else if (slot < 36) { // Main
+                 inventoryClick(minecraft.player.inventory, slot, button);
+            } else { // Hotbar (Unified 36-44 -> Inv 0-8)
+                 inventoryClick(minecraft.player.inventory, slot - 36, button);
             }
         }
     }
@@ -409,6 +440,58 @@ public final class GuiCrafting extends GuiScreen {
                 ShapeRenderer.instance.vertexUV(x, y, 0, 0, 0);
                 ShapeRenderer.instance.end();
              }
+        }
+    }
+
+    private int getUnifiedSlotAt(int mx, int my) {
+        final int x0 = (width - GUI_W) / 2;
+        final int y0 = (height - GUI_H) / 2;
+
+        // Matrix (0-8)
+        int gridX = x0 + 30;
+        int gridY = y0 + 17;
+        for (int i = 0; i < 9; i++) {
+             int col = i % 3;
+             int row = i / 3;
+             if (isOver(mx, my, gridX + col * 18, gridY + row * 18)) return i;
+        }
+
+        // Main Inventory (9-35)
+        for (int i = 0; i < 27; i++) {
+            int col = i % 9;
+            int row = i / 9;
+            if (isOver(mx, my, x0 + 8 + col * 18, y0 + 84 + row * 18)) return 9 + i;
+        }
+
+        // Hotbar (36-44)
+        for (int i = 0; i < 9; i++) {
+            if (isOver(mx, my, x0 + 8 + i * 18, y0 + 142)) return 36 + i;
+        }
+
+        return -1;
+    }
+
+    private void getUnifiedSlotPos(int slot, int[] out) {
+        final int x0 = (width - GUI_W) / 2;
+        final int y0 = (height - GUI_H) / 2;
+
+        if (slot < 9) {
+            int gridX = x0 + 30;
+            int gridY = y0 + 17;
+            int col = slot % 3;
+            int row = slot / 3;
+            out[0] = gridX + col * 18;
+            out[1] = gridY + row * 18;
+        } else if (slot < 36) {
+            int i = slot - 9;
+            int col = i % 9;
+            int row = i / 9;
+            out[0] = x0 + 8 + col * 18;
+            out[1] = y0 + 84 + row * 18;
+        } else if (slot < 45) {
+            int i = slot - 36;
+            out[0] = x0 + 8 + i * 18;
+            out[1] = y0 + 142;
         }
     }
 }

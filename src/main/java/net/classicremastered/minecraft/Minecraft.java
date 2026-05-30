@@ -1313,79 +1313,81 @@ public final class Minecraft implements Runnable {
                                                 r2.applyBobbing(renderPartial);
                                             }
 
-                                            HeldBlock hb = r2.heldBlock;
-                                            float heldInterp = r2.heldBlock.lastPos
-                                                    + (hb.pos - hb.lastPos) * renderPartial;
-                                            camPlayer = hb.minecraft.player;
-                                            GL11.glPushMatrix();
-                                            GL11.glRotatef(
-                                                    camPlayer.xRotO
-                                                            + (camPlayer.xRot - camPlayer.xRotO) * renderPartial,
-                                                    1.0F, 0.0F, 0.0F);
-                                            GL11.glRotatef(
-                                                    camPlayer.yRotO
-                                                            + (camPlayer.yRot - camPlayer.yRotO) * renderPartial,
-                                                    0.0F, 1.0F, 0.0F);
-                                            hb.minecraft.renderer.setLighting(true);
-                                            GL11.glPopMatrix();
-                                            GL11.glPushMatrix();
-                                            float heldScale = 0.8F;
-                                            if (hb.moving) {
-                                                float tSwing = ((float) hb.offset + renderPartial) / 7.0F;
-                                                float swingSin = MathHelper.sin(tSwing * 3.1415927F);
-                                                GL11.glTranslatef(
-                                                        -MathHelper.sin(MathHelper.sqrt(tSwing) * 3.1415927F) * 0.4F,
-                                                        MathHelper.sin(MathHelper.sqrt(tSwing) * 3.1415927F * 2.0F)
-                                                                * 0.2F,
-                                                        -swingSin * 0.2F);
-                                            }
-
-                                            GL11.glTranslatef(0.7F * heldScale,
-                                                    -0.65F * heldScale - (1.0F - heldInterp) * 0.6F, -0.9F * heldScale);
-                                            GL11.glRotatef(45.0F, 0.0F, 1.0F, 0.0F);
-                                            GL11.glEnable(2977);
-                                            if (hb.moving) {
-                                                float tSwing = ((float) hb.offset + renderPartial) / 7.0F;
-                                                float swingSin2 = MathHelper.sin(tSwing * tSwing * 3.1415927F);
+                                            if (r2.minecraft.cameraMode == 0) {
+                                                HeldBlock hb = r2.heldBlock;
+                                                float heldInterp = r2.heldBlock.lastPos
+                                                        + (hb.pos - hb.lastPos) * renderPartial;
+                                                camPlayer = hb.minecraft.player;
+                                                GL11.glPushMatrix();
                                                 GL11.glRotatef(
-                                                        MathHelper.sin(MathHelper.sqrt(tSwing) * 3.1415927F) * 80.0F,
+                                                        camPlayer.xRotO
+                                                                + (camPlayer.xRot - camPlayer.xRotO) * renderPartial,
+                                                        1.0F, 0.0F, 0.0F);
+                                                GL11.glRotatef(
+                                                        camPlayer.yRotO
+                                                                + (camPlayer.yRot - camPlayer.yRotO) * renderPartial,
                                                         0.0F, 1.0F, 0.0F);
-                                                GL11.glRotatef(-swingSin2 * 20.0F, 1.0F, 0.0F, 0.0F);
-                                            }
-
-                                            GL11.glColor4f(
-                                                    heldInterp = hb.minecraft.level.getBrightness((int) camPlayer.x,
-                                                            (int) camPlayer.y, (int) camPlayer.z),
-                                                    heldInterp, heldInterp, 1.0F);
-                                            ShapeRenderer heldShape = ShapeRenderer.instance;
-                                            if (hb.block != null) {
-                                                float s = 0.4F;
-                                                GL11.glScalef(s, s, s);
-                                                GL11.glTranslatef(-0.5F, -0.5F, -0.5F);
-                                                GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-                                                        hb.minecraft.textureManager.load("/terrain.png"));
-                                                hb.block.renderPreview(heldShape);
-                                            } else {
-                                                int selId = camPlayer.inventory.getSelected();
-                                                if (selId >= 256) {
-                                                    // hide arm: item rendered by renderHeldItem()
-                                                } else {
-                                                    camPlayer.bindTexture(hb.minecraft.textureManager);
-                                                    GL11.glScalef(1.0F, -1.0F, -1.0F);
-                                                    GL11.glTranslatef(0.0F, 0.2F, 0.0F);
-                                                    GL11.glRotatef(-120.0F, 0.0F, 0.0F, 1.0F);
-                                                    float armScale = 0.0625F;
-                                                    ModelPart arm = camPlayer.getModel().leftArm;
-                                                    if (!arm.hasList)
-                                                        arm.generateList(armScale);
-                                                    GL11.glCallList(arm.list);
+                                                hb.minecraft.renderer.setLighting(true);
+                                                GL11.glPopMatrix();
+                                                GL11.glPushMatrix();
+                                                float heldScale = 0.8F;
+                                                if (hb.moving) {
+                                                    float tSwing = ((float) hb.offset + renderPartial) / 7.0F;
+                                                    float swingSin = MathHelper.sin(tSwing * 3.1415927F);
+                                                    GL11.glTranslatef(
+                                                            -MathHelper.sin(MathHelper.sqrt(tSwing) * 3.1415927F) * 0.4F,
+                                                            MathHelper.sin(MathHelper.sqrt(tSwing) * 3.1415927F * 2.0F)
+                                                                    * 0.2F,
+                                                            -swingSin * 0.2F);
                                                 }
-                                            }
 
-                                            GL11.glDisable(2977);
-                                            GL11.glPopMatrix();
-                                            hb.minecraft.renderer.renderHeldItem();
-                                            hb.minecraft.renderer.setLighting(false);
+                                                GL11.glTranslatef(0.7F * heldScale,
+                                                        -0.65F * heldScale - (1.0F - heldInterp) * 0.6F, -0.9F * heldScale);
+                                                GL11.glRotatef(45.0F, 0.0F, 1.0F, 0.0F);
+                                                GL11.glEnable(2977);
+                                                if (hb.moving) {
+                                                    float tSwing = ((float) hb.offset + renderPartial) / 7.0F;
+                                                    float swingSin2 = MathHelper.sin(tSwing * tSwing * 3.1415927F);
+                                                    GL11.glRotatef(
+                                                            MathHelper.sin(MathHelper.sqrt(tSwing) * 3.1415927F) * 80.0F,
+                                                            0.0F, 1.0F, 0.0F);
+                                                    GL11.glRotatef(-swingSin2 * 20.0F, 1.0F, 0.0F, 0.0F);
+                                                }
+
+                                                GL11.glColor4f(
+                                                        heldInterp = hb.minecraft.level.getBrightness((int) camPlayer.x,
+                                                                (int) camPlayer.y, (int) camPlayer.z),
+                                                        heldInterp, heldInterp, 1.0F);
+                                                ShapeRenderer heldShape = ShapeRenderer.instance;
+                                                if (hb.block != null) {
+                                                    float s = 0.4F;
+                                                    GL11.glScalef(s, s, s);
+                                                    GL11.glTranslatef(-0.5F, -0.5F, -0.5F);
+                                                    GL11.glBindTexture(GL11.GL_TEXTURE_2D,
+                                                            hb.minecraft.textureManager.load("/terrain.png"));
+                                                    hb.block.renderPreview(heldShape);
+                                                } else {
+                                                    int selId = camPlayer.inventory.getSelected();
+                                                    if (selId >= 256) {
+                                                        // hide arm: item rendered by renderHeldItem()
+                                                    } else {
+                                                        camPlayer.bindTexture(hb.minecraft.textureManager);
+                                                        GL11.glScalef(1.0F, -1.0F, -1.0F);
+                                                        GL11.glTranslatef(0.0F, 0.2F, 0.0F);
+                                                        GL11.glRotatef(-120.0F, 0.0F, 0.0F, 1.0F);
+                                                        float armScale = 0.0625F;
+                                                        ModelPart arm = camPlayer.getModel().leftArm;
+                                                        if (!arm.hasList)
+                                                            arm.generateList(armScale);
+                                                        GL11.glCallList(arm.list);
+                                                    }
+                                                }
+
+                                                GL11.glDisable(2977);
+                                                GL11.glPopMatrix();
+                                                hb.minecraft.renderer.renderHeldItem();
+                                                hb.minecraft.renderer.setLighting(false);
+                                            }
                                             if (!r2.minecraft.settings.anaglyph)
                                                 break;
                                             ++stereoEye;
@@ -1656,17 +1658,17 @@ public final class Minecraft implements Runnable {
     boolean fireCanStayAt(int x, int y, int z) {
         if (!this.level.isInBounds(x, y, z))
             return false;
-        // solid below
-        if (this.level.isSolidTile(x, y - 1, z))
+        // solid or flammable below
+        if (this.level.isSolidTile(x, y - 1, z) || isFlammable(this.level.getTile(x, y - 1, z)))
             return true;
-        // side attachments
-        if (this.level.isSolidTile(x + 1, y, z))
+        // side attachments (solid or flammable)
+        if (this.level.isSolidTile(x + 1, y, z) || isFlammable(this.level.getTile(x + 1, y, z)))
             return true;
-        if (this.level.isSolidTile(x - 1, y, z))
+        if (this.level.isSolidTile(x - 1, y, z) || isFlammable(this.level.getTile(x - 1, y, z)))
             return true;
-        if (this.level.isSolidTile(x, y, z + 1))
+        if (this.level.isSolidTile(x, y, z + 1) || isFlammable(this.level.getTile(x, y, z + 1)))
             return true;
-        if (this.level.isSolidTile(x, y, z - 1))
+        if (this.level.isSolidTile(x, y, z - 1) || isFlammable(this.level.getTile(x, y, z - 1)))
             return true;
         return false;
     }

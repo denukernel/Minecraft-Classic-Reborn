@@ -29,14 +29,23 @@ import java.io.InputStreamReader;
 public final class ClassicLauncher {
 
     public static void main(String[] args) {
-        LwjglNativesDownloader.setupWindowsNatives();
-        JInputBootstrap.setupWindows();
-        ClassicLauncher app = new ClassicLauncher();
+        try {
+            LwjglNativesDownloader.setupWindowsNatives();
+            JInputBootstrap.setupWindows();
+            ClassicLauncher app = new ClassicLauncher();
 
-        // Claim single instance (or ask existing to close, then become primary)
-        app.singleInstance = SingleInstance.claimOrTakeover(app);
+            // Claim single instance (or ask existing to close, then become primary)
+            app.singleInstance = SingleInstance.claimOrTakeover(app);
 
-        SwingUtilities.invokeLater(app::show);
+            SwingUtilities.invokeLater(app::show);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            JOptionPane.showMessageDialog(null, 
+                "An error occurred during startup:\n" + t.toString(), 
+                "Minecraft Classic - Startup Error", 
+                JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }
     }
 
     private final JFrame frame = new JFrame("Minecraft Classic Launcher");
@@ -402,19 +411,33 @@ public final class ClassicLauncher {
                 return si;
             }
             // Another instance is running → request it to close, then wait and retry.
+            System.out.println("[SingleInstance] Port " + PORT + " is busy. Requesting takeover...");
             requestTakeover();
-            long deadline = System.currentTimeMillis() + 1500; // up to 4s
+            long deadline = System.currentTimeMillis() + 3000; // 3s
             while (System.currentTimeMillis() < deadline) {
                 try {
-                    Thread.sleep(100);
+                    Thread.sleep(200);
                 } catch (InterruptedException ignored) {
                 }
                 if (si.tryBind(app))
                     return si;
             }
-            // If we didn’t get the lock, just exit quietly.
-            System.exit(0);
-            return null; // unreachable
+            
+            // If we still didn't get it, it might be a real port conflict or the other instance is hanging.
+            int choice = JOptionPane.showConfirmDialog(null,
+                "Another instance of Minecraft Classic appears to be running, or port " + PORT + " is blocked.\n" +
+                "Do you want to try starting anyway? (This may cause issues if another instance is active)",
+                "Single Instance Warning",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            
+            if (choice == JOptionPane.YES_OPTION) {
+                System.out.println("[SingleInstance] Proceeding despite bind failure.");
+                return null; 
+            } else {
+                System.exit(0);
+                return null;
+            }
         }
 
         /** Ask the running instance to close itself. */

@@ -40,12 +40,22 @@ public final class ClassicLauncherSWT {
     private SingleInstance singleInstance = null;
 
     public static void main(String[] args) {
-        LwjglNativesDownloader.setupWindowsNatives();
-        JInputBootstrap.setupWindows();
+        try {
+            LwjglNativesDownloader.setupWindowsNatives();
+            JInputBootstrap.setupWindows();
 
-        ClassicLauncherSWT app = new ClassicLauncherSWT();
-        app.singleInstance = SingleInstance.claimOrTakeover(app);
-        app.run();
+            ClassicLauncherSWT app = new ClassicLauncherSWT();
+            app.singleInstance = SingleInstance.claimOrTakeover(app);
+            app.run();
+        } catch (Throwable t) {
+            t.printStackTrace();
+            // Using Swing even in SWT launcher for simpler unified error reporting without needing a Display
+            javax.swing.JOptionPane.showMessageDialog(null,
+                "An error occurred during startup:\n" + t.toString(),
+                "Minecraft Classic - Startup Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }
     }
 
     private void run() {
@@ -310,14 +320,29 @@ public final class ClassicLauncherSWT {
         static SingleInstance claimOrTakeover(ClassicLauncherSWT app) {
             SingleInstance si = new SingleInstance();
             if (si.tryBind(app)) return si;
+            
+            System.out.println("[SingleInstance] Port " + PORT + " is busy. Requesting takeover...");
             requestTakeover();
-            long deadline = System.currentTimeMillis() + 4000;
+            long deadline = System.currentTimeMillis() + 3000;
             while (System.currentTimeMillis() < deadline) {
-                try { Thread.sleep(150); } catch (InterruptedException ignored) {}
+                try { Thread.sleep(200); } catch (InterruptedException ignored) {}
                 if (si.tryBind(app)) return si;
             }
-            System.exit(0);
-            return null;
+
+            int choice = javax.swing.JOptionPane.showConfirmDialog(null,
+                "Another instance of Minecraft Classic appears to be running, or port " + PORT + " is blocked.\n" +
+                "Do you want to try starting anyway? (This may cause issues if another instance is active)",
+                "Single Instance Warning",
+                javax.swing.JOptionPane.YES_NO_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+            
+            if (choice == javax.swing.JOptionPane.YES_OPTION) {
+                System.out.println("[SingleInstance] Proceeding despite bind failure.");
+                return null; 
+            } else {
+                System.exit(0);
+                return null;
+            }
         }
 
         private static void requestTakeover() {

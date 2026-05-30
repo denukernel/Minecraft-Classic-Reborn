@@ -73,8 +73,10 @@ public class DroppedItem extends Entity {
                           yo + (y - yo) * partial + 0.1F,
                           zo + (z - zo) * partial);
         GL11.glRotatef((System.currentTimeMillis() / 10) % 360, 0, 1, 0);
-        GL11.glScalef(0.03F, 0.03F, 0.1F);
+        // Center item vertically and flip Y scale to render right-side up in 3D space
+        GL11.glScalef(0.03F, -0.03F, 0.1F);
         GL11.glDisable(GL11.GL_CULL_FACE);
+        GL11.glTranslatef(-8.0F, -8.0F, 0.0F); // Offset to rotate around center
         it.renderIcon(tm, ShapeRenderer.instance);
         GL11.glEnable(GL11.GL_CULL_FACE);
         GL11.glPopMatrix();

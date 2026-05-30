@@ -96,7 +96,6 @@ public final class FireBlock extends Block {
     @Override public boolean isSolid() { return false; }
     @Override public boolean isOpaque() { return false; }
     @Override public boolean isCube() { return true; }
-    @Override public int getRenderPass() { return 1; }
     @Override public AABB getCollisionBox(int x, int y, int z) { return null; }
     @Override public AABB getSelectionBox(int x, int y, int z) {
         float inset = 0.01f;
@@ -296,9 +295,6 @@ public final class FireBlock extends Block {
         }
         GL11.glTranslatef(-0.5f, 0f, -0.5f);
 
-        GL11.glEnable(GL11.GL_BLEND);
-        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GL11.glDepthMask(false);
         GL11.glDisable(GL11.GL_CULL_FACE);
 
         int tex = this.textureId;
@@ -344,8 +340,6 @@ public final class FireBlock extends Block {
         t.draw();
 
         GL11.glEnable(GL11.GL_CULL_FACE);
-        GL11.glDepthMask(false);
-        GL11.glDisable(GL11.GL_BLEND);
         GL11.glPopMatrix();
         return true;
     }

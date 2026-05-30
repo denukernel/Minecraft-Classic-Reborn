@@ -82,7 +82,7 @@ public void setupCamera(float partial) {
     float camZ = p.zo + (p.z - p.zo) * partial - (float)(dirZ * dist);
 
     GL11.glRotatef(pitch, 1.0F, 0.0F, 0.0F);
-    GL11.glRotatef(yaw,   0.0F, 1.0F, 0.0F);
+    GL11.glRotatef(lookYaw, 0.0F, 1.0F, 0.0F);
     GL11.glTranslatef(-camX, -camY, -camZ);
 
     // ===== Render the player model in third person =====
@@ -94,22 +94,36 @@ public void setupCamera(float partial) {
         float px = p.xo + (p.x - p.xo) * partial;
         float py = p.yo + (p.y - p.yo) * partial;
         float pz = p.zo + (p.z - p.zo) * partial;
-        GL11.glTranslatef(px, py - 1.62F, pz);
+        
+        // Match entity rendering brightness
+        float b = p.getBrightness(partial);
+        GL11.glColor3f(b, b, b);
 
-        // rotate body to face correctly
-        GL11.glRotatef(-p.yRot, 0F, 1F, 0F);
-        GL11.glScalef(0.9375F, 0.9375F, 0.9375F);
-        GL11.glScalef(1F, -1F, 1F); // flip Y axis like normal entity rendering
+        // Calculate body vs camera rotation
+        float bodyYaw = p.yBodyRotO + (p.yBodyRot - p.yBodyRotO) * partial;
+        float headYawDiff = yaw - bodyYaw;
+        while (headYawDiff < -180.0F) headYawDiff += 360.0F;
+        while (headYawDiff >= 180.0F) headYawDiff -= 360.0F;
+
+        // Position model and apply base entity transforms
+        GL11.glTranslatef(px, py - p.heightOffset, pz);
+        
+        // Add ground lift and bobbing (matches Mob.render logic)
+        float limbSwing       = p.animStepO + (p.animStep - p.animStepO) * partial;
+        float limbSwingAmount = p.oRun + (p.run - p.oRun) * partial;
+        float bob = -Math.abs(MathHelper.cos(limbSwing * 0.6662F)) * 5.0F * limbSwingAmount - model.groundOffset;
+        GL11.glTranslatef(0.0F, -bob * 0.0625F, 0.0F);
+
+        GL11.glScalef(1.0F, -1.0F, 1.0F); // flip Y
+        GL11.glScalef(-1.0F, 1.0F, 1.0F); // flip X (Classic entity standard)
+        GL11.glRotatef(180.0F - bodyYaw, 0.0F, 1.0F, 0.0F);
 
         // animate and render
-        float limbSwing       = p.walkDist;
-        float limbSwingAmount = p.walkDist - p.walkDistO;
-        float ageInTicks      = p.tickCount + partial;
-        float netHeadYaw      = yaw - p.yRot;
-        float headPitch       = -pitch;
+        float ageInTicks      = (float)p.tickCount + partial;
+        float headPitch       = pitch;
 
         p.bindTexture(minecraft.textureManager);
-        model.render(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, 0.0625F);
+        model.render(limbSwing, limbSwingAmount, ageInTicks, headYawDiff, headPitch, 0.0625F);
 
         GL11.glPopMatrix();
     }

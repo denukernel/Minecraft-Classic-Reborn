@@ -65,7 +65,7 @@ public abstract class Entity implements Serializable {
         this.level = var1;
         this.setPos(0.0F, 0.0F, 0.0F);
     }
-    private int fireTicks = 0;
+    public int remainingFireTicks = 0;
 
     // --- sound throttling (per tick) ---
     private static int STEP_SOUND_FRAME = -1;
@@ -325,27 +325,62 @@ public abstract class Entity implements Serializable {
             this.yo = this.y;
             this.zo = this.z;
         }
-        if (this.level != null && this.isInFire()) {
-            if (!(this instanceof net.classicremastered.minecraft.player.Player
-                    && net.classicremastered.minecraft.player.Player.creativeInvulnerable)) {
-
-                if (fireTicks <= 0) {
-                    this.hurt(null, 1);   // deal 1 HP
-                    fireTicks = 7;       // 10 ticks = 0.5s at 20 TPS
-                }
-
-                // keep short invulnerability window for mobs
-                if (this instanceof net.classicremastered.minecraft.mob.Mob) {
-                    net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) this;
-                    if (m.invulnerableTime > 8)
-                        m.invulnerableTime = 8;
+        if (isAliveEntity(this)) {
+            // Catch fire if inside a fire block
+            if (this.level != null && this.isInFire()) {
+                if (!(this instanceof net.classicremastered.minecraft.player.Player
+                        && net.classicremastered.minecraft.player.Player.creativeInvulnerable)) {
+                    this.remainingFireTicks = 100; // 5 seconds of burning
                 }
             }
-        } else {
-            fireTicks = 0; // stop burn timer when leaving fire
-        }
 
-        if (fireTicks > 0) fireTicks--;
+            // Catch fire if inside lava
+            if (this.level != null && this.isInLava()) {
+                if (!(this instanceof net.classicremastered.minecraft.player.Player
+                        && net.classicremastered.minecraft.player.Player.creativeInvulnerable)) {
+                    this.remainingFireTicks = 300; // 15 seconds of burning
+                }
+            }
+
+            // Water extinguishes fire
+            if (this.isInWater() || this.isUnderWater()) {
+                this.remainingFireTicks = 0;
+            }
+
+            // Fire damage tick
+            if (this.remainingFireTicks > 0) {
+                // Hurt entity every 20 ticks (1 second)
+                if (this.remainingFireTicks % 20 == 0) {
+                    this.hurt(null, 1);
+                }
+
+                // Keep short invulnerability window so damage is taken normally
+                if (this instanceof net.classicremastered.minecraft.mob.Mob) {
+                    net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) this;
+                    if (m.invulnerableTime > 8) {
+                        m.invulnerableTime = 8;
+                    }
+                }
+
+                // Spawn nice fire & smoke particles
+                if (this.level != null && this.level.particleEngine != null) {
+                    if (this.level.random.nextInt(4) == 0) {
+                        float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                        float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
+                        float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                        this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.SmokeParticle(this.level, px, py, pz));
+                    }
+                    if (this.level.random.nextInt(3) == 0) {
+                        float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                        float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
+                        float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                        this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.TerrainParticle(this.level, px, py, pz, 0f, 0f, 0f, Block.FIRE));
+                    }
+                }
+
+                this.remainingFireTicks--;
+            }
+        }
 
         this.xRotO = this.xRot;
         this.yRotO = this.yRot;

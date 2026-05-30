@@ -42,6 +42,22 @@ public class Zombie extends HumanoidMob {
         // --- Sunlight burning (skip if variant is sun-immune; also don't burn in/onto
         // water) ---
         if (!isSunImmune() && this.level.shouldUndeadBurnAt(this) && !this.isInWaterOrOnWater()) {
+            // Spawn nice fire & smoke particles as a visual sun-burn illusion
+            if (this.level.particleEngine != null) {
+                if (this.level.random.nextInt(4) == 0) {
+                    float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                    float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
+                    float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                    this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.SmokeParticle(this.level, px, py, pz));
+                }
+                if (this.level.random.nextInt(3) == 0) {
+                    float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                    float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
+                    float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
+                    this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.TerrainParticle(this.level, px, py, pz, 0f, 0f, 0f, net.classicremastered.minecraft.level.tile.Block.FIRE));
+                }
+            }
+
             if (++sunBurnTicks >= 20) {
                 this.hurt(null, 2);
                 sunBurnTicks = 0;
@@ -83,7 +99,7 @@ public class Zombie extends HumanoidMob {
     }
 
 // --- Water check helper ---
-    private boolean isInWaterOrOnWater() {
+    boolean isInWaterOrOnWater() {
         // Submerged or standing in a water block
         int bx = MathHelper.floor(x);
         int by = MathHelper.floor(y);

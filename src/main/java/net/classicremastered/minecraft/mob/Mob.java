@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.ai.AI;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.model.MD3Cache;
@@ -313,6 +314,77 @@ public abstract class Mob extends Entity {
         GL11.glTranslatef(this.xo + (this.x - this.xo) * partial,
                 this.yo + (this.y - this.yo) * partial - this.heightOffset + this.renderOffset,
                 this.zo + (this.z - this.zo) * partial);
+
+        boolean showFireOverlay = this.remainingFireTicks > 0;
+        if (!showFireOverlay && this instanceof Zombie) {
+            Zombie z = (Zombie) this;
+            if (!z.isSunImmune() && z.level != null && z.level.shouldUndeadBurnAt(z) && !z.isInWaterOrOnWater()) {
+                showFireOverlay = true;
+            }
+        }
+
+        if (showFireOverlay) {
+            GL11.glPushMatrix();
+            // Scale and center the fire relative to the mob's bounding box
+            float fw = this.bbWidth * 1.4f;
+            float fh = this.bbHeight * 1.2f;
+            GL11.glScalef(fw, fh, fw);
+            
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            
+            int fireTex = tm.load("/terrain.png");
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, fireTex);
+            
+            net.classicremastered.minecraft.render.Tessellator t = net.classicremastered.minecraft.render.Tessellator.instance;
+            
+            int tex = Block.FIRE.textureId;
+            float u0 = (tex % 16) / 16.0F;
+            float v0 = (tex / 16) / 16.0F;
+            float u1 = u0 + 1.0F / 16F;
+            float v1 = v0 + 1.0F / 16F;
+            
+            float h = 1.0f;
+            float topInset = 0.1f;
+            
+            float b0 = -0.5f, b1 = 0.5f;          // bottom edges
+            float t0 = -0.5f + topInset;        // top edges (shrunk in)
+            float t1 = 0.5f - topInset;
+            
+            t.startDrawingQuads();
+            t.setColorOpaque_F(1f, 1f, 1f);
+            
+            // north face
+            t.addVertexWithUV(b0, 0, b0, u0, v1);
+            t.addVertexWithUV(t0, h, t0, u0, v0);
+            t.addVertexWithUV(t1, h, t0, u1, v0);
+            t.addVertexWithUV(b1, 0, b0, u1, v1);
+            
+            // south face
+            t.addVertexWithUV(b1, 0, b1, u0, v1);
+            t.addVertexWithUV(t1, h, t1, u0, v0);
+            t.addVertexWithUV(t0, h, t1, u1, v0);
+            t.addVertexWithUV(b0, 0, b1, u1, v1);
+            
+            // west face
+            t.addVertexWithUV(b0, 0, b1, u0, v1);
+            t.addVertexWithUV(t0, h, t1, u0, v0);
+            t.addVertexWithUV(t0, h, t0, u1, v0);
+            t.addVertexWithUV(b0, 0, b0, u1, v1);
+            
+            // east face
+            t.addVertexWithUV(b1, 0, b0, u0, v1);
+            t.addVertexWithUV(t1, h, t0, u0, v0);
+            t.addVertexWithUV(t1, h, t1, u1, v0);
+            t.addVertexWithUV(b1, 0, b1, u1, v1);
+            
+            t.draw();
+            
+            GL11.glDisable(GL11.GL_BLEND);
+            GL11.glEnable(GL11.GL_CULL_FACE);
+            GL11.glPopMatrix();
+        }
 
         // ---- hurt/death wobble ----
         float ht = (float) this.hurtTime - partial;

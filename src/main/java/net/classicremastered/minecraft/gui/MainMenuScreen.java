@@ -27,7 +27,6 @@ public final class MainMenuScreen extends GuiScreen {
     @Override
     public void onOpen() {
         this.buttons.clear();
-        mascotTex = this.minecraft.textureManager.load("/gui/stickman.png"); // added
 
         int btnW = 200;
         int btnH = 20;
@@ -127,27 +126,7 @@ public final class MainMenuScreen extends GuiScreen {
             GL11.glPopMatrix();
         }
 
-        // --- mascot (draw after background/splash) ---
-        if (mascotTex != 0) {
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, mascotTex);
-            GL11.glEnable(GL11.GL_TEXTURE_2D);
-            GL11.glColor4f(1f, 1f, 1f, 1f);
 
-            int size = 64;
-            int x = this.width - size - 20;
-            int y = this.height - size - 40;
-
-            GL11.glBegin(GL11.GL_QUADS);
-            GL11.glTexCoord2f(0f, 0f);
-            GL11.glVertex2f(x, y);
-            GL11.glTexCoord2f(1f, 0f);
-            GL11.glVertex2f(x + size, y);
-            GL11.glTexCoord2f(1f, 1f);
-            GL11.glVertex2f(x + size, y + size);
-            GL11.glTexCoord2f(0f, 1f);
-            GL11.glVertex2f(x, y + size);
-            GL11.glEnd();
-        }
 
         // Draw buttons
         super.render(mouseX, mouseY);
