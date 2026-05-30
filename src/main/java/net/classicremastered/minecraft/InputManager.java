@@ -282,21 +282,11 @@ public class InputManager {
                         mc.player.dropSelectedItem(); // added
                     }
                 }
-             // F5 → toggle camera
-             // F5 → toggle camera (developer only)
                 if (Keyboard.getEventKey() == Keyboard.KEY_F5) {
-                    if (mc.developer) { // only allow if developer flag is set
-                        mc.cameraMode = (mc.cameraMode + 1) % 3;
-                        if (mc.hud != null) {
-                            switch (mc.cameraMode) {
-                            }
-                        }
-                    } else {
-                        // Optional: show a short message for non-devs
-                        if (mc.hud != null) {
-                        }
-                    }
+                    mc.cameraMode = (mc.cameraMode == 0) ? 2 : 0;
                 }
+
+                
 
 
                 // F6 → fast debug toggle
@@ -368,6 +358,6 @@ public class InputManager {
                 mc.settings.toggleSetting(4,
                         !Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) && !Keyboard.isKeyDown(Keyboard.KEY_RSHIFT) ? 1 : -1);
             }
-        }
+        } 
     }
 }

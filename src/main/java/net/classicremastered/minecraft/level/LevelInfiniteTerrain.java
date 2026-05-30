@@ -11,6 +11,7 @@ import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.phys.AABB;
 
 public final class LevelInfiniteTerrain extends Level {
@@ -45,6 +46,7 @@ public final class LevelInfiniteTerrain extends Level {
 
         // terrain mode
         this.chunks = new SimpleChunkManager(seed, depthY, SimpleChunkManager.Mode.TERRAIN);
+        this.chunks.level = this;
         this.waterLevel = Math.max(1, depthY / 2);
 
         this.findSpawn();
@@ -259,6 +261,16 @@ public final class LevelInfiniteTerrain extends Level {
                 Mob m = (Mob) o;
                 if (m.removed || m.health <= 0)
                     continue;
+
+                if (m instanceof Villager) {
+                    int cx = (int) Math.floor(m.x) >> 4;
+                    int cz = (int) Math.floor(m.z) >> 4;
+                    if (!chunks.isChunkLoaded(cx, cz)) {
+                        m.remove();
+                    }
+                    continue;
+                }
+
                 if (player == null)
                     continue;
                 float dx = m.x - player.x, dy = m.y - player.y, dz = m.z - player.z;
@@ -313,7 +325,7 @@ public final class LevelInfiniteTerrain extends Level {
                 InfiniteTerrainGenerator gen = new InfiniteTerrainGenerator(randomSeed, depth);
                 for (SimpleChunk c : loaded) {
                     if (c.corrupted26M) {
-                        gen.generateChunk(c, c.cx * SimpleChunk.SIZE, c.cz * SimpleChunk.SIZE, false);
+                        gen.generateChunk(c, c.cx * SimpleChunk.SIZE, c.cz * SimpleChunk.SIZE, false, this);
                         c.meshed = false;
                         c.corrupted26M = false;
                     }
@@ -350,7 +362,7 @@ public final class LevelInfiniteTerrain extends Level {
                 InfiniteTerrainGenerator gen = new InfiniteTerrainGenerator(randomSeed, depth);
                 for (SimpleChunk c : loaded) {
                     if (c.corrupted30M) {
-                        gen.generateChunk(c, c.cx * SimpleChunk.SIZE, c.cz * SimpleChunk.SIZE, false);
+                        gen.generateChunk(c, c.cx * SimpleChunk.SIZE, c.cz * SimpleChunk.SIZE, false, this);
                         c.meshed = false;
                         c.corrupted30M = false;
                     }

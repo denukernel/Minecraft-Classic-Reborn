@@ -66,24 +66,46 @@ public void setupCamera(float partial) {
         return;
     }
 
-    // ===== Third Person =====
+    // ===== Third Person (Indev style) =====
     float dist = 4.0F;
     float lookYaw = yaw;
-    if (minecraft.cameraMode == 2) { // front view
+    float lookPitch = pitch;
+    if (minecraft.cameraMode == 1) { // back view
         lookYaw += 180.0F;
     }
 
-    double dirX = -MathHelper.sin(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(pitch * (float)Math.PI / 180.0F);
-    double dirY = -MathHelper.sin(pitch * (float)Math.PI / 180.0F);
-    double dirZ =  MathHelper.cos(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(pitch * (float)Math.PI / 180.0F);
+    double dirX = -MathHelper.sin(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(lookPitch * (float)Math.PI / 180.0F);
+    double dirY = -MathHelper.sin(lookPitch * (float)Math.PI / 180.0F);
+    double dirZ =  MathHelper.cos(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(lookPitch * (float)Math.PI / 180.0F);
 
-    float camX = p.xo + (p.x - p.xo) * partial - (float)(dirX * dist);
-    float camY = p.yo + (p.y - p.yo) * partial + p.heightOffset + 0.2F - (float)(dirY * dist);
-    float camZ = p.zo + (p.z - p.zo) * partial - (float)(dirZ * dist);
+    float startX = p.xo + (p.x - p.xo) * partial;
+    float startY = p.yo + (p.y - p.yo) * partial;
+    float startZ = p.zo + (p.z - p.zo) * partial;
 
-    GL11.glRotatef(pitch, 1.0F, 0.0F, 0.0F);
+    // Raycast from 8 offsets to prevent block clipping (Indev standard)
+    if (p.level != null) {
+        for (int i = 0; i < 8; ++i) {
+            float ox = (float)(((i & 1) << 1) - 1) * 0.1F;
+            float oy = (float)(((i >> 1 & 1) << 1) - 1) * 0.1F;
+            float oz = (float)(((i >> 2 & 1) << 1) - 1) * 0.1F;
+
+            Vec3D startVec = new Vec3D(startX + ox, startY + oy, startZ + oz);
+            Vec3D endVec = new Vec3D(startX - (float)(dirX * 4.0D) + ox, startY - (float)(dirY * 4.0D) + oy, startZ - (float)(dirZ * 4.0D) + oz);
+            net.classicremastered.minecraft.MovingObjectPosition mop = p.level.clip(startVec, endVec);
+            if (mop != null) {
+                float collDist = mop.vec.distance(new Vec3D(startX, startY, startZ));
+                if (collDist < dist) {
+                    dist = collDist;
+                }
+            }
+        }
+    }
+
+    // Indev transformation order: Offset -> Camera Rotation -> Player translation
+    GL11.glTranslatef(0.0F, 0.0F, -dist);
+    GL11.glRotatef(lookPitch, 1.0F, 0.0F, 0.0F);
     GL11.glRotatef(lookYaw, 0.0F, 1.0F, 0.0F);
-    GL11.glTranslatef(-camX, -camY, -camZ);
+    GL11.glTranslatef(-startX, -startY, -startZ);
 
     // ===== Render the player model in third person =====
     HumanoidModel model = p.getModel();
@@ -115,12 +137,15 @@ public void setupCamera(float partial) {
         GL11.glTranslatef(0.0F, -bob * 0.0625F, 0.0F);
 
         GL11.glScalef(1.0F, -1.0F, 1.0F); // flip Y
+        GL11.glRotatef(180.0F - bodyYaw + p.rotOffs, 0.0F, 1.0F, 0.0F);
         GL11.glScalef(-1.0F, 1.0F, 1.0F); // flip X (Classic entity standard)
-        GL11.glRotatef(180.0F - bodyYaw, 0.0F, 1.0F, 0.0F);
 
         // animate and render
         float ageInTicks      = (float)p.tickCount + partial;
         float headPitch       = pitch;
+        if (minecraft.cameraMode == 1) {
+            headPitch = -pitch;
+        }
 
         p.bindTexture(minecraft.textureManager);
         model.render(limbSwing, limbSwingAmount, ageInTicks, headYawDiff, headPitch, 0.0625F);

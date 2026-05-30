@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.level.infinite;
 import java.util.*;
 
 import net.classicremastered.minecraft.Minecraft;
+import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 
 public final class SimpleChunkManager {
@@ -13,6 +14,7 @@ public final class SimpleChunkManager {
     private final long seed;
     private final InfiniteTerrainGenerator terrain;
     private final Mode mode;
+    public Level level;
 
     private static boolean warnedFarLands = false;
     private static int farlandsDamageCounter = 0;
@@ -113,13 +115,13 @@ public final class SimpleChunkManager {
         long dist = Math.max(Math.abs(worldX), Math.abs(worldZ));
         if (dist >= 1_000_000L) {
             if (terrain != null) {
-                terrain.generateChunk(c, worldX, worldZ, false);
+                terrain.generateChunk(c, worldX, worldZ, false, level);
             }
             return;
         }
 
         if (terrain != null) {
-            terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT);
+            terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT, level);
         }
     }
 
