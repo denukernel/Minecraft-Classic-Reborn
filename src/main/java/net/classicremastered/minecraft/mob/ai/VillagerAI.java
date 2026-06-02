@@ -31,6 +31,10 @@ public class VillagerAI extends BasicAI {
             return;
         }
 
+        if (checkAndPerformFlee()) {
+            return;
+        }
+
         boolean reportedHome = false;
         Villager villager = null;
         if (this.mob instanceof Villager) {

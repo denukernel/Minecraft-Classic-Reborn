@@ -7,6 +7,9 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ScaryMindZombie;
+import net.classicremastered.minecraft.mob.Zombie;
+import net.classicremastered.minecraft.mob.Skeleton;
+import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.mob.ai.goal.goal.Goal;
 import net.classicremastered.minecraft.mob.ai.goal.goal.GoalSelector;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
@@ -103,6 +106,59 @@ public class BasicAI extends AI {
         this.mob.yd = 0.42F;
     }
 
+    protected boolean checkAndPerformFlee() {
+        if (this.mob instanceof Villager && !((Villager) this.mob).isHostile()) {
+            if (this.level == null) return false;
+            java.util.List near = this.level.findEntities(this.mob, this.mob.bb.grow(8.0F, 4.0F, 8.0F));
+            Entity nearestThreat = null;
+            float nearestDist2 = Float.MAX_VALUE;
+            if (near != null) {
+                for (Object o : near) {
+                    if (o instanceof Zombie || o instanceof Skeleton) {
+                        Entity threat = (Entity) o;
+                        if (!threat.removed) {
+                            float dx = threat.x - this.mob.x;
+                            float dy = threat.y - this.mob.y;
+                            float dz = threat.z - this.mob.z;
+                            float dist2 = dx * dx + dy * dy + dz * dz;
+                            if (dist2 < nearestDist2) {
+                                nearestDist2 = dist2;
+                                nearestThreat = threat;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (nearestThreat != null) {
+                float dx = this.mob.x - nearestThreat.x;
+                float dz = this.mob.z - nearestThreat.z;
+                float targetYaw = (float) (Math.atan2((double) dz, (double) dx) * 180.0D / Math.PI) - 90.0F;
+                float dyaw = targetYaw - this.mob.yRot;
+                while (dyaw < -180.0F) dyaw += 360.0F;
+                while (dyaw >= 180.0F) dyaw -= 360.0F;
+                this.yRotA = dyaw * 0.4F;
+
+                this.running = true;
+                this.yya = this.runSpeed * 1.5F;
+
+                boolean obstacleJump = (this.mob.onGround && this.mob.horizontalCollision);
+                boolean mediumJump = (this.mob.isInWater() || this.mob.isInLava()) && this.random.nextFloat() < 0.8F;
+                this.jumping = obstacleJump || mediumJump;
+
+                this.mob.yRot += this.yRotA;
+                this.mob.xRot = (float) this.defaultLookAngle;
+
+                if (this.yya > this.runSpeed * 1.6F) this.yya = this.runSpeed * 1.6F;
+                if (this.yya < -this.runSpeed * 1.6F) this.yya = -this.runSpeed * 1.6F;
+                this.xxa = 0.0F;
+                this.noActionTime = 0;
+                return true;
+            }
+        }
+        return false;
+    }
+
     protected void update() {
         if (this.level == null || this.mob == null || this.mob.health <= 0) {
             // Hard stop if invalid
@@ -110,6 +166,10 @@ public class BasicAI extends AI {
             this.xxa = 0.0F;
             this.yya = 0.0F;
             this.yRotA = 0.0F;
+            return;
+        }
+
+        if (checkAndPerformFlee()) {
             return;
         }
 

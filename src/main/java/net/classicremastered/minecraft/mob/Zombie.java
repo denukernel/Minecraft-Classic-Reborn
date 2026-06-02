@@ -119,6 +119,9 @@ public class Zombie extends HumanoidMob {
 
     // --- Villager target finder ---
     private void acquireVillagerTarget(net.classicremastered.minecraft.mob.ai.BasicAttackAI a, float radius) {
+        if (this instanceof net.classicremastered.minecraft.mob.Skeleton) {
+            return;
+        }
         java.util.List list = level.findEntities(this, this.bb.grow(radius, 4, radius));
         if (list == null)
             return;

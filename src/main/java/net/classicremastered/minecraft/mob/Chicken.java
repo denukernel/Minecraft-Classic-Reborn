@@ -19,7 +19,7 @@ public class Chicken extends Mob {
         this.modelName = "chicken";
         this.textureName = "/mob/chicken.png";
         this.setPos(x, y, z);
-        this.setSize(0.3F, 0.5F); // small hitbox
+        this.setSize(0.3F, 0.4F); 
         this.health = 4;
     }
 

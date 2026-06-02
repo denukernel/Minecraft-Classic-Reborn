@@ -185,29 +185,7 @@ public class Villager extends Mob {
                     this.attackTime = 20;
                 }
             }
-        } else {
-            // Normal villagers flee from zombies/skeletons
-            if (this.level != null) {
-                java.util.List near = this.level.findEntities(this, this.bb.grow(8, 4, 8));
-                for (Object o : near) {
-                    if (o instanceof Zombie || o instanceof Skeleton) {
-                        Mob threat = (Mob) o;
-                        fleeFrom(threat.x, threat.z);
-                    }
-                }
-            }
         }
-    }
-
-    private void fleeFrom(float tx, float tz) {
-        float dx = this.x - tx;
-        float dz = this.z - tz;
-        float mag = (float) Math.sqrt(dx * dx + dz * dz);
-        if (mag < 0.01f)
-            mag = 0.01f;
-        this.xd += (dx / mag) * 0.2f;
-        this.zd += (dz / mag) * 0.2f;
-        this.running = true;
     }
 
     private void moveToward(float tx, float tz, float speed) {
@@ -231,6 +209,20 @@ public class Villager extends Mob {
 
     @Override
     public void hurt(Entity attacker, int damage) {
+        if (attacker != null) {
+            Entity actualAttacker = attacker;
+            if (attacker instanceof net.classicremastered.minecraft.entity.Arrow) {
+                actualAttacker = ((net.classicremastered.minecraft.entity.Arrow) attacker).getOwner();
+            }
+
+            if (actualAttacker instanceof Mob) {
+                boolean allowed = actualAttacker instanceof Zombie && !(actualAttacker instanceof Skeleton);
+                if (!allowed) {
+                    return;
+                }
+            }
+        }
+
         super.hurt(attacker, damage);
 
         if (attacker instanceof Player p) {

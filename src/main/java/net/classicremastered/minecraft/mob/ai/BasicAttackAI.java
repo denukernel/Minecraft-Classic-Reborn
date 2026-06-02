@@ -43,8 +43,8 @@ public class BasicAttackAI extends BasicAI {
         if (this.mob == null || this.level == null) return;
         if (this.mob.health <= 0) return;
 
-        // If Creative → no aggression
-        if (this.level.creativeMode) {
+        // If target is Creative Player → no aggression
+        if (net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(this.attackTarget)) {
             this.attackTarget = null;
             this.running = false;
             this.jumping = false;
@@ -161,8 +161,8 @@ public class BasicAttackAI extends BasicAI {
             this.attackTarget = null;
         }
 
-        // Acquire target if none (only if alive)
-        if (player != null && this.attackTarget == null && isAliveEntity(player)) {
+        // Acquire target if none (only if alive and not creative player)
+        if (player != null && this.attackTarget == null && isAliveEntity(player) && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(player)) {
             float dx0 = player.x - this.mob.x;
             float dy0 = player.y - this.mob.y;
             float dz0 = player.z - this.mob.z;
@@ -271,7 +271,7 @@ public class BasicAttackAI extends BasicAI {
 
     public boolean attack(Entity target) {
         if (this.level == null || this.mob == null) return false;
-        if (this.level.creativeMode) return false;
+        if (net.classicremastered.minecraft.util.CreativeModeHelper.isCreativePlayer(target)) return false;
         if (!hasLineOfSight(this.mob, target)) return false;
 
         this.mob.attackTime = 5;
@@ -287,7 +287,7 @@ public class BasicAttackAI extends BasicAI {
     public void hurt(Entity src, int dmg) {
         super.hurt(src, dmg);
         if (this.level == null || this.mob == null) return;
-        if (this.level.creativeMode) return;
+        if (net.classicremastered.minecraft.util.CreativeModeHelper.isCreativePlayer(src)) return;
 
         if (src instanceof Arrow) {
             src = ((Arrow)src).getOwner();
