@@ -309,8 +309,10 @@ public class BasicAttackAI extends BasicAI {
 
     private boolean hasLineOfSight(Entity from, Entity to) {
         if (from == null || to == null || level == null) return false;
-        float fromEyeY = from.y + (from.bbHeight > 0 ? from.bbHeight * 0.85f : 0.9f);
-        float toMidY   = to.y   + (to.bbHeight   > 0 ? to.bbHeight   * 0.50f : 0.5f);
+        float fromFeetY = from.y - from.heightOffset;
+        float toFeetY   = to.y - to.heightOffset;
+        float fromEyeY  = fromFeetY + (from.bbHeight > 0 ? from.bbHeight * 0.85f : 0.9f);
+        float toMidY    = toFeetY + (to.bbHeight > 0 ? to.bbHeight * 0.50f : 0.5f);
         Vec3D a = new Vec3D(from.x, fromEyeY, from.z);
         Vec3D b = new Vec3D(to.x,   toMidY,   to.z);
         return level.clip(a, b) == null;
@@ -443,8 +445,10 @@ public class BasicAttackAI extends BasicAI {
     }
 
     private float desiredPitchTo(Entity from, Entity to) {
-        float fromEyeY = from.y + (from.bbHeight > 0 ? from.bbHeight * 0.85f : 0.9f);
-        float toMidY   = to.y   + (to.bbHeight   > 0 ? to.bbHeight   * 0.50f : 0.5f);
+        float fromFeetY = from.y - from.heightOffset;
+        float toFeetY   = to.y - to.heightOffset;
+        float fromEyeY  = fromFeetY + (from.bbHeight > 0 ? from.bbHeight * 0.85f : 0.9f);
+        float toMidY    = toFeetY + (to.bbHeight > 0 ? to.bbHeight * 0.50f : 0.5f);
         float dy = toMidY - fromEyeY;
         float dx = to.x - from.x;
         float dz = to.z - from.z;
