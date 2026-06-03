@@ -12,7 +12,7 @@ It is an independent re-imagining of Minecraft Classic 0.30, made for educationa
 All rights to the original game belong to Mojang AB / Microsoft.
 
 > Credit to **mcraft-client** and **ManiaDevelopment** for sources and references.  
-> A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, non-block items, infinite terrain, and much more — built in Java.
+> A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, nonblock items, infinite terrain, and much more made in Java.
 > Feel free to star if you like it.
 
 ---
@@ -36,7 +36,8 @@ Give the launcher time to download the resources and you will start hearing audi
 - MD3 renderer
 - Infinite terrain
 - New inventory
-
+- NBT data and NBT loader
+- Third Person Mode
 ---
 
 ## 🛠️ Planned / Not Yet Implemented
@@ -45,8 +46,7 @@ Give the launcher time to download the resources and you will start hearing audi
 - F5 camera preview (toggle between first/third person)  
 - More mobs and features  
 
-### ✅ In Progress
-- NBT data and NBT loader  
+
 
 ---
 
@@ -81,7 +81,7 @@ If you just want to **play the game**:
   → Built upon MCraft-Client, often beyond its original intent (e.g., ClassicCube ported to C# to focus on multiplayer).
 
 - **Classic-Reborn (this project)**  
-  → Builds directly on the Java MCraft-Client lineage. Expands Classic 0.30 with infinite terrain, mobs, commands, custom launcher — without abandoning the Classic or Java DNA.
+  → Builds directly on the Java MCraft-Client lineage. Expands Classic 0.30 with infinite terrain, mobs, commands, custom launcher without abandoning the Classic or Java DNA.
 
 
 ## Developer Guide
