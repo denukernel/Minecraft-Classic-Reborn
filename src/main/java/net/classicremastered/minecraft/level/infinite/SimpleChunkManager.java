@@ -23,7 +23,7 @@ public final class SimpleChunkManager {
         this.seed = seed;
         this.height = height;
         this.mode = mode;
-        this.terrain = (mode == Mode.TERRAIN ? new InfiniteTerrainGenerator(seed, height) : null);
+        this.terrain = new InfiniteTerrainGenerator(seed, height);
     }
 
     private static long key(int cx, int cz) {
@@ -115,7 +115,7 @@ public final class SimpleChunkManager {
         long dist = Math.max(Math.abs(worldX), Math.abs(worldZ));
         if (dist >= 1_000_000L) {
             if (terrain != null) {
-                terrain.generateChunk(c, worldX, worldZ, false, level);
+                terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT, level);
             }
             return;
         }

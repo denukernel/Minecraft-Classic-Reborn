@@ -107,7 +107,7 @@ public final class PaulsCodeSoundManager {
         float cp = MathHelper.cos(-pitch * 0.017453292F);
         float sp = MathHelper.sin(-pitch * 0.017453292F);
 
-        float fx = -sy * cp, fy = sp, fz = -cy * cp;
+        float fx = sy * cp, fy = sp, fz = cy * cp;
         float ux = -sy * sp, uy = cp, uz = -cy * sp;
 
         sys.setListenerPosition(x, y, z);

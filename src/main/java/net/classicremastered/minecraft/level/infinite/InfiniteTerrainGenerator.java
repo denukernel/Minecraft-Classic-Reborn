@@ -121,43 +121,24 @@ public final class InfiniteTerrainGenerator {
         c.meshed = false;
     }
 
-    /** Corrupted flat: jittered plains with random holes and spikes. */
+    /** Clean flat: flat plains. */
     private void generateCorruptedFlat(SimpleChunk c, int worldX, int worldZ) {
-        Random rand = new Random(seed ^ (worldX * 4987142L + worldZ * 5947611L));
         final int baseY = height / 2;
 
         for (int lx = 0; lx < CHUNK; lx++) {
-            int gx = worldX + lx;
             for (int lz = 0; lz < CHUNK; lz++) {
-                int gz = worldZ + lz;
-
-                int h = baseY + (int) (Math.sin(gx * 0.01) * 2) + (int) (Math.cos(gz * 0.01) * 2) + rand.nextInt(3) - 1;
-
-                if ((gx ^ gz ^ seed) % 97 == 0) {
-                    h += rand.nextInt(20) - 10;
-                }
-
-                h = clamp(h, 4, height - 4);
-
                 for (int y = 0; y < height; y++) {
                     byte id = 0;
-                    if (y == 0)
+                    if (y == 0) {
                         id = (byte) Block.BEDROCK.id;
-                    else if (y < h - 3)
+                    } else if (y < baseY - 2) {
                         id = (byte) Block.STONE.id;
-                    else if (y < h)
+                    } else if (y < baseY) {
                         id = (byte) Block.DIRT.id;
-                    else if (y == h)
+                    } else if (y == baseY) {
                         id = (byte) Block.GRASS.id;
-                    if (rand.nextInt(500) == 0)
-                        id = 0; // corruption hole
+                    }
                     c.blocks[SimpleChunk.idx(lx, y, lz, c.height)] = id;
-                }
-
-                for (int y = 1; y <= waterLevel && y < height; y++) {
-                    int idx = SimpleChunk.idx(lx, y, lz, c.height);
-                    if (c.blocks[idx] == 0)
-                        c.blocks[idx] = (byte) Block.WATER.id;
                 }
             }
         }

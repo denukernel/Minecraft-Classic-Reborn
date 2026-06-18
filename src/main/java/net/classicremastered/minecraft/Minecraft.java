@@ -171,8 +171,12 @@ public final class Minecraft implements Runnable {
     }
 
     public final void setCurrentScreen(GuiScreen next) {
-        if (this.currentScreen instanceof ErrorScreen)
-            return;
+        if (this.currentScreen instanceof ErrorScreen) {
+            ErrorScreen err = (ErrorScreen) this.currentScreen;
+            if (!err.hasParent()) {
+                return;
+            }
+        }
 
         if (this.currentScreen != null)
             this.currentScreen.onClose();
@@ -855,12 +859,15 @@ public final class Minecraft implements Runnable {
                                         if (r.minecraft.selected != null) {
                                             cosPitch = r.minecraft.selected.vec.distance(r.getPlayerVector(partial));
                                         }
-
+                                        float maxEntityReach = (r.minecraft.gamemode instanceof CreativeGameMode) ? 32.0F : r.minecraft.gamemode.getReachDistance();
                                         rayStart = r.getPlayerVector(partial);
-                                        if (r.minecraft.gamemode instanceof CreativeGameMode)
-                                            reach = 32.0F;
-                                        else
-                                            reach = cosPitch;
+                                        Vec3D entityRayEnd = rayStart.add(lookX * maxEntityReach, sinPitch * maxEntityReach, lookZ * maxEntityReach);
+                                        MovingObjectPosition solidBlockHit = r.minecraft.level.clip(rayStart, entityRayEnd, true);
+                                        reach = maxEntityReach;
+                                        if (solidBlockHit != null) {
+                                            reach = solidBlockHit.vec.distance(r.getPlayerVector(partial));
+                                        }
+                                        rayStart = r.getPlayerVector(partial);
                                         rayEnd = rayStart.add(lookX * reach, sinPitch * reach, lookZ * reach);
                                         r.entity = null;
                                         List entitiesInPath = r.minecraft.level.blockMap.getEntities(player,
@@ -2313,6 +2320,9 @@ public final class Minecraft implements Runnable {
 
             if (!this.isOnline()) {
                 this.player = (Player) var1.findSubclassOf(Player.class);
+                if (this.player != null) {
+                    var1.player = this.player;
+                }
             } else if (this.player != null) {
                 this.player.resetPos();
                 this.gamemode.preparePlayer(this.player);
@@ -2341,6 +2351,10 @@ public final class Minecraft implements Runnable {
             this.gamemode.preparePlayer(this.player);
             if (var1 != null)
                 var1.player = this.player;
+        } else {
+            if (var1 != null) {
+                var1.player = this.player;
+            }
         }
         this.player.minecraft = this;
         this.player.input = new InputHandlerImpl(this.settings);

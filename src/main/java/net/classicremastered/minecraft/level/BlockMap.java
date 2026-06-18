@@ -47,9 +47,13 @@ public class BlockMap implements Serializable {
     }
 
     public void insert(Entity e) {
-        this.all.add(e);
+        synchronized (this.all) {
+            this.all.add(e);
+        }
         if (infiniteMode) {
-            this.entityGrid[0].add(e);
+            synchronized (this.entityGrid[0]) {
+                this.entityGrid[0].add(e);
+            }
         } else {
             this.slot.init(e.x, e.y, e.z).add(e);
         }
@@ -61,11 +65,15 @@ public class BlockMap implements Serializable {
 
     public void remove(Entity e) {
         if (infiniteMode) {
-            this.entityGrid[0].remove(e);
+            synchronized (this.entityGrid[0]) {
+                this.entityGrid[0].remove(e);
+            }
         } else {
             this.slot.init(e.xOld, e.yOld, e.zOld).remove(e);
         }
-        this.all.remove(e);
+        synchronized (this.all) {
+            this.all.remove(e);
+        }
     }
 
     public void moved(Entity e) {
@@ -90,8 +98,12 @@ public class BlockMap implements Serializable {
     public List<Entity> getEntities(Entity except, float x0, float y0, float z0, float x1, float y1, float z1,
             List<Entity> out) {
         if (infiniteMode) {
-            for (Entity e : this.all) {
-                if (e != except && e.intersects(x0, y0, z0, x1, y1, z1)) {
+            Entity[] entities;
+            synchronized (this.all) {
+                entities = this.all.toArray(new Entity[0]);
+            }
+            for (Entity e : entities) {
+                if (e != null && e != except && e.intersects(x0, y0, z0, x1, y1, z1)) {
                     out.add(e);
                 }
             }
@@ -106,8 +118,12 @@ public class BlockMap implements Serializable {
                 for (int zs = BlockMap$Slot.getZSlot(a) - 1; zs <= BlockMap$Slot.getZSlot(b) + 1; ++zs) {
                     if (xs >= 0 && ys >= 0 && zs >= 0 && xs < this.width && ys < this.depth && zs < this.height) {
                         List<Entity> cell = this.entityGrid[(zs * this.depth + ys) * this.width + xs];
-                        for (Entity e : cell) {
-                            if (e != except && e.intersects(x0, y0, z0, x1, y1, z1)) {
+                        Entity[] entities;
+                        synchronized (cell) {
+                            entities = cell.toArray(new Entity[0]);
+                        }
+                        for (Entity e : entities) {
+                            if (e != null && e != except && e.intersects(x0, y0, z0, x1, y1, z1)) {
                                 out.add(e);
                             }
                         }
@@ -120,24 +136,35 @@ public class BlockMap implements Serializable {
 
     public void removeAllNonCreativeModeEntities() {
         if (infiniteMode) {
-            for (int i = 0; i < all.size(); i++) {
-                if (!all.get(i).isCreativeModeAllowed()) {
-                    all.remove(i--);
-                    this.entityGrid[0].remove(i);
+            synchronized (this.all) {
+                for (int i = 0; i < all.size(); i++) {
+                    Entity e = all.get(i);
+                    if (!e.isCreativeModeAllowed()) {
+                        all.remove(i--);
+                        synchronized (this.entityGrid[0]) {
+                            this.entityGrid[0].remove(e);
+                        }
+                    }
                 }
             }
             return;
         }
         for (List<Entity> cell : this.entityGrid) {
-            cell.removeIf(e -> !e.isCreativeModeAllowed());
+            synchronized (cell) {
+                cell.removeIf(e -> !e.isCreativeModeAllowed());
+            }
         }
     }
 
     public void clear() {
         for (List<Entity> cell : this.entityGrid) {
-            cell.clear();
+            synchronized (cell) {
+                cell.clear();
+            }
         }
-        this.all.clear();
+        synchronized (this.all) {
+            this.all.clear();
+        }
     }
 
     public List<Entity> getEntities(Entity except, AABB box) {
@@ -150,13 +177,22 @@ public class BlockMap implements Serializable {
     }
 
     public void tickAll() {
-        for (int i = 0; i < this.all.size(); ++i) {
-            Entity e = this.all.get(i);
+        Entity[] entities;
+        synchronized (this.all) {
+            entities = this.all.toArray(new Entity[0]);
+        }
+        for (int i = 0; i < entities.length; ++i) {
+            Entity e = entities[i];
+            if (e == null) continue;
             e.tick();
             if (e.removed) {
-                this.all.remove(i--);
+                synchronized (this.all) {
+                    this.all.remove(e);
+                }
                 if (infiniteMode) {
-                    this.entityGrid[0].remove(e);
+                    synchronized (this.entityGrid[0]) {
+                        this.entityGrid[0].remove(e);
+                    }
                 } else {
                     this.slot.init(e.xOld, e.yOld, e.zOld).remove(e);
                 }
@@ -176,8 +212,12 @@ public class BlockMap implements Serializable {
 
     public void render(Vec3D cam, Frustrum fr, TextureManager tex, float partial) {
         if (infiniteMode) {
-            for (Entity e : this.all) {
-                if (!e.removed && e.shouldRender(cam)) {
+            Entity[] entities;
+            synchronized (this.all) {
+                entities = this.all.toArray(new Entity[0]);
+            }
+            for (Entity e : entities) {
+                if (e != null && !e.removed && e.shouldRender(cam)) {
                     AABB bb = e.bb;
                     if (bb != null && fr.isBoxInFrustrum(bb.x0, bb.y0, bb.z0, bb.x1, bb.y1, bb.z1)) {
                         e.render(tex, partial);
@@ -200,8 +240,12 @@ public class BlockMap implements Serializable {
                         float z0 = (float) ((z << 4) - 2);
                         float z1 = (float) ((z + 1 << 4) + 2);
                         if (fr.isBoxInFrustrum(x0, y0, z0, x1, y1, z1)) {
-                            for (Entity e : cell) {
-                                if (e.shouldRender(cam)) {
+                            Entity[] entities;
+                            synchronized (cell) {
+                                entities = cell.toArray(new Entity[0]);
+                            }
+                            for (Entity e : entities) {
+                                if (e != null && e.shouldRender(cam)) {
                                     e.render(tex, partial);
                                 }
                             }

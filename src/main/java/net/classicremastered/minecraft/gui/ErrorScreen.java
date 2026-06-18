@@ -17,10 +17,17 @@ public final class ErrorScreen extends GuiScreen {
     private String text;
     private boolean screenshotTaken = false;
     private final String githubUrl = "https://github.com/denukernel/Minecraft-Classic-Reborn/issues";
+    private GuiScreen parent;
 
     public ErrorScreen(String title, String text) {
         this.title = title;
         this.text = text;
+    }
+
+    public ErrorScreen(String title, String text, GuiScreen parent) {
+        this.title = title;
+        this.text = text;
+        this.parent = parent;
     }
 
     public ErrorScreen(String title, Throwable error) {
@@ -36,8 +43,21 @@ public final class ErrorScreen extends GuiScreen {
         this.text = message;
     }
 
+    public ErrorScreen(String title, Throwable error, GuiScreen parent) {
+        this(title, error);
+        this.parent = parent;
+    }
+
+    public boolean hasParent() {
+        return this.parent != null;
+    }
+
     public final void onOpen() {
-        if (!screenshotTaken) {
+        if (this.parent != null) {
+            this.buttons.clear();
+            this.buttons.add(new Button(0, this.width / 2 - 100, this.height - 40, "Back"));
+        }
+        if (!screenshotTaken && this.parent == null) {
             try {
                 Screenshot.take(Minecraft.mcDir);
                 System.out.println("[ErrorScreen] Screenshot captured for debugging.");
@@ -85,6 +105,28 @@ public final class ErrorScreen extends GuiScreen {
     }
 
     public final void render(int mouseX, int mouseY) {
+        if (this.parent != null) {
+            drawFadingBox(0, 0, this.width, this.height, -12574688, -11530224);
+
+            GL11.glPushMatrix();
+            GL11.glScalef(1.1F, 1.1F, 1.0F);
+            drawCenteredString(this.fontRenderer, this.title,
+                (int)(this.width / 2.2F), (int)(60 / 1.1F), 0xFFFFFF);
+            GL11.glPopMatrix();
+
+            // Exception/Error text
+            String[] lines = wrapText(this.text, 60);
+            int y = 100;
+            for (String line : lines) {
+                drawCenteredString(this.fontRenderer, line, this.width / 2, y, 0xFFFFFF);
+                y += 12;
+            }
+
+            GL11.glColor4f(1, 1, 1, 1);
+            super.render(mouseX, mouseY);
+            return;
+        }
+
         drawFadingBox(0, 0, this.width, this.height, -12574688, -11530224);
 
         GL11.glPushMatrix();
@@ -147,8 +189,26 @@ public final class ErrorScreen extends GuiScreen {
     }
 
     @Override
+    protected void onButtonClick(Button btn) {
+        if (btn.id == 0 && this.parent != null) {
+            this.minecraft.setCurrentScreen(this.parent);
+        }
+    }
+
+    @Override
+    protected void onKeyPress(char var1, int var2) {
+        if (var2 == 1 && this.parent != null) {
+            this.minecraft.setCurrentScreen(this.parent);
+        }
+    }
+
+    @Override
     public void mouseEvent() {
         if (!Mouse.isCreated()) return;
+        if (this.parent != null) {
+            super.mouseEvent();
+            return;
+        }
 
         while (Mouse.next()) {
             if (Mouse.getEventButtonState()) {

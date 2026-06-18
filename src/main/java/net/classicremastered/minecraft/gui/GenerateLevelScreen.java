@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.gui;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
 import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.LevelInfiniteFlat;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.generator.FlatLevelGenerator;
 import net.classicremastered.minecraft.level.generator.LevelGenerator;
@@ -22,8 +23,7 @@ public final class GenerateLevelScreen extends GuiScreen {
     private boolean flat = false;
     private boolean creative = false;
 
-    // Infinite Flat fully disabled
-    private enum WorldType { FINITE, INFINITE_TERRAIN }
+    private enum WorldType { FINITE, INFINITE_TERRAIN, INFINITE_FLAT }
     private WorldType worldType = WorldType.FINITE;
 
     private String seedString = "";
@@ -107,10 +107,8 @@ public final class GenerateLevelScreen extends GuiScreen {
             return;
         }
 
-        if (b.id == 2) { // World Type toggle (Finite <-> Infinite Terrain)
-            worldType = (worldType == WorldType.FINITE)
-                ? WorldType.INFINITE_TERRAIN
-                : WorldType.FINITE;
+        if (b.id == 2) { // World Type toggle
+            worldType = WorldType.values()[(worldType.ordinal() + 1) % WorldType.values().length];
             this.onOpen(); // rebuild buttons for current mode
             return;
         }
@@ -132,6 +130,11 @@ public final class GenerateLevelScreen extends GuiScreen {
                     level.name = "Infinite Terrain";
                     break;
                 }
+                case INFINITE_FLAT: {
+                    level = new LevelInfiniteFlat(seed, 64);
+                    level.name = "Infinite Flat";
+                    break;
+                }
                 default: { // FINITE
                     if (flat) {
                         level = FlatLevelGenerator.makeFlatLevel(sizeIndex);
@@ -149,7 +152,14 @@ public final class GenerateLevelScreen extends GuiScreen {
     }
 
     private String getWorldTypeName() {
-        return (worldType == WorldType.INFINITE_TERRAIN) ? "Infinite Terrain" : "Finite";
+        switch (worldType) {
+            case INFINITE_TERRAIN:
+                return "Infinite Terrain";
+            case INFINITE_FLAT:
+                return "Infinite Flat";
+            default:
+                return "Finite";
+        }
     }
 
     private long resolveSeed() {

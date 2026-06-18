@@ -125,10 +125,10 @@ public final class SelectLevelScreen extends GuiScreen {
                     if (L != null)
                         startWith(L);
                     else
-                        minecraft.setCurrentScreen(new ErrorScreen("Failed to load", "Corrupt or unreadable level."));
+                        minecraft.setCurrentScreen(new ErrorScreen("Failed to load", "Corrupt or unreadable level.", this));
                 } catch (Exception ex) {
                     ex.printStackTrace();
-                    minecraft.setCurrentScreen(new ErrorScreen("Failed to load", ex.toString()));
+                    minecraft.setCurrentScreen(new ErrorScreen("Failed to load", ex.toString(), this));
                 }
             }
             return;
@@ -160,7 +160,7 @@ public final class SelectLevelScreen extends GuiScreen {
             }
             confirmDelete = false;
             if (!ok && f.exists()) {
-                minecraft.setCurrentScreen(new ErrorScreen("Delete failed", "Could not delete:\n" + f.getName()));
+                minecraft.setCurrentScreen(new ErrorScreen("Delete failed", "Could not delete:\n" + f.getName() + "\n\nFile may be in use by another process.", this));
                 return;
             }
             // Refresh UI state
@@ -181,12 +181,16 @@ public final class SelectLevelScreen extends GuiScreen {
             @Override
             public void onGenerated(Level level) {
                 try {
-                    minecraft.levelIo.save(level, target);
-                    refreshSlot(slotIdx);
                     startWith(level);
+                    boolean saved = minecraft.levelIo.save(level, target);
+                    if (!saved) {
+                        minecraft.setCurrentScreen(new ErrorScreen("Save failed", "Could not save level.\n\nFile may be in use by another process.", SelectLevelScreen.this));
+                        return;
+                    }
+                    refreshSlot(slotIdx);
                 } catch (Exception ex) {
                     ex.printStackTrace();
-                    minecraft.setCurrentScreen(new ErrorScreen("Failed to save", ex.toString()));
+                    minecraft.setCurrentScreen(new ErrorScreen("Failed to save", ex.toString(), SelectLevelScreen.this));
                 }
             }
         }));

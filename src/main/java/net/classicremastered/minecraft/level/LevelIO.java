@@ -47,13 +47,9 @@ public final class LevelIO {
                  GZIPOutputStream gos = new GZIPOutputStream(fos);
                  DataOutputStream out = new DataOutputStream(gos)) {
 
-                out.writeInt(MAGIC);
-
                 if (level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain) {
-                    out.writeByte(VERSION_INFINITE_NBT);
                     saveInfiniteNBT(level, out);
                 } else {
-                    out.writeByte(VERSION_CLASSIC_NBT);
                     saveClassicNBT(level, out);
                 }
             }
@@ -96,12 +92,16 @@ public final class LevelIO {
         out.writeBoolean(inf.doDayNightCycle);
 
         // --- player ---
-        if (inf.player != null) {
-            out.writeFloat(inf.player.x);
-            out.writeFloat(inf.player.y);
-            out.writeFloat(inf.player.z);
-            out.writeFloat(inf.player.yRot);
-            out.writeFloat(inf.player.xRot);
+        Entity savePlayer = inf.player;
+        if (savePlayer == null && inf.minecraft != null) {
+            savePlayer = inf.minecraft.player;
+        }
+        if (savePlayer != null) {
+            out.writeFloat(savePlayer.x);
+            out.writeFloat(savePlayer.y);
+            out.writeFloat(savePlayer.z);
+            out.writeFloat(savePlayer.yRot);
+            out.writeFloat(savePlayer.xRot);
         } else {
             out.writeFloat(0f); out.writeFloat(0f); out.writeFloat(0f);
             out.writeFloat(0f); out.writeFloat(0f);
@@ -148,12 +148,16 @@ public final class LevelIO {
         out.writeBoolean(inf.doDayNightCycle);
 
         // --- player ---
-        if (inf.player != null) {
-            out.writeFloat(inf.player.x);
-            out.writeFloat(inf.player.y);
-            out.writeFloat(inf.player.z);
-            out.writeFloat(inf.player.yRot);
-            out.writeFloat(inf.player.xRot);
+        Entity savePlayer = inf.player;
+        if (savePlayer == null && inf.minecraft != null) {
+            savePlayer = inf.minecraft.player;
+        }
+        if (savePlayer != null) {
+            out.writeFloat(savePlayer.x);
+            out.writeFloat(savePlayer.y);
+            out.writeFloat(savePlayer.z);
+            out.writeFloat(savePlayer.yRot);
+            out.writeFloat(savePlayer.xRot);
         } else {
             out.writeFloat(0f); out.writeFloat(0f); out.writeFloat(0f);
             out.writeFloat(0f); out.writeFloat(0f);
@@ -203,19 +207,44 @@ public final class LevelIO {
         }
 
         try (GZIPInputStream gis = new GZIPInputStream(inRaw);
-             DataInputStream in = new DataInputStream(gis)) {
+             PushbackInputStream pbis = new PushbackInputStream(gis, 1);
+             DataInputStream in = new DataInputStream(pbis)) {
 
-            int magic = in.readInt();
-            if (magic != MAGIC) throw new IOException("Bad magic " + magic);
+            int firstByte = pbis.read();
+            if (firstByte == -1) {
+                throw new EOFException("Empty stream");
+            }
+            if (firstByte == 0x0A) {
+                pbis.unread(firstByte);
+                CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+                String name = root.getName();
+                if ("ClassicLevel".equals(name)) {
+                    return loadClassicNBT(root);
+                } else if ("InfiniteLevel".equals(name)) {
+                    return loadInfiniteNBT(root);
+                } else {
+                    throw new IOException("Unknown root tag name: " + name);
+                }
+            } else {
+                pbis.unread(firstByte);
+                int magic = in.readInt();
+                if (magic != MAGIC) throw new IOException("Bad magic " + magic);
 
-            int ver = in.readByte() & 0xFF;
-            switch (ver) {
-                case VERSION_CLASSIC:      return loadClassic(gis);
-                case VERSION_INFINITE:     return loadInfiniteFlat(in);
-                case VERSION_TERRAIN:      return loadInfiniteTerrain(in);
-                case VERSION_CLASSIC_NBT:  return loadClassicNBT(in);
-                case VERSION_INFINITE_NBT: return loadInfiniteNBT(in);
-                default: throw new IOException("Unsupported version: " + ver);
+                int ver = in.readByte() & 0xFF;
+                switch (ver) {
+                    case VERSION_CLASSIC:      return loadClassic(gis);
+                    case VERSION_INFINITE:     return loadInfiniteFlat(in);
+                    case VERSION_TERRAIN:      return loadInfiniteTerrain(in);
+                    case VERSION_CLASSIC_NBT:  {
+                        CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+                        return loadClassicNBT(root);
+                    }
+                    case VERSION_INFINITE_NBT: {
+                        CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+                        return loadInfiniteNBT(root);
+                    }
+                    default: throw new IOException("Unsupported version: " + ver);
+                }
             }
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -262,10 +291,7 @@ public final class LevelIO {
 
         // ✅ make sure BlockMap exists before adding entities
         inf.blockMap = new net.classicremastered.minecraft.level.BlockMap(inf.width, inf.depth, inf.height);
-        if (inf.blockMap == null) {
-            inf.blockMap = new BlockMap(1, 1, 1);
-            inf.blockMap.infiniteMode = true;
-        }
+        inf.blockMap.infiniteMode = true;
         for (Entity e : inf.blockMap.all) {
             e.blockMap = inf.blockMap;
         }
@@ -281,12 +307,14 @@ public final class LevelIO {
             float yaw = in.readFloat();
             float pitch = in.readFloat();
 
-            if (inf.player != null) {
-                inf.player.x = px;
-                inf.player.y = py;
-                inf.player.z = pz;
-                inf.player.yRot = yaw;
-                inf.player.xRot = pitch;
+            if (inf.player == null) {
+                net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(null);
+                loadedPlayer.level = inf;
+                inf.player = loadedPlayer;
+                loadedPlayer.moveTo(px, py, pz, yaw, pitch);
+                inf.addEntity(loadedPlayer);
+            } else {
+                inf.player.moveTo(px, py, pz, yaw, pitch);
             }
 
             int count = in.readInt();
@@ -309,46 +337,7 @@ public final class LevelIO {
             // older saves
         }
 
-
-        // --- metadata ---
-        try {
-            inf.timeOfDay = in.readInt();
-            
-            inf.doDayNightCycle = in.readBoolean();
-
-            float px = in.readFloat();
-            float py = in.readFloat();
-            float pz = in.readFloat();
-            float yaw = in.readFloat();
-            float pitch = in.readFloat();
-
-            if (inf.player != null) {
-                inf.player.x = px;
-                inf.player.y = py;
-                inf.player.z = pz;
-                inf.player.yRot = yaw;
-                inf.player.xRot = pitch;
-            }
-
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                short id = in.readShort();
-                float x = in.readFloat();
-                float y = in.readFloat();
-                float z = in.readFloat();
-                float yRot = in.readFloat();
-                float xRot = in.readFloat();
-                int health = in.readInt();
-                var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
-                if (mob == null) continue;
-                mob.yRot = yRot;
-                mob.xRot = xRot;
-                mob.health = health;
-                inf.addEntity(mob);
-            }
-        } catch (EOFException ignored) {
-            // Compatibility with older saves
-        }
+        inf.updateDayNightColorsSmooth();
 
         return inf;
     }
@@ -417,16 +406,21 @@ public final class LevelIO {
         root.put(map);
 
         CompoundTag player = new CompoundTag("Player");
-        if (level.player != null) {
+        player.putString("id", "Player");
+        Entity savePlayer = level.player;
+        if (savePlayer == null && level.minecraft != null) {
+            savePlayer = level.minecraft.player;
+        }
+        if (savePlayer != null) {
             ListTag pos = new ListTag("Pos", (byte) 5); // TAG_Float
-            pos.add(new FloatTag(null, level.player.x));
-            pos.add(new FloatTag(null, level.player.y));
-            pos.add(new FloatTag(null, level.player.z));
+            pos.add(new FloatTag(null, savePlayer.x));
+            pos.add(new FloatTag(null, savePlayer.y));
+            pos.add(new FloatTag(null, savePlayer.z));
             player.put(pos);
 
             ListTag rot = new ListTag("Rotation", (byte) 5); // TAG_Float
-            rot.add(new FloatTag(null, level.player.yRot));
-            rot.add(new FloatTag(null, level.player.xRot));
+            rot.add(new FloatTag(null, savePlayer.yRot));
+            rot.add(new FloatTag(null, savePlayer.xRot));
             player.put(rot);
         } else {
             ListTag pos = new ListTag("Pos", (byte) 5);
@@ -461,6 +455,7 @@ public final class LevelIO {
 
             CompoundTag mobTag = new CompoundTag(null);
             mobTag.putShort("Id", id);
+            mobTag.putString("id", m.getClass().getSimpleName());
 
             ListTag mPos = new ListTag("Pos", (byte) 5);
             mPos.add(new FloatTag(null, m.x));
@@ -506,16 +501,21 @@ public final class LevelIO {
         root.putByte("DoDayNightCycle", (byte) (level.doDayNightCycle ? 1 : 0));
 
         CompoundTag player = new CompoundTag("Player");
-        if (level.player != null) {
+        player.putString("id", "Player");
+        Entity savePlayer = level.player;
+        if (savePlayer == null && level.minecraft != null) {
+            savePlayer = level.minecraft.player;
+        }
+        if (savePlayer != null) {
             ListTag pos = new ListTag("Pos", (byte) 5);
-            pos.add(new FloatTag(null, level.player.x));
-            pos.add(new FloatTag(null, level.player.y));
-            pos.add(new FloatTag(null, level.player.z));
+            pos.add(new FloatTag(null, savePlayer.x));
+            pos.add(new FloatTag(null, savePlayer.y));
+            pos.add(new FloatTag(null, savePlayer.z));
             player.put(pos);
 
             ListTag rot = new ListTag("Rotation", (byte) 5);
-            rot.add(new FloatTag(null, level.player.yRot));
-            rot.add(new FloatTag(null, level.player.xRot));
+            rot.add(new FloatTag(null, savePlayer.yRot));
+            rot.add(new FloatTag(null, savePlayer.xRot));
             player.put(rot);
         } else {
             ListTag pos = new ListTag("Pos", (byte) 5);
@@ -555,6 +555,7 @@ public final class LevelIO {
 
             CompoundTag mobTag = new CompoundTag(null);
             mobTag.putShort("Id", id);
+            mobTag.putString("id", m.getClass().getSimpleName());
 
             ListTag mPos = new ListTag("Pos", (byte) 5);
             mPos.add(new FloatTag(null, m.x));
@@ -575,8 +576,7 @@ public final class LevelIO {
         net.classicremastered.nbt.NBTIO.write(root, out);
     }
 
-    private Level loadClassicNBT(DataInputStream in) throws IOException {
-        CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+    private Level loadClassicNBT(CompoundTag root) throws IOException {
         Level level = new Level();
 
         level.name = root.getString("Name");
@@ -609,6 +609,13 @@ public final class LevelIO {
         for (int i = 0; i < entities.size(); i++) {
             CompoundTag mobTag = (CompoundTag) entities.get(i);
             short id = mobTag.getShort("Id");
+            if (mobTag.hasKey("id")) {
+                String name = mobTag.getString("id");
+                short resolved = net.classicremastered.minecraft.mob.MobRegistry.idOfName(name);
+                if (resolved >= 0) {
+                    id = resolved;
+                }
+            }
             ListTag mPos = mobTag.getList("Pos");
             ListTag mRot = mobTag.getList("Rotation");
             int health = mobTag.getInt("Health");
@@ -631,25 +638,37 @@ public final class LevelIO {
         level.initTransient();
 
         CompoundTag player = root.getCompound("Player");
-        if (player.hasKey("Pos") && level.player != null) {
+        if (player.hasKey("Pos")) {
             ListTag pos = player.getList("Pos");
-            if (pos.size() >= 3) {
-                level.player.x = ((FloatTag) pos.get(0)).value;
-                level.player.y = ((FloatTag) pos.get(1)).value;
-                level.player.z = ((FloatTag) pos.get(2)).value;
-            }
             ListTag rot = player.getList("Rotation");
+            float px = 0f, py = 0f, pz = 0f;
+            if (pos.size() >= 3) {
+                px = ((FloatTag) pos.get(0)).value;
+                py = ((FloatTag) pos.get(1)).value;
+                pz = ((FloatTag) pos.get(2)).value;
+            }
+            float yaw = 0f, pitch = 0f;
             if (rot.size() >= 2) {
-                level.player.yRot = ((FloatTag) rot.get(0)).value;
-                level.player.xRot = ((FloatTag) rot.get(1)).value;
+                yaw = ((FloatTag) rot.get(0)).value;
+                pitch = ((FloatTag) rot.get(1)).value;
+            }
+
+            if (level.player == null) {
+                net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(null);
+                loadedPlayer.level = level;
+                level.player = loadedPlayer;
+                loadedPlayer.moveTo(px, py, pz, yaw, pitch);
+                level.addEntity(loadedPlayer);
+            } else {
+                level.player.moveTo(px, py, pz, yaw, pitch);
             }
         }
+        level.updateDayNightColorsSmooth();
 
         return level;
     }
 
-    private Level loadInfiniteNBT(DataInputStream in) throws IOException {
-        CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
+    private Level loadInfiniteNBT(CompoundTag root) throws IOException {
         String type = root.getString("TerrainType");
         long seed = root.getLong("Seed");
         int depth = root.getInt("Depth");
@@ -682,26 +701,35 @@ public final class LevelIO {
         }
 
         level.blockMap = new net.classicremastered.minecraft.level.BlockMap(level.width, level.depth, level.height);
-        if (level.blockMap == null) {
-            level.blockMap = new BlockMap(1, 1, 1);
-            level.blockMap.infiniteMode = true;
-        }
+        level.blockMap.infiniteMode = true;
         for (Entity e : level.blockMap.all) {
             e.blockMap = level.blockMap;
         }
 
         CompoundTag player = root.getCompound("Player");
-        if (player.hasKey("Pos") && level.player != null) {
+        if (player.hasKey("Pos")) {
             ListTag pos = player.getList("Pos");
-            if (pos.size() >= 3) {
-                level.player.x = ((FloatTag) pos.get(0)).value;
-                level.player.y = ((FloatTag) pos.get(1)).value;
-                level.player.z = ((FloatTag) pos.get(2)).value;
-            }
             ListTag rot = player.getList("Rotation");
+            float px = 0f, py = 0f, pz = 0f;
+            if (pos.size() >= 3) {
+                px = ((FloatTag) pos.get(0)).value;
+                py = ((FloatTag) pos.get(1)).value;
+                pz = ((FloatTag) pos.get(2)).value;
+            }
+            float yaw = 0f, pitch = 0f;
             if (rot.size() >= 2) {
-                level.player.yRot = ((FloatTag) rot.get(0)).value;
-                level.player.xRot = ((FloatTag) rot.get(1)).value;
+                yaw = ((FloatTag) rot.get(0)).value;
+                pitch = ((FloatTag) rot.get(1)).value;
+            }
+
+            if (level.player == null) {
+                net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(null);
+                loadedPlayer.level = level;
+                level.player = loadedPlayer;
+                loadedPlayer.moveTo(px, py, pz, yaw, pitch);
+                level.addEntity(loadedPlayer);
+            } else {
+                level.player.moveTo(px, py, pz, yaw, pitch);
             }
         }
 
@@ -710,6 +738,13 @@ public final class LevelIO {
         for (int i = 0; i < entities.size(); i++) {
             CompoundTag mobTag = (CompoundTag) entities.get(i);
             short id = mobTag.getShort("Id");
+            if (mobTag.hasKey("id")) {
+                String name = mobTag.getString("id");
+                short resolved = net.classicremastered.minecraft.mob.MobRegistry.idOfName(name);
+                if (resolved >= 0) {
+                    id = resolved;
+                }
+            }
             ListTag mPos = mobTag.getList("Pos");
             ListTag mRot = mobTag.getList("Rotation");
             int health = mobTag.getInt("Health");
@@ -734,6 +769,7 @@ public final class LevelIO {
                 level.addEntity(mob);
             }
         }
+        level.updateDayNightColorsSmooth();
 
         return level;
     }

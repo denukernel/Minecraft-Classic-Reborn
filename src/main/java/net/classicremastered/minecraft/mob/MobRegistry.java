@@ -64,14 +64,26 @@ public final class MobRegistry {
         try { register(id, name, cls, factory); } catch (Throwable ignored) {}
     }
 
-    /** Create a mob by ID; returns null if unknown or construction fails. */
+    /** Create a mob by ID; returns a Pig placeholder if unknown or construction fails. */
     public static Mob create(short id, Level level, float x, float y, float z) {
         Entry e = byId.get(id);
+        if (e == null) {
+            System.err.println("[MobRegistry] Unknown mob ID " + id + ", spawning Pig placeholder.");
+            e = byId.get((short) 21); // Pig ID
+        }
         if (e == null) return null;
         try {
             return e.factory.create(level, x, y, z);
         } catch (Throwable t) {
             t.printStackTrace();
+            if (id != 21) {
+                try {
+                    Entry pigEntry = byId.get((short) 21);
+                    if (pigEntry != null) {
+                        return pigEntry.factory.create(level, x, y, z);
+                    }
+                } catch (Throwable ignored) {}
+            }
             return null;
         }
     }

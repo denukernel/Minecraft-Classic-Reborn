@@ -20,15 +20,16 @@ public final class EndermanModel extends Model {
         // Head
         head = new ModelPart(0, 0);
         head.setBounds(-4, -8, -4, 8, 8, 8, 0.0F);
-        head.setPosition(0, -14, 0);
+        head.setPosition(0, -13, 0);
 
         // Headwear
-        headwear = new ModelPart(32, 0);
-        headwear.setBounds(-4, -8, -4, 8, 8, 8, 0.0F);
-        headwear.setPosition(0, -14, 0);
+        headwear = new ModelPart(0, 16);
+        headwear.setBounds(-4, -8, -4, 8, 8, 8, -0.5F);
+        headwear.setPosition(0, 0, 0);
+        head.addChild(headwear);
 
         // Body
-        body = new ModelPart(16, 16);
+        body = new ModelPart(32, 16);
         body.setBounds(-4, 0, -2, 8, 12, 4, 0.0F);
         body.setPosition(0, -14, 0);
 
@@ -45,12 +46,12 @@ public final class EndermanModel extends Model {
         // Legs
         rightLeg = new ModelPart(56, 0);
         rightLeg.setBounds(-1, 0, -1, 2, 30, 2, 0.0F);
-        rightLeg.setPosition(-2, 0, 0);
+        rightLeg.setPosition(-2, -5, 0);
 
         leftLeg = new ModelPart(56, 0);
         leftLeg.mirror = true;
         leftLeg.setBounds(-1, 0, -1, 2, 30, 2, 0.0F);
-        leftLeg.setPosition(2, 0, 0);
+        leftLeg.setPosition(2, -5, 0);
 
         TexturedQuad.ATLAS_W = prevW;
         TexturedQuad.ATLAS_H = prevH;
@@ -77,7 +78,6 @@ public final class EndermanModel extends Model {
 
         // Base pass (black body)
         head.render(scale);
-        headwear.render(scale);
         body.render(scale);
         rightArm.render(scale);
         leftArm.render(scale);
@@ -95,7 +95,6 @@ public final class EndermanModel extends Model {
 
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, eyesTex);
         head.render(scale);
-        headwear.render(scale);
 
         GL11.glPopAttrib();
     }
@@ -104,30 +103,38 @@ public final class EndermanModel extends Model {
     @Override
     public void setRotationAngles(float limbSwing, float limbSwingAmount, float ageInTicks,
                                   float netHeadYaw, float headPitch, float scale) {
-        // --- Head look (no vertical “y” offset to avoid jitter) ---
-        head.y   = -14.0F;   headwear.y = -14.0F;
-        head.yaw =  netHeadYaw / 57.295776F;
+        // --- Head look ---
+        head.yaw = netHeadYaw / 57.295776F;
         head.pitch = headPitch / 57.295776F;
+        head.roll = 0.0F;
 
-        // --- Base walk (long-limb stride) ---
-        // keep legs as-is, but tone down arm walk since punch anim will drive arms
-        rightLeg.pitch = MathHelper.cos(limbSwing * 0.6662F)                 * 1.4F * limbSwingAmount;
-        leftLeg .pitch = MathHelper.cos(limbSwing * 0.6662F + 3.1415927F)    * 1.4F * limbSwingAmount;
+        // --- Base walk (halved stride for Enderman) ---
+        rightLeg.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F) * 1.4F * limbSwingAmount * 0.5D);
+        leftLeg.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * 1.4F * limbSwingAmount * 0.5D);
 
-        // start arms nearly relaxed (small walk sway)
-        float armWalk = 0.15F; // small because long arms
-        rightArm.pitch = MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * armWalk * limbSwingAmount;
-        leftArm .pitch = MathHelper.cos(limbSwing * 0.6662F)              * armWalk * limbSwingAmount;
+        rightArm.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * 2.0F * limbSwingAmount * 0.5F * 0.5D);
+        leftArm.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F) * 2.0F * limbSwingAmount * 0.5F * 0.5D);
+
+        // Clamping of arms and legs rotations like in ModelEnderman.java
+        float var8 = 0.4F;
+        if (rightArm.pitch > var8) rightArm.pitch = var8;
+        if (leftArm.pitch > var8) leftArm.pitch = var8;
+        if (rightArm.pitch < -var8) rightArm.pitch = -var8;
+        if (leftArm.pitch < -var8) leftArm.pitch = -var8;
+
+        if (rightLeg.pitch > var8) rightLeg.pitch = var8;
+        if (leftLeg.pitch > var8) leftLeg.pitch = var8;
+        if (rightLeg.pitch < -var8) rightLeg.pitch = -var8;
+        if (leftLeg.pitch < -var8) leftLeg.pitch = -var8;
+
         rightArm.yaw = leftArm.yaw = 0.0F;
         rightArm.roll = leftArm.roll = 0.0F;
 
         // --- Attack (two-hand punch, zombie-style), driven by Model.attackOffset (0..1) ---
-        // Mob.render() is already setting attackOffset based on attackTime
         if (this.attackOffset > 0.001F) {
             float a  = MathHelper.sin(this.attackOffset * 3.1415927F);
             float a2 = MathHelper.sin((1.0F - (1.0F - this.attackOffset) * (1.0F - this.attackOffset)) * 3.1415927F);
 
-            // bigger swing for long thin arms, but keep it elegant
             float basePunchPitch = -1.5707964F; // -90 deg base
             float punchPitchAdd  = (a * 1.3F - a2 * 0.4F);
 
@@ -137,7 +144,6 @@ public final class EndermanModel extends Model {
             rightArm.pitch = basePunchPitch - punchPitchAdd;
             leftArm .pitch = basePunchPitch - punchPitchAdd;
 
-            // subtle roll sway for life
             rightArm.roll += MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.03F;
             leftArm .roll -= MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.03F;
 
@@ -145,7 +151,7 @@ public final class EndermanModel extends Model {
             leftArm .pitch -= MathHelper.sin(ageInTicks * 0.067F) * 0.03F;
         }
 
-        // --- Carry pose (if you wire it later) overrides arm attack/walk ---
+        // --- Carry pose ---
         if (isCarrying) {
             rightArm.pitch = leftArm.pitch = -0.50F;
             rightArm.roll  =  0.05F;
@@ -154,17 +160,29 @@ public final class EndermanModel extends Model {
             leftArm .yaw   = 0.0F;
         }
 
-        // --- “Scream/attack” stance: head & torso attitude (no head.y nudges) ---
+        // Set rotation points (overrides values)
+        rightArm.z = 0.0F;
+        leftArm.z = 0.0F;
+        rightLeg.z = 0.0F;
+        leftLeg.z = 0.0F;
+        rightLeg.y = -5.0F;
+        leftLeg.y = -5.0F;
+        head.z = 0.0F;
+        head.y = -13.0F;
+
+        headwear.pitch = 0.0F;
+        headwear.yaw = 0.0F;
+        headwear.roll = 0.0F;
+        headwear.x = 0.0F;
+        headwear.z = 0.0F;
+        headwear.y = isAttacking ? 5.0F : 0.0F;
+
+        // --- “Scream/attack” stance: head & torso attitude ---
         if (isAttacking) {
-            // slight head tuck and torso lean to sell the lunge
-            head.pitch     += 0.20F;
-            headwear.pitch += 0.20F;
-            body.pitch      = 0.08F;
+            head.y -= 5.0F;
+            body.pitch = 0.08F;
         } else {
             body.pitch = 0.0F;
         }
-
-        // (Endermen arms are very long; avoid harsh clamps except extreme values)
-    
     }
 }

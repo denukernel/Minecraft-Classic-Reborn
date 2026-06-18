@@ -45,13 +45,19 @@ class BlockMap$Slot implements Serializable {
     }
 
     public void add(Entity e) {
-        this.blockMap.entityGrid[(this.zSlot * BlockMap.getDepth(this.blockMap) + this.ySlot)
-                * BlockMap.getWidth(this.blockMap) + this.xSlot].add(e);
+        java.util.List<Entity> cell = (java.util.List<Entity>) this.blockMap.entityGrid[(this.zSlot * BlockMap.getDepth(this.blockMap) + this.ySlot)
+                * BlockMap.getWidth(this.blockMap) + this.xSlot];
+        synchronized (cell) {
+            cell.add(e);
+        }
     }
 
     public void remove(Entity e) {
-        this.blockMap.entityGrid[(this.zSlot * BlockMap.getDepth(this.blockMap) + this.ySlot)
-                * BlockMap.getWidth(this.blockMap) + this.xSlot].remove(e);
+        java.util.List<Entity> cell = (java.util.List<Entity>) this.blockMap.entityGrid[(this.zSlot * BlockMap.getDepth(this.blockMap) + this.ySlot)
+                * BlockMap.getWidth(this.blockMap) + this.xSlot];
+        synchronized (cell) {
+            cell.remove(e);
+        }
     }
 
     // synthetic helpers

@@ -1312,6 +1312,10 @@ public class Level implements Serializable {
     }
 
     public MovingObjectPosition clip(Vec3D var1, Vec3D var2) {
+        return this.clip(var1, var2, false);
+    }
+
+    public MovingObjectPosition clip(Vec3D var1, Vec3D var2, boolean checkSolidOnly) {
         if (!Float.isNaN(var1.x) && !Float.isNaN(var1.y) && !Float.isNaN(var1.z)) {
             if (!Float.isNaN(var2.x) && !Float.isNaN(var2.y) && !Float.isNaN(var2.z)) {
                 int var3 = (int) Math.floor((double) var2.x);
@@ -1432,6 +1436,9 @@ public class Level implements Serializable {
                     int var22 = this.getTile(var6, var7, var8);
                     Block var21 = Block.blocks[var22];
                     if (var22 > 0 && var21.getLiquidType() == LiquidType.NOT_LIQUID) {
+                        if (checkSolidOnly && var21.getCollisionBox(var6, var7, var8) == null) {
+                            continue;
+                        }
                         MovingObjectPosition var23;
                         if (var21.isCube()) {
                             if ((var23 = var21.clip(var6, var7, var8, var1, var2)) != null) {

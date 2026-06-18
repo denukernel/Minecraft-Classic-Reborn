@@ -12,6 +12,13 @@ public final class EndermanRenderer extends MobRenderer<Enderman> {
     public void render(Enderman mob, TextureManager tm, float partial) {
         AnimInputs a = animInputs(mob, partial);
 
+        GL11.glPushMatrix();
+        if (mob.isAttacking) {
+            float var10 = 0.02F;
+            java.util.Random rnd = mob.level.random;
+            GL11.glTranslatef((float) rnd.nextGaussian() * var10, 0.0F, (float) rnd.nextGaussian() * var10);
+        }
+
         // body
         bind(tm, texture);
         model.preAnimate(mob);
@@ -25,5 +32,7 @@ public final class EndermanRenderer extends MobRenderer<Enderman> {
         GL11.glBlendFunc(GL11.GL_ONE, GL11.GL_ONE); // additive
         ((EndermanModel) model).renderEyes(tm, MODEL_SCALE);
         GL11.glDisable(GL11.GL_BLEND);
+
+        GL11.glPopMatrix();
     }
 }

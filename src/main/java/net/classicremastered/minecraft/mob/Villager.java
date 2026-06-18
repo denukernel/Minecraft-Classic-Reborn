@@ -80,7 +80,7 @@ public class Villager extends Mob {
         if (p.coins >= cost) {
             p.coins -= cost;
             p.inventory.addResource(give);
-            if (p.villagerReputation < 100) {
+            if (!this.level.creativeMode && p.villagerReputation < 100) {
                 p.villagerReputation++;
             }
             if (p.minecraft != null && p.minecraft.hud != null) {
@@ -215,7 +215,7 @@ public class Villager extends Mob {
                 actualAttacker = ((net.classicremastered.minecraft.entity.Arrow) attacker).getOwner();
             }
 
-            if (actualAttacker instanceof Mob) {
+            if (actualAttacker instanceof Mob && !(actualAttacker instanceof Player)) {
                 boolean allowed = actualAttacker instanceof Zombie && !(actualAttacker instanceof Skeleton);
                 if (!allowed) {
                     return;
@@ -228,11 +228,13 @@ public class Villager extends Mob {
         if (attacker instanceof Player p) {
             this.hurtCounter++;
             if (this.hurtCounter >= 3) {
-                p.villagerReputation = Math.max(-100, p.villagerReputation - 2);
-                this.hurtCounter = 0;
-                if (p.minecraft != null && p.minecraft.hud != null) {
-                    p.minecraft.hud.addChat("&cVillagers distrust you (-2 reputation)");
+                if (!this.level.creativeMode) {
+                    p.villagerReputation = Math.max(-100, p.villagerReputation - 2);
+                    if (p.minecraft != null && p.minecraft.hud != null) {
+                        p.minecraft.hud.addChat("&cVillagers distrust you (-2 reputation)");
+                    }
                 }
+                this.hurtCounter = 0;
             }
         }
     }
@@ -246,11 +248,13 @@ public class Villager extends Mob {
         super.die(killer);
 
         if (killer instanceof Player p) {
-            p.villagerReputation = Math.max(-100, p.villagerReputation - 7);
-            p.villagerKills++;
-            if (p.minecraft != null && p.minecraft.hud != null) {
-                p.minecraft.hud.addChat("&cYou killed a villager! (-7 reputation)");
+            if (!this.level.creativeMode) {
+                p.villagerReputation = Math.max(-100, p.villagerReputation - 7);
+                if (p.minecraft != null && p.minecraft.hud != null) {
+                    p.minecraft.hud.addChat("&cYou killed a villager! (-7 reputation)");
+                }
             }
+            p.villagerKills++;
 
             java.util.List near = this.level.findEntities(this, this.bb.grow(5, 3, 5));
             for (Object o : near) {

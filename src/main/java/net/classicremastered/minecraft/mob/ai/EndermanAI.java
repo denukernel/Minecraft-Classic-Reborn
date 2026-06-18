@@ -230,7 +230,7 @@ public final class EndermanAI extends BasicAI {
         // --- Melee movement ---
         this.running = true;
         this.yya = runSpeed * 1.3F;
-        enderman.isAttacking = false;
+        enderman.isAttacking = true;
 
         if (enderman.attackTime <= 0) {
             if (enderman.bb != null && player.bb != null) {
