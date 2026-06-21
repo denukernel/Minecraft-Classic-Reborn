@@ -38,12 +38,12 @@ Give the launcher time to download the resources and you will start hearing audi
 - New inventory
 - NBT data and NBT loader
 - Third Person Mode
+- F5 camera preview (toggle between first/third person)  
 ---
 
 ## 🛠️ Planned / Not Yet Implemented
 - Tile entities  
 - Dimensions  
-- F5 camera preview (toggle between first/third person)  
 - More mobs and features  
 
 
@@ -95,9 +95,13 @@ If you just want to **play the game**:
 - 1: Use ClassicLauncher main class for launching minecraft.
 - 2: Replace ${project.basedir} with your disk. eclipse asks you to inline
 - 3: Done.
-
+- 
+### History
+- I planned to make a minecraft classic mod like that since 2019, as my 10-11 year old self planned, and i successfully did that.
+- and I knew i would return to programming on "Unknown year" that you know now.
 ### Clone the Repo
 ```bash
 git clone https://github.com/denukernel/Minecraft-Classic-Reborn.git
 cd Minecraft-Classic-Reborn
+
 
