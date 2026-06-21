@@ -38,12 +38,12 @@ Give the launcher time to download the resources and you will start hearing audi
 - New inventory
 - NBT data and NBT loader
 - Third Person Mode
+- F5 camera preview (toggle between first/third person)  
 ---
 
 ## 🛠️ Planned / Not Yet Implemented
 - Tile entities  
 - Dimensions  
-- F5 camera preview (toggle between first/third person)  
 - More mobs and features  
 
 
@@ -100,4 +100,7 @@ If you just want to **play the game**:
 ```bash
 git clone https://github.com/denukernel/Minecraft-Classic-Reborn.git
 cd Minecraft-Classic-Reborn
+
+### History
+- I was making this project since 2019, back in 2019 i planned to make a minecraft classic mod like that and i successfully did, as my 10-11 year old self planned
 
