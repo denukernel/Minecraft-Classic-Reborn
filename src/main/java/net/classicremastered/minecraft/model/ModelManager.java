@@ -33,6 +33,9 @@ public final class ModelManager {
    // NEW: ShulkerMan model
    private ModelShulkerMan shulkerman = new ModelShulkerMan();
 
+   // NEW: LeggedMan model
+   private LeggedMan leggedman = new LeggedMan();
+
    public final Model getModel(String key) {
       if (key == null) return null;
       switch (key) {
@@ -73,6 +76,9 @@ public final class ModelManager {
 
          // NEW: ShulkerMan mapping
          case "shulkerman":            return this.shulkerman;
+
+         // NEW: LeggedMan mapping
+         case "leggedmonster":         return this.leggedman;
 
          default:                      return null;
       }

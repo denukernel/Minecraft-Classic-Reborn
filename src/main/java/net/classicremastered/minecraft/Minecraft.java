@@ -2135,6 +2135,8 @@ public final class Minecraft implements Runnable {
                     if (rightDown && held != null) {
                         // Held → tick
                         held.tick(this.player, this.level);
+                    } else if (held instanceof net.classicremastered.minecraft.level.itemstack.GravityGunItem) {
+                        held.tick(this.player, this.level);
                     }
                     if (!rightDown && wasRightDown && held != null) {
                         // Just released → releaseUse
@@ -2244,6 +2246,11 @@ public final class Minecraft implements Runnable {
                 skyRenderer.tick();
             this.level.tickEntities();
             net.classicremastered.minecraft.level.itemstack.TelekinesisItem.processArmedImpacts(this.level); // added
+            if (this.player != null && (this.player.inventory.getSelected() - 256 != 11)) {
+                if (net.classicremastered.minecraft.level.itemstack.GravityGunItem.grabbedMobs.containsKey(this.player)) {
+                    net.classicremastered.minecraft.level.itemstack.GravityGunItem.dropGently(this.player);
+                }
+            }
             if (this.level != null) {
                 this.level.tickTime();
                 if (this.levelRenderer != null) {

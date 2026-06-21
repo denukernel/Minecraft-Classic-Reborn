@@ -270,5 +270,19 @@ public final class LevelRenderer {
         for (Entity e : level.entityList) {
             if (!e.removed) e.render(textureManager, partial);
         }
+
+        // Draw gravity gun beams for grabbed mobs
+        for (Entity e : level.entityList) {
+            if (e instanceof Player) {
+                Player p = (Player) e;
+                int selId = p.inventory.getSelected();
+                if (selId >= 256 && (selId - 256) == 11) {
+                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
+                    if (grabbed != null && !grabbed.removed) {
+                        net.classicremastered.minecraft.level.itemstack.GravityGunItem.renderMobBeam(p, grabbed, textureManager, partial);
+                    }
+                }
+            }
+        }
     }
 }

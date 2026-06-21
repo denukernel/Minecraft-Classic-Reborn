@@ -255,15 +255,9 @@ public class ImpactPrimedTnt extends Entity {
         int tex = textureManager.load("/terrain.png");
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
 
-        int bx = MathHelper.floor(x);
-        int by = MathHelper.floor(y);
-        int bz = MathHelper.floor(z);
-        if (level != null && level.height > 0) {
-            by = Math.max(0, Math.min(level.height - 1, by));
-        }
         float brightness = 1.0F;
         try {
-            brightness = level.getBrightness(bx, by, bz);
+            brightness = this.getBrightness(partial);
         } catch (Throwable ignored) {}
 
         GL11.glPushMatrix();

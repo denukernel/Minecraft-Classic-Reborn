@@ -21,6 +21,7 @@ public class Creeper extends Mob {
         this.ai = new net.classicremastered.minecraft.mob.ai.SmartHostileAI();
         this.deathScore = 200;
         this.setPos(x, y, z);
+        
         this.coinDrop = 4;
         this.footSize = 0.45F;
 

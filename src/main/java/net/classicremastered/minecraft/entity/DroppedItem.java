@@ -13,10 +13,16 @@ import org.lwjgl.opengl.GL11;
 public class DroppedItem extends Entity {
     public int itemId;
     public int life = 6000; // ~5 mins
+    public int count = 1;
 
     public DroppedItem(Level level, float x, float y, float z, int itemId) {
+        this(level, x, y, z, itemId, 1);
+    }
+
+    public DroppedItem(Level level, float x, float y, float z, int itemId, int count) {
         super(level);
         this.itemId = itemId;
+        this.count = count;
         setPos(x, y, z);
         this.bb = new AABB(x - 0.25F, y - 0.25F, z - 0.25F, x + 0.25F, y + 0.25F, z + 0.25F);
         setSize(0.25F, 0.25F);
@@ -50,12 +56,24 @@ public class DroppedItem extends Entity {
             idToAdd = 256 + itemId; // fixed: prevents collision with Block IDs
         }
 
-        if (p.inventory.addResource(idToAdd)) { // fixed: add remapped ID
+        int added = 0;
+        for (int i = 0; i < this.count; i++) {
+            if (p.inventory.addResource(idToAdd)) {
+                added++;
+            } else {
+                break;
+            }
+        }
+
+        if (added > 0) {
             if (this.level != null) {
                 float pitch = 1.0F + (MathHelper.random.nextFloat() - 0.5F) * 0.2F;
                 this.level.playSound("random/pop", this.x, this.y, this.z, 0.2F, pitch);
             }
-            remove();
+            this.count -= added;
+            if (this.count <= 0) {
+                remove();
+            }
         }
     }
 

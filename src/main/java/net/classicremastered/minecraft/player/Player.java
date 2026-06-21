@@ -110,9 +110,9 @@ public class Player extends Mob {
         Entity dropped;
         if (id >= 256) {
             dropped = new net.classicremastered.minecraft.entity.DroppedItem(this.level, spawnX, spawnY, spawnZ,
-                    id - 256);
+                    id - 256, count);
         } else {
-            dropped = new net.classicremastered.minecraft.entity.DroppedBlock(this.level, spawnX, spawnY, spawnZ, id);
+            dropped = new net.classicremastered.minecraft.entity.DroppedBlock(this.level, spawnX, spawnY, spawnZ, id, count);
         }
 
         // --- Modern throw velocity ---
@@ -541,11 +541,40 @@ public class Player extends Mob {
         // --- lose all coins ---
         this.coins = 0;
 
-        // --- clear inventory (lose all items) ---
-        if (this.inventory != null) {
+        // --- drop all inventory items/blocks ---
+        if (this.inventory != null && this.level != null) {
+            java.util.Random rnd = this.level.random;
             for (int i = 0; i < this.inventory.slots.length; i++) {
-                this.inventory.slots[i] = -1;
-                this.inventory.count[i] = 0;
+                int id = this.inventory.slots[i];
+                int count = this.inventory.count[i];
+                if (id > 0 && count > 0) {
+                    // Random scatter offset around the player's feet
+                    float rx = (rnd.nextFloat() - 0.5F) * 0.4F;
+                    float ry = rnd.nextFloat() * 0.3F + 0.1F;
+                    float rz = (rnd.nextFloat() - 0.5F) * 0.4F;
+                    
+                    Entity dropped;
+                    if (id >= 256) {
+                        dropped = new net.classicremastered.minecraft.entity.DroppedItem(
+                            this.level, this.x + rx, this.y + ry, this.z + rz, id - 256, count
+                        );
+                    } else {
+                        dropped = new net.classicremastered.minecraft.entity.DroppedBlock(
+                            this.level, this.x + rx, this.y + ry, this.z + rz, id, count
+                        );
+                    }
+                    
+                    // Scatter velocity
+                    dropped.xd = (rnd.nextFloat() - 0.5F) * 0.2F;
+                    dropped.yd = rnd.nextFloat() * 0.2F + 0.1F;
+                    dropped.zd = (rnd.nextFloat() - 0.5F) * 0.2F;
+                    
+                    this.level.addEntity(dropped);
+                    
+                    // Clear slot
+                    this.inventory.slots[i] = -1;
+                    this.inventory.count[i] = 0;
+                }
             }
             this.arrows = 0; // also clear arrows
         }

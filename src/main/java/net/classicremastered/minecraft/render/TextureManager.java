@@ -276,11 +276,22 @@ public class TextureManager {
             GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, x, y, 16, 16, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buf);
         };
 
-        // load a 16×16 from classpath
+        // load a 16×16 from classpath or filesystem fallback
         java.util.function.BiConsumer<Integer, String> put = (index, path) -> {
             try {
-                putImg.accept(index, ImageIO.read(TextureManager.class.getResourceAsStream(path)));
-            } catch (Exception ignored) {
+                java.io.InputStream in = TextureManager.class.getResourceAsStream(path);
+                if (in == null) {
+                    java.io.File file = new java.io.File("src/main/resources" + path);
+                    if (file.exists()) {
+                        putImg.accept(index, ImageIO.read(file));
+                    } else {
+                        System.err.println("[TextureManager] Missing texture resource: " + path);
+                    }
+                } else {
+                    putImg.accept(index, ImageIO.read(in));
+                }
+            } catch (Exception e) {
+                System.err.println("[TextureManager] Failed to load block tile at index " + index + ": " + e);
             }
         };
 
@@ -349,6 +360,7 @@ public class TextureManager {
         put.accept(187, "/terrain/blocks/new_blocks/diamond_ore.png"); // added
         put.accept(188, "/terrain/blocks/new_blocks/pumpkin_side.png"); // added
         put.accept(189, "/terrain/blocks/new_blocks/pumpkin_face_off.png"); // added
+        put.accept(190, "/terrain/blocks/lucky_block.png");
 
         // ---- optional: wool strip 64..79 ----
         try {

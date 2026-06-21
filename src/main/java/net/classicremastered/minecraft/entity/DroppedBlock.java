@@ -15,9 +15,15 @@ public class DroppedBlock extends Entity {
     private int pickupDelay = 10; // ~0.5s at 20 tps (tune)
     private boolean pickingUp = false; // one-shot guard
     private static final java.util.Random rand = new java.util.Random();
+    public int count = 1;
 
     public DroppedBlock(Level level1, float x, float y, float z, int block) {
+        this(level1, x, y, z, block, 1);
+    }
+
+    public DroppedBlock(Level level1, float x, float y, float z, int block, int count) {
         super(level1);
+        this.count = count;
 
         setSize(0.25F, 0.25F);
 
@@ -110,15 +116,26 @@ public class DroppedBlock extends Entity {
 
         Player player = (Player) entity;
 
-        if (player.inventory.addResource(resource)) {
+        int added = 0;
+        for (int i = 0; i < this.count; i++) {
+            if (player.inventory.addResource(resource)) {
+                added++;
+            } else {
+                break;
+            }
+        }
+
+        if (added > 0) {
             // --- Play pickup pop sound (safe random) ---
             if (this.level != null) {
                 float pitch = 1.0F + (MathHelper.random.nextFloat() - 0.5F) * 0.2F;
                 this.level.playSound("random/pop", this.x, this.y, this.z, 0.2F, pitch);
             }
 
-            // optional: level.addEntity(new TakeEntityAnim(level, this, player));
-            remove();
+            this.count -= added;
+            if (this.count <= 0) {
+                remove();
+            }
         }
     }
 

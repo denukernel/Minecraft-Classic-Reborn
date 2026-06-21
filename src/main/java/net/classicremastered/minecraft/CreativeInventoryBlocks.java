@@ -72,6 +72,7 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.PUMPKIN);
         allowedBlocks.add(Block.CACTUS);
         allowedBlocks.add(Block.PISTON);
+        allowedBlocks.add(Block.LUCKY_BLOCK);
     }
 
 }

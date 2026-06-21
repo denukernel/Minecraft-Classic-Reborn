@@ -9,6 +9,9 @@ import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.Frustrum;
 import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.minecraft.entity.HeldBlockEntity;
+import net.classicremastered.minecraft.player.Player;
+
 
 public class BlockMap implements Serializable {
 
@@ -211,13 +214,34 @@ public class BlockMap implements Serializable {
     }
 
     public void render(Vec3D cam, Frustrum fr, TextureManager tex, float partial) {
-        if (infiniteMode) {
-            Entity[] entities;
-            synchronized (this.all) {
-                entities = this.all.toArray(new Entity[0]);
+        // Render all HeldBlockEntity first, bypassing frustum check and infiniteMode check
+        Entity[] entities;
+        synchronized (this.all) {
+            entities = this.all.toArray(new Entity[0]);
+        }
+        for (Entity e : entities) {
+            if (e instanceof HeldBlockEntity && !e.removed) {
+                e.render(tex, partial);
             }
+        }
+
+        // Draw gravity gun beams for grabbed mobs
+        for (Entity e : entities) {
+            if (e instanceof Player) {
+                Player p = (Player) e;
+                int selId = p.inventory.getSelected();
+                if (selId >= 256 && (selId - 256) == 11) {
+                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
+                    if (grabbed != null && !grabbed.removed) {
+                        net.classicremastered.minecraft.level.itemstack.GravityGunItem.renderMobBeam(p, grabbed, tex, partial);
+                    }
+                }
+            }
+        }
+
+        if (infiniteMode) {
             for (Entity e : entities) {
-                if (e != null && !e.removed && e.shouldRender(cam)) {
+                if (e != null && !e.removed && !(e instanceof HeldBlockEntity) && e.shouldRender(cam)) {
                     AABB bb = e.bb;
                     if (bb != null && fr.isBoxInFrustrum(bb.x0, bb.y0, bb.z0, bb.x1, bb.y1, bb.z1)) {
                         e.render(tex, partial);
@@ -240,12 +264,12 @@ public class BlockMap implements Serializable {
                         float z0 = (float) ((z << 4) - 2);
                         float z1 = (float) ((z + 1 << 4) + 2);
                         if (fr.isBoxInFrustrum(x0, y0, z0, x1, y1, z1)) {
-                            Entity[] entities;
+                            Entity[] cellEntities;
                             synchronized (cell) {
-                                entities = cell.toArray(new Entity[0]);
+                                cellEntities = cell.toArray(new Entity[0]);
                             }
-                            for (Entity e : entities) {
-                                if (e != null && e.shouldRender(cam)) {
+                            for (Entity e : cellEntities) {
+                                if (e != null && !(e instanceof HeldBlockEntity) && e.shouldRender(cam)) {
                                     e.render(tex, partial);
                                 }
                             }

@@ -24,13 +24,25 @@ public class InputManager {
     public void onMouseClick(int button) {
         // button: 0 = left, 1 = right
 
+        final int selId = mc.player.inventory.getSelected();
+
+        // If holding Gravity Gun and clicking Left Click while carrying something, drop gently
+        if (selId >= 256 && (selId - 256) == 11) {
+            if (button == 0 && net.classicremastered.minecraft.level.itemstack.GravityGunItem.isHoldingAnything(mc.player)) {
+                net.classicremastered.minecraft.level.itemstack.GravityGunItem.dropGently(mc.player);
+                if (mc.renderer != null && mc.renderer.heldBlock != null) {
+                    mc.renderer.heldBlock.offset = -1;
+                    mc.renderer.heldBlock.moving = true;
+                }
+                return;
+            }
+        }
+
         // --- LEFT CLICK: swing animation ---
         if (button == 0 && mc.renderer != null && mc.renderer.heldBlock != null) {
             mc.renderer.heldBlock.offset = -1; // fixed
             mc.renderer.heldBlock.moving = true; // fixed
         }
-
-        final int selId = mc.player.inventory.getSelected();
 
         // --- RIGHT CLICK: items swing only (let main loop call use()/tick/releaseUse)
         // ---
@@ -244,8 +256,6 @@ public class InputManager {
                             mc.player.isFlying = !mc.player.isFlying;
                             if (!mc.player.isFlying)
                                 mc.player.yd = 0.0F;
-                            if (mc.hud != null)
-                                mc.hud.addChat(mc.player.isFlying ? "&aFlight enabled" : "&cFlight disabled");
                             mc.jumpTapArmed = false;
                             mc.lastJumpTapTick = -10000;
                         } else {
@@ -268,9 +278,6 @@ public class InputManager {
                             mc.player.yd = 0.0F;
                             mc.player.fallDistance = 0.0F;
                             mc.player.onGround = true;
-                        }
-                        if (mc.hud != null) {
-                            mc.hud.addChat(mc.player.isFlying ? "&aFlight enabled" : "&cFlight disabled");
                         }
                     }
                 }

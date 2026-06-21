@@ -8,16 +8,31 @@ import java.io.File;
 
 public final class LevelNameScreen extends GuiScreen {
 
+    public interface Receiver {
+        void onNameEntered(String name);
+    }
+
     private final GuiScreen parent;
     private final String title = "Enter level name:";
     private final int id;   // slot id or save slot index
     private String name;
     private int counter = 0;
+    private Receiver receiver;
 
     public LevelNameScreen(GuiScreen parent, String currentName, int id) {
         this.parent = parent;
         this.id = id;
         this.name = currentName;
+        if (this.name.equals("-")) {
+            this.name = "";
+        }
+    }
+
+    public LevelNameScreen(GuiScreen parent, String currentName, Receiver receiver) {
+        this.parent = parent;
+        this.id = -1;
+        this.name = currentName;
+        this.receiver = receiver;
         if (this.name.equals("-")) {
             this.name = "";
         }
@@ -47,8 +62,13 @@ public final class LevelNameScreen extends GuiScreen {
         if (!b.active) return;
 
         if (b.id == 0 && this.name.trim().length() > 1) {
-            // --- Save locally ---
             String safeName = this.name.trim();
+            if (this.receiver != null) {
+                this.receiver.onNameEntered(safeName);
+                return;
+            }
+
+            // --- Save locally ---
             this.minecraft.level.name = safeName;
 
             try {

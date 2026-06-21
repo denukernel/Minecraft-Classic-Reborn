@@ -11,6 +11,7 @@ public final class CreeperModel extends Model {
 
     public CreeperModel() {
         head.setBounds(-4.0F, -8.0F, -4.0F, 8, 8, 8, 0.0F);
+        this.groundOffset = 21.5F;
 
         unused = new ModelPart(32, 0);
         unused.setBounds(-4.0F, -8.0F, -4.0F, 8, 8, 8, 0.5F);

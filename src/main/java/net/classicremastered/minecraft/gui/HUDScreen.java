@@ -228,7 +228,7 @@ public final class HUDScreen extends Screen {
          drawCenteredString(this.mc.fontRenderer, warn, this.width / 2, 2, color);
      }
      if (this.mc.settings.showFrameRate) {
-         font.render("&7Minecraft &6Classic &b0.45 Pre Release 1", 2, 2, 0xFFFFFF);
+         font.render("&7Minecraft &6Classic &bRCT June 26 Build", 2, 2, 0xFFFFFF);
          font.render(this.mc.debug, 2, 22, 0xFFFFFF);
      }
      if(this.mc.settings.showFrameRate) {

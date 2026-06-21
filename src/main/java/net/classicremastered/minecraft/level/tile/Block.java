@@ -112,6 +112,7 @@ public class Block {
     public static final Block FIRE;
     public static final Block JUKEBOX;
     public static final Block PORTAL;
+    public static final Block LUCKY_BLOCK;
     public int textureId;
     public final int id;
     public Tile$SoundType stepsound;
@@ -608,6 +609,7 @@ public class Block {
         CACTUS            = new CactusBlock(225);
         PISTON            = new PistonBlock(226);
         PORTAL = new BlockPortal(227); // pick free ID
+        LUCKY_BLOCK       = new LuckyBlock(229);
         
         BLUE_WOOL = (new Block(28, 71, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         PURPLE_WOOL = (new Block(29, 72, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);

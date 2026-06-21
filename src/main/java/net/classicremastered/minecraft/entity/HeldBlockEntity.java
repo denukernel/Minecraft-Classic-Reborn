@@ -39,7 +39,7 @@ public final class HeldBlockEntity extends Entity {
     // spin 10 rev / 5s => 36 deg per tick @20 TPS
     private static final float SPIN_DEG_PER_TICK = 36f;
 
-    public HeldBlockEntity(Level lvl, Player owner, int blockId) {
+    public HeldBlockEntity(Level lvl, Player owner, int blockId, int bx, int by, int bz) {
         super(lvl);
         this.owner = owner;
         this.blockId = blockId;
@@ -47,12 +47,21 @@ public final class HeldBlockEntity extends Entity {
         this.heightOffset = 0.0f;
         this.makeStepSound = false;
 
-        recalcHeldTarget(true);
-        this.x = targetX; this.y = targetY; this.z = targetZ;
+        this.x = bx + 0.5f;
+        this.y = by + 0.5f;
+        this.z = bz + 0.5f;
         this.lastX = this.x; this.lastY = this.y; this.lastZ = this.z;
+        this.setPos(this.x, this.y, this.z);
+
+        recalcHeldTarget(true);
     }
 
     public boolean isHeld() { return state == State.HELD; }
+    public Player getOwner() { return owner; }
+    public void dropGently() {
+        tryPlaceBlockSimple();
+        this.removed = true;
+    }
 
     public void throwNow(float power) {
         if (state == State.THROWN) return;
@@ -76,7 +85,10 @@ public final class HeldBlockEntity extends Entity {
         lastX = this.x; lastY = this.y; lastZ = this.z;
 
         if (state == State.HELD) {
-            if (owner == null || owner.removed) { state = State.THROWN; }
+            if (owner == null || owner.removed || (owner.inventory.getSelected() - 256 != 11)) {
+                dropGently();
+                return;
+            }
             recalcHeldTarget(true);
 
             this.xd *= 0.6f; this.yd *= 0.6f; this.zd *= 0.6f;
@@ -93,17 +105,28 @@ public final class HeldBlockEntity extends Entity {
         this.move(this.xd, this.yd, this.zd);
         this.xd *= drag; this.yd *= 0.98f; this.zd *= drag;
 
-        // world contact via ray last->now
+        // world contact via ray last->now or collision flags
         MovingObjectPosition hit = rayFromLast();
-        if (hit != null) {
-            if (hit.vec != null) { this.x = (float)hit.vec.x; this.y = (float)hit.vec.y; this.z = (float)hit.vec.z; }
-            tryPlaceAtImpact(hit);
+        if (hit != null || this.collision || this.onGround || this.horizontalCollision) {
+            if (hit != null && hit.vec != null) { this.x = (float)hit.vec.x; this.y = (float)hit.vec.y; this.z = (float)hit.vec.z; }
+            Block block = Block.blocks[blockId];
+            if (block != null && level.particleEngine != null) {
+                block.spawnBreakParticles(level, MathHelper.floor(this.x), MathHelper.floor(this.y), MathHelper.floor(this.z), level.particleEngine);
+            }
+            if (block != null && block.stepsound != null) {
+                level.playSound(block.stepsound.pool, this.x, this.y, this.z, 0.8f, 1.0f);
+            }
+            if (hit != null) {
+                tryPlaceAtImpact(hit);
+            } else {
+                tryPlaceBlockSimple();
+            }
             this.removed = true;
             return;
         }
 
         // entity hit → 5 damage
-        damageMobsOnHit(5);
+        damageMobsOnHit(8);
 
         if (age > life) {
             tryPlaceBlockSimple();
@@ -144,6 +167,13 @@ public final class HeldBlockEntity extends Entity {
                 e.hurt(this, dmg);
                 float kb = 0.35f;
                 e.xd += this.xd * kb; e.yd += 0.08f; e.zd += this.zd * kb;
+                Block block = Block.blocks[blockId];
+                if (block != null && level.particleEngine != null) {
+                    block.spawnBreakParticles(level, MathHelper.floor(this.x), MathHelper.floor(this.y), MathHelper.floor(this.z), level.particleEngine);
+                }
+                if (block != null && block.stepsound != null) {
+                    level.playSound(block.stepsound.pool, this.x, this.y, this.z, 0.8f, 1.0f);
+                }
                 tryPlaceBlockSimple();
                 this.removed = true;
                 return;
@@ -168,6 +198,13 @@ public final class HeldBlockEntity extends Entity {
     private void recalcHeldTarget(boolean trace) {
         if (owner == null) return;
 
+        float currentHoldDist = 3.5f;
+        if (net.classicremastered.minecraft.level.itemstack.GravityGunItem.holdDists.containsKey(owner)) {
+            currentHoldDist = net.classicremastered.minecraft.level.itemstack.GravityGunItem.holdDists.get(owner);
+        } else {
+            currentHoldDist = this.holdDist;
+        }
+
         float ex = owner.x, ey = owner.y + owner.heightOffset, ez = owner.z;
         float yaw = owner.yRot * (float)Math.PI/180f;
         float pitch = owner.xRot * (float)Math.PI/180f;
@@ -175,9 +212,9 @@ public final class HeldBlockEntity extends Entity {
         float fy = -MathHelper.sin(pitch);
         float fz =  MathHelper.cos(yaw) * MathHelper.cos(pitch);
 
-        targetX = ex + fx * holdDist;
-        targetY = ey + fy * holdDist;
-        targetZ = ez + fz * holdDist;
+        targetX = ex + fx * currentHoldDist;
+        targetY = ey + fy * currentHoldDist;
+        targetZ = ez + fz * currentHoldDist;
 
         if (!trace || level == null) return;
         var mop = level.clip(new Vec3D(ex, ey, ez), new Vec3D(targetX, targetY, targetZ));
@@ -199,63 +236,57 @@ public final class HeldBlockEntity extends Entity {
     @Override
     public void render(TextureManager tm, float partial) {
         if (blockId <= 0 || Block.blocks[blockId] == null) return;
+        Block block = Block.blocks[blockId];
+
+        float ex = this.lastX + (this.x - this.lastX) * partial;
+        float ey = this.lastY + (this.y - this.lastY) * partial;
+        float ez = this.lastZ + (this.z - this.lastZ) * partial;
+
+        // Draw energy beam from player to block
+        if (owner != null && state == State.HELD) {
+            float px = owner.xo + (owner.x - owner.xo) * partial;
+            float py = owner.yo + (owner.y - owner.yo) * partial + owner.heightOffset - 0.2f;
+            float pz = owner.zo + (owner.z - owner.zo) * partial;
+
+            GL11.glPushMatrix();
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
+
+            // Outer glowing beam
+            GL11.glColor4f(0.0f, 0.6f, 1.0f, 0.4f);
+            GL11.glLineWidth(8.0f);
+            GL11.glBegin(GL11.GL_LINES);
+            GL11.glVertex3f(ex, ey, ez);
+            GL11.glVertex3f(px, py, pz);
+            GL11.glEnd();
+
+            // Inner bright core
+            GL11.glColor4f(0.8f, 0.95f, 1.0f, 0.9f);
+            GL11.glLineWidth(3.0f);
+            GL11.glBegin(GL11.GL_LINES);
+            GL11.glVertex3f(ex, ey, ez);
+            GL11.glVertex3f(px, py, pz);
+            GL11.glEnd();
+
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glEnable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_BLEND);
+            GL11.glPopMatrix();
+        }
 
         GL11.glPushMatrix();
-        GL11.glTranslatef(this.x, this.y, this.z);
+        GL11.glTranslatef(ex, ey, ez);
         GL11.glRotatef(this.yRotO + (this.yRot - this.yRotO) * partial, 0f, 1f, 0f);
         GL11.glScalef(0.98f, 0.98f, 0.98f); // slight shrink to avoid z-fight
 
-        // Try to bind terrain atlas if present
-        int tex = 0;
-        try { tex = tm.load("/terrain.png"); } catch (Throwable ignored) {}
-        if (tex != 0) GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
+        block.bindTexture(tm);
 
-        // Draw a unit cube centered at origin with very simple UVs.
-        // (You can swap this with your block renderer later.)
         ShapeRenderer sr = ShapeRenderer.instance;
         GL11.glDisable(GL11.GL_CULL_FACE);
-        sr.begin(); // +X
-        sr.vertexUV( 0.5f,-0.5f,-0.5f, 0,1);
-        sr.vertexUV( 0.5f, 0.5f,-0.5f, 0,0);
-        sr.vertexUV( 0.5f, 0.5f, 0.5f, 1,0);
-        sr.vertexUV( 0.5f,-0.5f, 0.5f, 1,1);
-        sr.end();
-
-        sr.begin(); // -X
-        sr.vertexUV(-0.5f,-0.5f, 0.5f, 0,1);
-        sr.vertexUV(-0.5f, 0.5f, 0.5f, 0,0);
-        sr.vertexUV(-0.5f, 0.5f,-0.5f, 1,0);
-        sr.vertexUV(-0.5f,-0.5f,-0.5f, 1,1);
-        sr.end();
-
-        sr.begin(); // +Y
-        sr.vertexUV(-0.5f, 0.5f,-0.5f, 0,1);
-        sr.vertexUV(-0.5f, 0.5f, 0.5f, 0,0);
-        sr.vertexUV( 0.5f, 0.5f, 0.5f, 1,0);
-        sr.vertexUV( 0.5f, 0.5f,-0.5f, 1,1);
-        sr.end();
-
-        sr.begin(); // -Y
-        sr.vertexUV( 0.5f,-0.5f,-0.5f, 0,1);
-        sr.vertexUV( 0.5f,-0.5f, 0.5f, 0,0);
-        sr.vertexUV(-0.5f,-0.5f, 0.5f, 1,0);
-        sr.vertexUV(-0.5f,-0.5f,-0.5f, 1,1);
-        sr.end();
-
-        sr.begin(); // +Z
-        sr.vertexUV(-0.5f,-0.5f, 0.5f, 0,1);
-        sr.vertexUV( 0.5f,-0.5f, 0.5f, 1,1);
-        sr.vertexUV( 0.5f, 0.5f, 0.5f, 1,0);
-        sr.vertexUV(-0.5f, 0.5f, 0.5f, 0,0);
-        sr.end();
-
-        sr.begin(); // -Z
-        sr.vertexUV( 0.5f,-0.5f,-0.5f, 0,1);
-        sr.vertexUV(-0.5f,-0.5f,-0.5f, 1,1);
-        sr.vertexUV(-0.5f, 0.5f,-0.5f, 1,0);
-        sr.vertexUV( 0.5f, 0.5f,-0.5f, 0,0);
-        sr.end();
-
+        GL11.glTranslatef(-0.5f, -0.5f, -0.5f);
+        block.renderPreview(sr);
         GL11.glEnable(GL11.GL_CULL_FACE);
         GL11.glPopMatrix();
     }

@@ -27,7 +27,10 @@ public final class ItemRegistry {
         Item.FLINT_AND_STEEL = new FlintAndSteelItem(9);
         Item.items[9]  = Item.FLINT_AND_STEEL;
         Item.items[10] = new TelekinesisItem(10);
+        Item.items[11] = new GravityGunItem(11);
+        Item.GRAVITYGUN = (GravityGunItem) Item.items[11];
 
+        
         // --- Spawn eggs ---
         int eggBaseId = 100; // free range, safe above your tools/items
         for (String name : MobRegistry.allNames()) {

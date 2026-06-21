@@ -26,5 +26,9 @@ public final class EntityRenderBootstrap {
         // ✅ NEW MOB: ShulkerMan
         RenderManager.register(ShulkerMan.class,
             new ShulkerManRenderer((ModelShulkerMan) mm.getModel("shulkerman")));
+
+        // ✅ NEW MOB: LeggedMonster
+        RenderManager.register(LeggedMonster.class,
+            new LeggedMonsterRenderer(mm.getModel("leggedmonster")));
     }
 }

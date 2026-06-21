@@ -41,6 +41,11 @@ public final class ModelEditorApp {
     private Canvas glCanvas;
     private DefaultListModel<EditablePart> partListModel = new DefaultListModel<>();
     private JList<EditablePart> partList;
+    private JList<EditablePart> settingsPartList;
+    private CardLayout mainCardLayout;
+    private JPanel mainCardContainer;
+    private JButton btn3DMode;
+    private JButton btnSettingsMode;
     // Updated only on EDT; read by the render loop
     private volatile boolean typingInSwing = false;
 
@@ -52,6 +57,10 @@ public final class ModelEditorApp {
     // atlas fields
     private JSpinner atlasW, atlasH;
     private JTextField modelName;
+
+    // Preview checkboxes
+    private JCheckBox chkPreviewAnim;
+    private JCheckBox chkAggressive;
 
     // guard to avoid feedback loops when pushing model→UI
     private volatile boolean updatingUI = false;
@@ -66,6 +75,8 @@ public final class ModelEditorApp {
     private String textureName = "(none)";
     // Edit-mode gate: true = edit in GL canvas, false = typing in Swing
     private volatile boolean canvasEdit = true;
+    private volatile boolean inFocusTransition = false;
+    private long lastUiUpdate = 0L;
 
     // --- path helpers ---
     private File getDefaultDir() {
@@ -157,6 +168,8 @@ public final class ModelEditorApp {
     private void installFocusTracking() {
         java.awt.KeyboardFocusManager kfm = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
         kfm.addPropertyChangeListener("focusOwner", evt -> {
+            if (inFocusTransition)
+                return;
             Object obj = evt.getNewValue();
             boolean editing = isEditorComponent(obj);
             typingInSwing = editing;
@@ -345,10 +358,7 @@ public final class ModelEditorApp {
                         input();
                         render();
                         Display.update();
-                     // Auto-reclaim focus if dialogs stole it
-                        if (Display.isActive() && canvasEdit && frame.isActive() && !glCanvas.isFocusOwner()) {
-                            glCanvas.requestFocusInWindow();
-                        }
+
 
                         Display.sync(60);
 
@@ -621,7 +631,6 @@ public final class ModelEditorApp {
     private void restoreFocusAfterDialog() {
         new javax.swing.Timer(150, e -> {
             try {
-                installGlobalTabToggle(); // re-register dispatcher
                 if (frame != null) {
                     frame.toFront();
                     frame.requestFocus();
@@ -657,11 +666,81 @@ public final class ModelEditorApp {
 
     // ---------------- UI ----------------
     private void buildUI() {
+        Color bgDark = new Color(0x18181B); // dark gray-black for frame/panel backgrounds
+        Color cardDark = new Color(0x202025); // slightly lighter slate card background
+        Color textLight = new Color(0xE4E4E7); // clean zinc light white text
+        Color borderDark = new Color(0x2E2E35); // outline borders
+        Color activeSelection = new Color(0x3B82F6); // modern active blue
+
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception ignored) {}
+
+        UIManager.put("Panel.background", cardDark);
+        UIManager.put("Label.foreground", textLight);
+        UIManager.put("CheckBox.foreground", textLight);
+        UIManager.put("CheckBox.background", cardDark);
+        UIManager.put("List.background", new Color(0x131317));
+        UIManager.put("List.foreground", textLight);
+        UIManager.put("List.selectionBackground", activeSelection);
+        UIManager.put("List.selectionForeground", Color.WHITE);
+        UIManager.put("TextField.background", new Color(0x131317));
+        UIManager.put("TextField.foreground", textLight);
+        UIManager.put("TextField.caretColor", textLight);
+        UIManager.put("TextField.border", BorderFactory.createLineBorder(borderDark));
+        UIManager.put("TextArea.background", new Color(0x131317));
+        UIManager.put("TextArea.foreground", textLight);
+        UIManager.put("TextArea.caretColor", textLight);
+        UIManager.put("TextArea.border", BorderFactory.createLineBorder(borderDark));
+        UIManager.put("Spinner.background", new Color(0x131317));
+        UIManager.put("Spinner.foreground", textLight);
+        UIManager.put("Spinner.border", BorderFactory.createLineBorder(borderDark));
+        UIManager.put("Button.background", new Color(0x31313E));
+        UIManager.put("Button.foreground", textLight);
+        UIManager.put("Button.border", BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(borderDark),
+            BorderFactory.createEmptyBorder(4, 10, 4, 10)
+        ));
+
         frame = new JFrame("Classic Model Editor");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLayout(new BorderLayout());
+        frame.getContentPane().setBackground(bgDark);
 
-        // ----- CENTER: GL canvas + UV viewer (Blockbench-style) -----
+        // ----- HEADER SELECTOR BAR -----
+        JPanel topBar = new JPanel(new BorderLayout(12, 0));
+        topBar.setBackground(new Color(0x18181B));
+        topBar.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+
+        JLabel titleLabel = new JLabel("Classic Model Editor");
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(Color.WHITE);
+        topBar.add(titleLabel, BorderLayout.WEST);
+
+        JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
+        modePanel.setBackground(new Color(0x18181B));
+        btn3DMode = createButton("3D Viewport");
+        btnSettingsMode = createButton("Settings & Properties");
+        btn3DMode.setPreferredSize(new Dimension(150, 28));
+        btnSettingsMode.setPreferredSize(new Dimension(170, 28));
+
+        btn3DMode.addActionListener(e -> switchMode(true));
+        btnSettingsMode.addActionListener(e -> switchMode(false));
+
+        modePanel.add(btn3DMode);
+        modePanel.add(btnSettingsMode);
+        topBar.add(modePanel, BorderLayout.CENTER);
+        frame.add(topBar, BorderLayout.NORTH);
+
+        // ----- MAIN CARD CONTAINER -----
+        mainCardLayout = new CardLayout();
+        mainCardContainer = new JPanel(mainCardLayout);
+        mainCardContainer.setBackground(bgDark);
+
+        // ----- CARD 1: VIEW_3D -----
+        JPanel view3D = new JPanel(new BorderLayout());
+        view3D.setBackground(bgDark);
+
         glCanvas = new Canvas();
         glCanvas.setPreferredSize(new Dimension(820, 720));
 
@@ -672,67 +751,46 @@ public final class ModelEditorApp {
         JSplitPane centerSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, glCanvas, uvPanel);
         centerSplit.setResizeWeight(1.0);
         centerSplit.setDividerSize(6);
-        frame.add(centerSplit, BorderLayout.CENTER);
+        centerSplit.setBackground(bgDark);
+        centerSplit.setBorder(BorderFactory.createEmptyBorder());
+        view3D.add(centerSplit, BorderLayout.CENTER);
 
-        // ----- RIGHT: side panel -----
-        JPanel side = new JPanel();
-        side.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
+        // 3D Mode Right Sidebar (Parts tree + Preview Controls)
+        JPanel compactSide = new JPanel();
+        compactSide.setBackground(bgDark);
+        compactSide.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        compactSide.setLayout(new BoxLayout(compactSide, BoxLayout.Y_AXIS));
+        compactSide.setPreferredSize(new Dimension(240, 720));
 
-        // Model section
-        JPanel modelBox = titledBox("Model");
-        modelName = new JTextField(model.name, 16);
-        atlasW = spinnerInt(model.atlasW, 1, 4096, 1);
-        atlasH = spinnerInt(model.atlasH, 1, 4096, 1);
-        modelBox.add(row("Name:", modelName));
-        modelBox.add(row("Atlas W:", atlasW));
-        modelBox.add(row("Atlas H:", atlasH));
-        JButton btnApplyAtlas = new JButton("Apply Atlas");
-        btnApplyAtlas.addActionListener(e -> {
-            try {
-                atlasW.commitEdit();
-                atlasH.commitEdit();
-            } catch (java.text.ParseException ignore) {
-            }
-            pushHistory();
-            model.name = modelName.getText().trim();
-            model.atlasW = ((Number) atlasW.getValue()).intValue();
-            model.atlasH = ((Number) atlasH.getValue()).intValue();
-            uvPanel.repaint();
-        });
-        modelBox.add(btnApplyAtlas);
-        side.add(modelBox);
-        side.add(Box.createVerticalStrut(8));
-
-        // Parts section
-        JPanel partsBox = titledBox("Parts");
+        JPanel cpPartsBox = titledBox("Parts");
         partList = new JList<>(partListModel);
-        partList.setVisibleRowCount(10);
+        partList.setVisibleRowCount(12);
         partList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         partList.setCellRenderer((lst, value, idx, isSel, hasFocus) -> {
             JLabel lbl = new JLabel(value == null ? "(null)" : value.name);
             lbl.setOpaque(true);
-            lbl.setBackground(isSel ? new Color(0x2d, 0x6a, 0xa3) : Color.WHITE);
-            lbl.setForeground(isSel ? Color.WHITE : Color.DARK_GRAY);
+            lbl.setBackground(isSel ? new Color(0x3B, 0x82, 0xF6) : new Color(0x131317));
+            lbl.setForeground(isSel ? Color.WHITE : new Color(0xE4, 0xE4, 0xE7));
             lbl.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
             return lbl;
         });
-        JScrollPane sp = new JScrollPane(partList);
-        partsBox.add(sp);
+        JScrollPane cpSp = new JScrollPane(partList);
+        cpSp.setBorder(BorderFactory.createLineBorder(new Color(0x2E2E35)));
+        cpPartsBox.add(cpSp);
 
-        JButton btnAddRoot = new JButton("Add Root Cube");
-        JButton btnAddChild = new JButton("Add Child Cube");
-        JButton btnDelete = new JButton("Delete");
-        JButton btnDuplicate = new JButton("Duplicate");
+        JButton cpBtnAddRoot = createButton("Add Root");
+        JButton cpBtnAddChild = createButton("Add Child");
+        JButton cpBtnDuplicate = createButton("Duplicate");
+        JButton cpBtnDelete = createButton("Delete");
 
-        btnAddRoot.addActionListener(e -> {
+        cpBtnAddRoot.addActionListener(e -> {
             pushHistory();
             EditablePart np = makeNewPart();
             model.parts.add(np);
             selected = np;
             refreshPartListSelect(np);
         });
-        btnAddChild.addActionListener(e -> {
+        cpBtnAddChild.addActionListener(e -> {
             pushHistory();
             EditablePart np = makeNewPart();
             if (selected != null)
@@ -742,14 +800,14 @@ public final class ModelEditorApp {
             selected = np;
             refreshPartListSelect(np);
         });
-        btnDelete.addActionListener(e -> {
+        cpBtnDelete.addActionListener(e -> {
             if (selected == null)
                 return;
             pushHistory();
             deleteSelected();
             refreshPartListSelect(selected);
         });
-        btnDuplicate.addActionListener(e -> {
+        cpBtnDuplicate.addActionListener(e -> {
             if (selected == null)
                 return;
             pushHistory();
@@ -763,18 +821,190 @@ public final class ModelEditorApp {
             refreshPartListSelect(cp);
         });
 
-        JPanel partBtns = new JPanel(new GridLayout(1, 4, 6, 0));
-        partBtns.add(btnAddRoot);
-        partBtns.add(btnAddChild);
-        partBtns.add(btnDuplicate);
-        partBtns.add(btnDelete);
-        partsBox.add(Box.createVerticalStrut(6));
-        partsBox.add(partBtns);
-        side.add(partsBox);
-        side.add(Box.createVerticalStrut(8));
+        JPanel cpPartBtns = new JPanel(new GridLayout(2, 2, 6, 6));
+        cpPartBtns.add(cpBtnAddRoot);
+        cpPartBtns.add(cpBtnAddChild);
+        cpPartBtns.add(cpBtnDuplicate);
+        cpPartBtns.add(cpBtnDelete);
+        cpPartsBox.add(Box.createVerticalStrut(6));
+        cpPartsBox.add(cpPartBtns);
+        compactSide.add(cpPartsBox);
 
-        // Selected Part Properties
-        JPanel propBox = titledBox("Selected Part");
+        compactSide.add(Box.createVerticalStrut(8));
+        JPanel cpPreviewBox = titledBox("Preview Controls");
+        chkPreviewAnim = new JCheckBox("Preview Walk/Idle");
+        chkAggressive = new JCheckBox("Preview Aggressive");
+        cpPreviewBox.add(chkPreviewAnim);
+        cpPreviewBox.add(Box.createVerticalStrut(4));
+        cpPreviewBox.add(chkAggressive);
+        compactSide.add(cpPreviewBox);
+
+        view3D.add(compactSide, BorderLayout.EAST);
+        mainCardContainer.add(view3D, "3D");
+
+        // ----- CARD 2: VIEW_SETTINGS -----
+        JPanel viewSettings = new JPanel(new GridLayout(1, 2, 12, 0));
+        viewSettings.setBackground(bgDark);
+        viewSettings.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        // Column 1 (General Settings, Hierarchy, Files)
+        JPanel col1 = new JPanel();
+        col1.setBackground(bgDark);
+        col1.setLayout(new BoxLayout(col1, BoxLayout.Y_AXIS));
+
+        JPanel settingsModelBox = titledBox("Model Settings");
+        modelName = new JTextField(model.name, 16);
+        atlasW = spinnerInt(model.atlasW, 1, 4096, 1);
+        atlasH = spinnerInt(model.atlasH, 1, 4096, 1);
+        settingsModelBox.add(row("Name:", modelName));
+        settingsModelBox.add(row("Atlas W:", atlasW));
+        settingsModelBox.add(row("Atlas H:", atlasH));
+        JButton btnApplyAtlas = createButton("Apply Atlas");
+        btnApplyAtlas.addActionListener(e -> {
+            try {
+                atlasW.commitEdit();
+                atlasH.commitEdit();
+            } catch (java.text.ParseException ignore) {}
+            pushHistory();
+            model.name = modelName.getText().trim();
+            model.atlasW = ((Number) atlasW.getValue()).intValue();
+            model.atlasH = ((Number) atlasH.getValue()).intValue();
+            uvPanel.repaint();
+        });
+        settingsModelBox.add(Box.createVerticalStrut(6));
+        settingsModelBox.add(btnApplyAtlas);
+        col1.add(settingsModelBox);
+        col1.add(Box.createVerticalStrut(8));
+
+        JPanel settingsPartsBox = titledBox("Model Parts");
+        settingsPartList = new JList<>(partListModel);
+        settingsPartList.setVisibleRowCount(8);
+        settingsPartList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        settingsPartList.setCellRenderer((lst, value, idx, isSel, hasFocus) -> {
+            JLabel lbl = new JLabel(value == null ? "(null)" : value.name);
+            lbl.setOpaque(true);
+            lbl.setBackground(isSel ? new Color(0x3B, 0x82, 0xF6) : new Color(0x131317));
+            lbl.setForeground(isSel ? Color.WHITE : new Color(0xE4, 0xE4, 0xE7));
+            lbl.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+            return lbl;
+        });
+        JScrollPane settingsPartScroll = new JScrollPane(settingsPartList);
+        settingsPartScroll.setBorder(BorderFactory.createLineBorder(new Color(0x2E2E35)));
+        settingsPartsBox.add(settingsPartScroll);
+
+        JButton settingsBtnAddRoot = createButton("Add Root");
+        JButton settingsBtnAddChild = createButton("Add Child");
+        JButton settingsBtnDuplicate = createButton("Duplicate");
+        JButton settingsBtnDelete = createButton("Delete");
+
+        settingsBtnAddRoot.addActionListener(e -> {
+            pushHistory();
+            EditablePart np = makeNewPart();
+            model.parts.add(np);
+            selected = np;
+            refreshPartListSelect(np);
+        });
+        settingsBtnAddChild.addActionListener(e -> {
+            pushHistory();
+            EditablePart np = makeNewPart();
+            if (selected != null)
+                selected.children.add(np);
+            else
+                model.parts.add(np);
+            selected = np;
+            refreshPartListSelect(np);
+        });
+        settingsBtnDelete.addActionListener(e -> {
+            if (selected == null)
+                return;
+            pushHistory();
+            deleteSelected();
+            refreshPartListSelect(selected);
+        });
+        settingsBtnDuplicate.addActionListener(e -> {
+            if (selected == null)
+                return;
+            pushHistory();
+            EditablePart cp = copyPart(selected);
+            EditablePart parent = parentOf(selected);
+            if (parent != null)
+                parent.children.add(cp);
+            else
+                model.parts.add(cp);
+            selected = cp;
+            refreshPartListSelect(cp);
+        });
+
+        JPanel settingsPartBtns = new JPanel(new GridLayout(2, 2, 6, 6));
+        settingsPartBtns.add(settingsBtnAddRoot);
+        settingsPartBtns.add(settingsBtnAddChild);
+        settingsPartBtns.add(settingsBtnDuplicate);
+        settingsPartBtns.add(settingsBtnDelete);
+        settingsPartsBox.add(Box.createVerticalStrut(6));
+        settingsPartsBox.add(settingsPartBtns);
+        col1.add(settingsPartsBox);
+        col1.add(Box.createVerticalStrut(8));
+
+        JPanel ioBox = titledBox("File & Textures");
+        JButton saveBtn = createButton("Save (.mmdl)");
+        JButton loadBtn = createButton("Load (.mmdl)");
+        JButton exportJavaBtn = createButton("Export Java");
+        JButton exportUVBtn = createButton("Export UV Template");
+        JButton importJavaBtn = createButton("Import .java");
+        textureLabel = new JLabel(textureName);
+        JButton importTexBtn = createButton("Import Texture");
+        JButton clearTexBtn = createButton("Clear Texture");
+        JButton newBtn = createButton("New Project");
+        JButton undoBtn = createButton("Undo (Ctrl+Z)");
+        JButton redoBtn = createButton("Redo (Ctrl+X)");
+
+        importTexBtn.addActionListener(e -> doImportTexture());
+        clearTexBtn.addActionListener(e -> clearTexture());
+        newBtn.addActionListener(e -> newProject());
+        undoBtn.addActionListener(e -> undoAction());
+        redoBtn.addActionListener(e -> redoAction());
+
+        JPanel texRow = new JPanel(new BorderLayout(6, 0));
+        texRow.add(new JLabel("Texture:"), BorderLayout.WEST);
+        texRow.add(textureLabel, BorderLayout.CENTER);
+        JPanel texBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        texBtns.add(importTexBtn);
+        texBtns.add(clearTexBtn);
+        texRow.add(texBtns, BorderLayout.EAST);
+        ioBox.add(texRow);
+
+        saveBtn.addActionListener(e -> doSave());
+        loadBtn.addActionListener(e -> doLoad());
+        exportJavaBtn.addActionListener(e -> doExportJava());
+        exportUVBtn.addActionListener(e -> doExportTemplate());
+        importJavaBtn.addActionListener(e -> doImportJava());
+
+        JPanel ioGrid = new JPanel(new GridLayout(2, 3, 6, 6));
+        ioGrid.add(saveBtn);
+        ioGrid.add(loadBtn);
+        ioGrid.add(importJavaBtn);
+        ioGrid.add(exportJavaBtn);
+        ioGrid.add(exportUVBtn);
+        ioGrid.add(new JLabel());
+        ioBox.add(Box.createVerticalStrut(6));
+        ioBox.add(ioGrid);
+
+        JPanel ioGrid2 = new JPanel(new GridLayout(1, 3, 6, 6));
+        ioGrid2.add(newBtn);
+        ioGrid2.add(undoBtn);
+        ioGrid2.add(redoBtn);
+        ioBox.add(Box.createVerticalStrut(6));
+        ioBox.add(ioGrid2);
+        col1.add(ioBox);
+
+        viewSettings.add(col1);
+
+        // Column 2 (Selected Part Details & Animations)
+        JPanel col2 = new JPanel();
+        col2.setBackground(bgDark);
+        col2.setLayout(new BoxLayout(col2, BoxLayout.Y_AXIS));
+
+        JPanel propBox = titledBox("Selected Part Properties");
         partName = new JTextField(selected != null ? selected.name : "", 14);
         mirror = new JCheckBox("Mirror");
         u = spinnerInt(0, 0, 4096, 1);
@@ -811,106 +1041,85 @@ public final class ModelEditorApp {
         propBox.add(row("Roll (rad):", rollSp));
         propBox.add(row("Inflate:", inflate));
 
-        JButton apply = new JButton("Apply Changes");
+        JButton apply = createButton("Apply Changes");
         apply.addActionListener(e -> {
             pushHistory();
             applyUIToSelected();
             uvPanel.repaint();
         });
+        propBox.add(Box.createVerticalStrut(6));
         propBox.add(apply);
+        col2.add(propBox);
+        col2.add(Box.createVerticalStrut(8));
 
-        side.add(propBox);
-        side.add(Box.createVerticalStrut(8));
-
-        // File / Texture ops
-        JPanel io = titledBox("File");
-        JButton saveBtn = new JButton("Save (.mmdl)");
-        JButton loadBtn = new JButton("Load (.mmdl)");
-        JButton exportJavaBtn = new JButton("Export Java");
-        JButton exportUVBtn = new JButton("Export UV Template");
-        JButton importJavaBtn = new JButton("Import .java");
-        textureLabel = new JLabel(textureName);
-        JButton importTexBtn = new JButton("Import Texture");
-        JButton clearTexBtn = new JButton("Clear Texture");
-
-        JButton newBtn = new JButton("New Project");
-        JButton undoBtn = new JButton("Undo (Ctrl+Z)");
-        JButton redoBtn = new JButton("Redo (Ctrl+X)");
-
-        importTexBtn.addActionListener(e -> doImportTexture());
-        clearTexBtn.addActionListener(e -> clearTexture());
-        newBtn.addActionListener(e -> newProject());
-        undoBtn.addActionListener(e -> undoAction());
-        redoBtn.addActionListener(e -> redoAction());
-
-        JPanel texRow = new JPanel(new BorderLayout(6, 0));
-        texRow.add(new JLabel("Texture:"), BorderLayout.WEST);
-        texRow.add(textureLabel, BorderLayout.CENTER);
-        JPanel texBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        texBtns.add(importTexBtn);
-        texBtns.add(clearTexBtn);
-        texRow.add(texBtns, BorderLayout.EAST);
-        io.add(texRow);
-
-        saveBtn.addActionListener(e -> doSave());
-        loadBtn.addActionListener(e -> doLoad());
-        exportJavaBtn.addActionListener(e -> doExportJava());
-        exportUVBtn.addActionListener(e -> doExportTemplate());
-        importJavaBtn.addActionListener(e -> doImportJava());
-
-        JPanel ioGrid = new JPanel(new GridLayout(2, 3, 6, 6));
-        ioGrid.add(saveBtn);
-        ioGrid.add(loadBtn);
-        ioGrid.add(importJavaBtn);
-        ioGrid.add(exportJavaBtn);
-        ioGrid.add(exportUVBtn);
-        ioGrid.add(new JLabel());
-        io.add(ioGrid);
-
-        JPanel ioGrid2 = new JPanel(new GridLayout(1, 3, 6, 6));
-        ioGrid2.add(newBtn);
-        ioGrid2.add(undoBtn);
-        ioGrid2.add(redoBtn);
-        io.add(Box.createVerticalStrut(6));
-        io.add(ioGrid2);
-
-        side.add(io);
-
-        // --- NEW: Animations editor (setRotationAngles) ---
-        side.add(Box.createVerticalStrut(8));
         JPanel animBox = titledBox("Animations (setRotationAngles)");
         animText = new JTextArea(8, 20);
         animText.setLineWrap(true);
         animText.setWrapStyleWord(true);
         animText.setText(model.setRotationAnglesCode == null ? "" : model.setRotationAnglesCode);
         JScrollPane animScroll = new JScrollPane(animText);
+        animScroll.setBorder(BorderFactory.createLineBorder(new Color(0x2E2E35)));
         animBox.add(animScroll);
-        JButton applyAnimBtn = new JButton("Apply Animations");
+
+        JPanel settingsPreviewPanel = new JPanel(new GridLayout(1, 2, 6, 0));
+        JCheckBox settingsChkPreviewAnim = new JCheckBox("Preview Walk/Idle");
+        JCheckBox settingsChkAggressive = new JCheckBox("Preview Aggressive");
+        settingsPreviewPanel.add(settingsChkPreviewAnim);
+        settingsPreviewPanel.add(settingsChkAggressive);
+        animBox.add(Box.createVerticalStrut(6));
+        animBox.add(settingsPreviewPanel);
+
+        // Sync preview checkboxes
+        chkPreviewAnim.addActionListener(e -> settingsChkPreviewAnim.setSelected(chkPreviewAnim.isSelected()));
+        settingsChkPreviewAnim.addActionListener(e -> chkPreviewAnim.setSelected(settingsChkPreviewAnim.isSelected()));
+        chkAggressive.addActionListener(e -> settingsChkAggressive.setSelected(chkAggressive.isSelected()));
+        settingsChkAggressive.addActionListener(e -> chkAggressive.setSelected(settingsChkAggressive.isSelected()));
+
+        JButton applyAnimBtn = createButton("Apply Animations");
         applyAnimBtn.addActionListener(e -> {
             pushHistory();
             model.setRotationAnglesCode = animText.getText();
             System.out.println("[anim] Updated setRotationAnglesCode ("
                     + (model.setRotationAnglesCode == null ? 0 : model.setRotationAnglesCode.length()) + " chars)");
         });
+        animBox.add(Box.createVerticalStrut(6));
         animBox.add(applyAnimBtn);
-        side.add(animBox);
+        col2.add(animBox);
 
-        frame.add(side, BorderLayout.EAST);
+        viewSettings.add(col2);
 
-        // selection → selected
+        JScrollPane scrollSettings = new JScrollPane(viewSettings);
+        scrollSettings.setBorder(BorderFactory.createEmptyBorder());
+        scrollSettings.getVerticalScrollBar().setUnitIncrement(16);
+        mainCardContainer.add(scrollSettings, "Settings");
+
+        frame.add(mainCardContainer, BorderLayout.CENTER);
+
+        // Synchronize list selections
+        settingsPartList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                EditablePart sel = settingsPartList.getSelectedValue();
+                if (sel != null && sel != selected) {
+                    selected = sel;
+                    partList.setSelectedValue(sel, true);
+                    loadSelectedToUI();
+                }
+            }
+        });
         partList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 EditablePart sel = partList.getSelectedValue();
                 if (sel != null) {
                     selected = sel;
+                    settingsPartList.setSelectedValue(sel, true);
                     loadSelectedToUI();
                     uvPanel.setSelected(sel);
                 }
             }
         });
 
-        // initial list fill
-        refreshPartListSelect(selected);
+        // Set initial mode
+        switchMode(true);
 
         // Commit spinner text on focus loss
         for (JSpinner s : new JSpinner[] { u, v, x, y, z, w, h, d, posX, posY, posZ, pitchSp, yawSp, rollSp, inflate,
@@ -1002,6 +1211,7 @@ public final class ModelEditorApp {
                 pushHistoryThrottled();
                 selected.name = partName.getText().trim();
                 partList.repaint();
+                settingsPartList.repaint();
                 uvPanel.repaint();
             }
 
@@ -1027,8 +1237,64 @@ public final class ModelEditorApp {
     private JPanel titledBox(String title) {
         JPanel p = new JPanel();
         p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-        p.setBorder(BorderFactory.createTitledBorder(title));
+        p.setBackground(new Color(0x202025));
+        p.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(0x2E2E35), 1),
+                title,
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Segoe UI", Font.BOLD, 12),
+                new Color(0x94A3B8)
+            ),
+            BorderFactory.createEmptyBorder(6, 6, 6, 6)
+        ));
         return p;
+    }
+
+    private JButton createButton(String text) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                g.setColor(getBackground());
+                g.fillRect(0, 0, getWidth(), getHeight());
+                super.paintComponent(g);
+            }
+        };
+        btn.setBackground(new Color(0x31313E));
+        btn.setForeground(new Color(0xE4E4E7));
+        btn.setFocusPainted(false);
+        btn.setContentAreaFilled(false);
+        btn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(0x2E2E35), 1),
+            BorderFactory.createEmptyBorder(4, 10, 4, 10)
+        ));
+        btn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                btn.setBackground(new Color(0x454555));
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                btn.setBackground(new Color(0x31313E));
+            }
+
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                btn.setBackground(new Color(0x252530));
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                if (btn.getBounds().contains(e.getPoint())) {
+                    btn.setBackground(new Color(0x454555));
+                } else {
+                    btn.setBackground(new Color(0x31313E));
+                }
+            }
+        });
+        return btn;
     }
 
     private JPanel row(String label, JComponent comp) {
@@ -1073,6 +1339,9 @@ public final class ModelEditorApp {
 
         if (selSnapshot != null) {
             partList.setSelectedValue(selSnapshot, true);
+            if (settingsPartList != null) {
+                settingsPartList.setSelectedValue(selSnapshot, true);
+            }
         }
         loadSelectedToUI();
         if (uvPanel != null)
@@ -1156,7 +1425,21 @@ public final class ModelEditorApp {
     }
 
     private EditablePart makeNewPart() {
-        EditablePart np = new EditablePart("part" + (int) (Math.random() * 1000));
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (EditablePart p : getAllParts(model)) {
+            existing.add(p.name);
+        }
+        
+        String name = "new_part";
+        if (existing.contains(name)) {
+            int suffix = 2;
+            while (existing.contains("new_part" + suffix)) {
+                suffix++;
+            }
+            name = "new_part" + suffix;
+        }
+        
+        EditablePart np = new EditablePart(name);
         np.w = np.h = np.d = 4;
         return np;
     }
@@ -1384,51 +1667,99 @@ public final class ModelEditorApp {
 
         // Continuous edit keys
         boolean ctrlDown = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
-        boolean editingKeys = !ctrlDown && (Keyboard.isKeyDown(Keyboard.KEY_I) || Keyboard.isKeyDown(Keyboard.KEY_K)
-                || Keyboard.isKeyDown(Keyboard.KEY_J) || Keyboard.isKeyDown(Keyboard.KEY_L)
-                || Keyboard.isKeyDown(Keyboard.KEY_U) || Keyboard.isKeyDown(Keyboard.KEY_O)
-                || Keyboard.isKeyDown(Keyboard.KEY_T) || Keyboard.isKeyDown(Keyboard.KEY_G)
-                || Keyboard.isKeyDown(Keyboard.KEY_F) || Keyboard.isKeyDown(Keyboard.KEY_H)
-                || Keyboard.isKeyDown(Keyboard.KEY_R) || Keyboard.isKeyDown(Keyboard.KEY_Y)
-                || Keyboard.isKeyDown(Keyboard.KEY_LEFT) || Keyboard.isKeyDown(Keyboard.KEY_RIGHT)
-                || Keyboard.isKeyDown(Keyboard.KEY_UP) || Keyboard.isKeyDown(Keyboard.KEY_DOWN)
-                || Keyboard.isKeyDown(Keyboard.KEY_PRIOR) || Keyboard.isKeyDown(Keyboard.KEY_NEXT)
-                || Keyboard.isKeyDown(Keyboard.KEY_NUMPAD8) || Keyboard.isKeyDown(Keyboard.KEY_NUMPAD2)
-                || Keyboard.isKeyDown(Keyboard.KEY_NUMPAD6) || Keyboard.isKeyDown(Keyboard.KEY_NUMPAD4)
-                || Keyboard.isKeyDown(Keyboard.KEY_NUMPAD9) || Keyboard.isKeyDown(Keyboard.KEY_NUMPAD7)
-                || Keyboard.isKeyDown(Keyboard.KEY_ADD) || Keyboard.isKeyDown(Keyboard.KEY_SUBTRACT)
-                || Keyboard.isKeyDown(Keyboard.KEY_M));
+        boolean shiftDown = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
 
-        if (editingKeys && !inKeyEdit) {
-            pushHistory();
-            inKeyEdit = true;
-        }
-        if (!editingKeys)
+        boolean movingW = Keyboard.isKeyDown(Keyboard.KEY_W);
+        boolean movingS = Keyboard.isKeyDown(Keyboard.KEY_S);
+        boolean movingA = Keyboard.isKeyDown(Keyboard.KEY_A);
+        boolean movingD = Keyboard.isKeyDown(Keyboard.KEY_D);
+        boolean movingQ = Keyboard.isKeyDown(Keyboard.KEY_Q);
+        boolean movingE = Keyboard.isKeyDown(Keyboard.KEY_E);
+
+        boolean editingKeys = !ctrlDown && (movingW || movingS || movingA || movingD || movingQ || movingE);
+
+        if (editingKeys) {
+            if (!inKeyEdit) {
+                pushHistory();
+                inKeyEdit = true;
+            }
+
+            float delta = shiftDown ? 0.2f : 0.05f;
+            if (movingW) selected.posZ -= delta;
+            if (movingS) selected.posZ += delta;
+            if (movingA) selected.posX -= delta;
+            if (movingD) selected.posX += delta;
+            if (movingQ) selected.posY += delta; // Down
+            if (movingE) selected.posY -= delta; // Up
+
+            long now = System.currentTimeMillis();
+            if (now - lastUiUpdate > 66) {
+                lastUiUpdate = now;
+                onEDT(this::loadSelectedToUI);
+            }
+        } else {
             inKeyEdit = false;
+        }
+    }
+
+    private void switchMode(boolean toCanvas) {
+        onEDT(() -> {
+            if (toCanvas) {
+                if (mainCardLayout != null && mainCardContainer != null) {
+                    mainCardLayout.show(mainCardContainer, "3D");
+                }
+                enterCanvasEditMode();
+                if (btn3DMode != null) {
+                    btn3DMode.setBackground(new Color(0x3B82F6));
+                    btn3DMode.setForeground(Color.WHITE);
+                }
+                if (btnSettingsMode != null) {
+                    btnSettingsMode.setBackground(new Color(0x31313E));
+                    btnSettingsMode.setForeground(new Color(0xE4E4E7));
+                }
+            } else {
+                if (mainCardLayout != null && mainCardContainer != null) {
+                    mainCardLayout.show(mainCardContainer, "Settings");
+                }
+                enterSwingTypingMode();
+                if (btnSettingsMode != null) {
+                    btnSettingsMode.setBackground(new Color(0x3B82F6));
+                    btnSettingsMode.setForeground(Color.WHITE);
+                }
+                if (btn3DMode != null) {
+                    btn3DMode.setBackground(new Color(0x31313E));
+                    btn3DMode.setForeground(new Color(0xE4E4E7));
+                }
+            }
+        });
     }
 
     private void enterCanvasEditMode() {
+        inFocusTransition = true;
         canvasEdit = true;
         typingInSwing = false;
         setListInteractive(true); // re-enable list navigation
         enableKeyboard(); // reattach LWJGL keyboard
-        if (!glCanvas.isFocusable())
-            glCanvas.setFocusable(true);
         if (!glCanvas.isFocusOwner())
             glCanvas.requestFocusInWindow();
         canvasHover = true;
         updateModeTitle();
+        SwingUtilities.invokeLater(() -> {
+            inFocusTransition = false;
+        });
     }
 
     private void enterSwingTypingMode() {
+        inFocusTransition = true;
         canvasEdit = false;
         typingInSwing = true;
         setListInteractive(false); // prevent list from eating arrow keys
         disableKeyboard(); // release LWJGL keyboard grab
-        if (glCanvas.isFocusable())
-            glCanvas.setFocusable(false);
         focusSidePanel(); // focus text field
         updateModeTitle();
+        SwingUtilities.invokeLater(() -> {
+            inFocusTransition = false;
+        });
     }
 
     // Disable and enable LWJGL keyboard grabbing
@@ -1441,6 +1772,13 @@ public final class ModelEditorApp {
 
     private void enableKeyboard() {
         keyboardActive = true;
+        try {
+            if (Keyboard.isCreated()) {
+                while (Keyboard.next()) {
+                    // drain queue
+                }
+            }
+        } catch (Throwable ignored) {}
         System.out.println("[keyboard] resumed for Canvas input");
     }
 
@@ -1599,14 +1937,13 @@ public final class ModelEditorApp {
             if (ev.getID() == java.awt.event.KeyEvent.KEY_PRESSED
                     && ev.getKeyCode() == java.awt.event.KeyEvent.VK_TAB) {
 
-                if (canvasEdit) {
-                    enterSwingTypingMode();
-                } else {
-                    enterCanvasEditMode();
+                boolean ctrl = ev.isControlDown() || ev.isMetaDown();
+                // Toggle if Ctrl+Tab is pressed, OR if plain Tab is pressed while in 3D viewport mode
+                if (ctrl || canvasEdit) {
+                    switchMode(!canvasEdit);
+                    ev.consume();
+                    return true;
                 }
-                updateModeTitle();
-                ev.consume();
-                return true;
             }
             return false;
         });
@@ -1673,6 +2010,13 @@ public final class ModelEditorApp {
             case java.awt.event.KeyEvent.VK_Y:
                 if (ctrl) {
                     redoAction();
+                    ev.consume();
+                    return true;
+                }
+                break;
+            case java.awt.event.KeyEvent.VK_ESCAPE:
+                if (!canvasEdit) {
+                    switchMode(true);
                     ev.consume();
                     return true;
                 }
@@ -1912,7 +2256,7 @@ public final class ModelEditorApp {
             this.modelSupplier = modelSupplier;
             this.selSupplier = selSupplier;
 
-            setBackground(new Color(0x1c1f26));
+            setBackground(new Color(0x131317));
 
             addMouseWheelListener(e -> {
                 double old = zoom;
@@ -2007,7 +2351,7 @@ public final class ModelEditorApp {
             for (int y = 0; y < getHeight(); y += cell)
                 for (int x = 0; x < getWidth(); x += cell) {
                     boolean a = ((x ^ y) & cell) == 0;
-                    g.setColor(a ? new Color(0x2b2f36) : new Color(0x242932));
+                    g.setColor(a ? new Color(0x1E1E24) : new Color(0x16161C));
                     g.fillRect(x, y, cell, cell);
                 }
         }
@@ -2126,6 +2470,11 @@ public final class ModelEditorApp {
 
         // ---- draw ----
         GL11.glPushMatrix();
+        if (chkAggressive != null && chkAggressive.isSelected()) {
+            float var10 = 0.02f;
+            java.util.Random rnd = new java.util.Random();
+            GL11.glTranslatef((float) rnd.nextGaussian() * var10, 0.0f, (float) rnd.nextGaussian() * var10);
+        }
         GL11.glTranslatef(0, 24 * s, 0);
         GL11.glScalef(1, -1, 1);
         GL11.glFrontFace(GL11.GL_CW);
@@ -2137,8 +2486,9 @@ public final class ModelEditorApp {
             GL11.glDisable(GL11.GL_TEXTURE_2D);
         }
 
+        float time = (float) (System.currentTimeMillis() / 50.0);
         for (EditablePart p : partsSnapshot) {
-            renderPart(p, s, selSnapshot);
+            renderPart(p, s, selSnapshot, time);
         }
 
         GL11.glFrontFace(GL11.GL_CCW);
@@ -2149,15 +2499,56 @@ public final class ModelEditorApp {
 
     private final java.util.concurrent.ConcurrentLinkedQueue<Runnable> glTasks = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
-    private void renderPart(EditablePart ep, float scale, EditablePart sel) {
+    private void renderPart(EditablePart ep, float scale, EditablePart sel, float time) {
         GL11.glPushMatrix();
-        GL11.glTranslatef(ep.posX * scale, ep.posY * scale, ep.posZ * scale);
-        if (ep.roll != 0)
-            GL11.glRotatef((float) Math.toDegrees(ep.roll), 0, 0, 1);
-        if (ep.yaw != 0)
-            GL11.glRotatef((float) Math.toDegrees(ep.yaw), 0, 1, 0);
-        if (ep.pitch != 0)
-            GL11.glRotatef((float) Math.toDegrees(ep.pitch), 1, 0, 0);
+
+        float px = ep.posX;
+        float py = ep.posY;
+        float pz = ep.posZ;
+
+        float p = ep.pitch;
+        float y = ep.yaw;
+        float r = ep.roll;
+
+        boolean preview = chkPreviewAnim != null && chkPreviewAnim.isSelected();
+        boolean aggressive = chkAggressive != null && chkAggressive.isSelected();
+
+        String name = ep.name.toLowerCase();
+
+        if (preview) {
+            if (name.contains("head")) {
+                y += (float) Math.sin(time * 0.08f) * 0.15f;
+                p += (float) Math.cos(time * 0.05f) * 0.08f;
+            } else if (name.contains("rightleg") || name.contains("right_leg")) {
+                p += (float) Math.cos(time * 0.12f) * 0.4f;
+            } else if (name.contains("leftleg") || name.contains("left_leg")) {
+                p += (float) Math.cos(time * 0.12f + Math.PI) * 0.4f;
+            } else if (name.contains("rightarm") || name.contains("right_arm")) {
+                p += (float) Math.cos(time * 0.12f + Math.PI) * 0.3f;
+                r += (float) Math.cos(time * 0.09f) * 0.05f + 0.05f;
+            } else if (name.contains("leftarm") || name.contains("left_arm")) {
+                p += (float) Math.cos(time * 0.12f) * 0.3f;
+                r -= (float) Math.cos(time * 0.09f) * 0.05f + 0.05f;
+            }
+        }
+
+        if (aggressive) {
+            if (name.contains("headwear")) {
+                py += 5.0f;
+            } else if (name.contains("head")) {
+                py -= 5.0f;
+            } else if (name.contains("body")) {
+                p += 0.08f;
+            }
+        }
+
+        GL11.glTranslatef(px * scale, py * scale, pz * scale);
+        if (r != 0)
+            GL11.glRotatef((float) Math.toDegrees(r), 0, 0, 1);
+        if (y != 0)
+            GL11.glRotatef((float) Math.toDegrees(y), 0, 1, 0);
+        if (p != 0)
+            GL11.glRotatef((float) Math.toDegrees(p), 1, 0, 0);
 
         ModelPart part = new ModelPart(ep.u, ep.v);
         part.mirror = ep.mirror;
@@ -2170,7 +2561,7 @@ public final class ModelEditorApp {
         part.render(scale);
 
         for (EditablePart c : ep.children)
-            renderPart(c, scale, sel);
+            renderPart(c, scale, sel, time);
         GL11.glPopMatrix();
     }
 
