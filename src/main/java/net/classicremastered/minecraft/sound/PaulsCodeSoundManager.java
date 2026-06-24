@@ -323,7 +323,6 @@ public final class PaulsCodeSoundManager {
             }
         } catch (Throwable ignored) {
         }
-        System.out.println("[FarLandsAudio] Reset to normal state.");
     }
 
     public void shutdown() {

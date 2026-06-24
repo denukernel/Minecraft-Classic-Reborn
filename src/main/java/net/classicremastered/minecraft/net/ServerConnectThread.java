@@ -33,10 +33,10 @@ public class ServerConnectThread extends Thread
 			netManager.successful = true;
 		} catch (Exception var3) {
 			minecraft.online = false;
-
 			minecraft.networkManager = null;
+			minecraft.setLevel(null);
 
-			minecraft.setCurrentScreen(new ErrorScreen("Failed to connect", "You failed to connect to the server. It\'s probably down!"));
+			minecraft.setCurrentScreen(new ErrorScreen("Failed to connect", "You failed to connect to the server. It\'s probably down!", netManager.parentScreen));
 
 			netManager.successful = false;
 		}

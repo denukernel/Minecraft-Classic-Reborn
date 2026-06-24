@@ -7,10 +7,10 @@ import org.lwjgl.opengl.GL11;
 
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.gui.FontRenderer;
-import net.classicremastered.minecraft.mob.HumanoidMob;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
 
-public class NetworkPlayer extends HumanoidMob {
+public class NetworkPlayer extends Player {
 
    public static final long serialVersionUID = 77479605454997290L;
    private List moveQueue = new LinkedList();
@@ -27,7 +27,7 @@ public class NetworkPlayer extends HumanoidMob {
 
 
    public NetworkPlayer(Minecraft var1, int var2, String var3, int var4, int var5, int var6, float var7, float var8) {
-      super(var1.level, (float)var4, (float)var5, (float)var6);
+      super(var1.level, false);
       this.minecraft = var1;
       this.displayName = var3;
       var3 = FontRenderer.stripColor(var3);
@@ -35,7 +35,7 @@ public class NetworkPlayer extends HumanoidMob {
       this.xp = var4;
       this.yp = var5;
       this.zp = var6;
-      this.heightOffset = 0.0F;
+      this.heightOffset = 1.62F;
       this.pushthrough = 0.8F;
       this.setPos((float)var4 / 32.0F, (float)var5 / 32.0F, (float)var6 / 32.0F);
       this.xRot = var8;
@@ -43,20 +43,33 @@ public class NetworkPlayer extends HumanoidMob {
       this.armor = this.helmet = false;
       this.renderOffset = 0.6875F;
       (new SkinDownloadThread(this)).start();
-      this.allowAlpha = false;
+      this.allowAlpha = true;
+      this.modelName = "humanoid";
    }
 
-   public void aiStep() {
-      int var1 = 5;
-
-      do {
-         if(this.moveQueue.size() > 0) {
-            this.setPos((PositionUpdate)this.moveQueue.remove(0));
-         }
-      } while(var1-- > 0 && this.moveQueue.size() > 10);
-
-      this.onGround = true;
-   }
+    public void aiStep() {
+       if (this.moveQueue.size() > 0) {
+          int var1 = 5;
+          do {
+             if (this.moveQueue.size() > 0) {
+                this.setPos((PositionUpdate)this.moveQueue.remove(0));
+             }
+          } while(var1-- > 0 && this.moveQueue.size() > 10);
+          this.xd = 0.0F;
+          this.yd = 0.0F;
+          this.zd = 0.0F;
+       } else {
+          this.yd -= 0.08F;
+          this.move(this.xd, this.yd, this.zd);
+          this.xd *= 0.91F;
+          this.yd *= 0.98F;
+          this.zd *= 0.91F;
+          if (this.onGround) {
+             this.xd *= 0.6F;
+             this.zd *= 0.6F;
+          }
+       }
+    }
 
    public void bindTexture(TextureManager var1) {
       this.textures = var1;

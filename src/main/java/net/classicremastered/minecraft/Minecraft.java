@@ -113,8 +113,8 @@ public final class Minecraft implements Runnable {
     public MovingObjectPosition selected;
     public GameSettings settings;
     private MinecraftApplet applet;
-    String server;
-    int port;
+    public String server;
+    public int port;
     public volatile boolean running;
     public String debug;
     public boolean hasMouse;
@@ -184,13 +184,14 @@ public final class Minecraft implements Runnable {
             this.soundPC.resetAudioState();
         }
 
-        if (next == null && this.player.health <= 0)
+        if (next == null && this.player != null && this.player.health <= 0)
             next = new GameOverScreen();
 
         this.currentScreen = next;
         if (next != null) {
             if (this.hasMouse) {
-                this.player.releaseAllKeys();
+                if (this.player != null)
+                    this.player.releaseAllKeys();
                 this.hasMouse = false;
                 try {
                     if (this.levelLoaded)
@@ -1850,9 +1851,35 @@ public final class Minecraft implements Runnable {
                                         var42.levelLoaded = true;
                                     } else if (var6 == PacketType.BLOCK_CHANGE) {
                                         if (var42.minecraft.level != null) {
-                                            var42.minecraft.level.netSetTile(((Short) var7[0]).shortValue(),
-                                                    ((Short) var7[1]).shortValue(), ((Short) var7[2]).shortValue(),
-                                                    ((Byte) var7[3]).byteValue());
+                                            short bx = ((Short) var7[0]).shortValue();
+                                            short by = ((Short) var7[1]).shortValue();
+                                            short bz = ((Short) var7[2]).shortValue();
+                                            byte blockId = ((Byte) var7[3]).byteValue();
+                                            
+                                            int oldBlockId = var42.minecraft.level.getTile(bx, by, bz);
+                                            
+                                            if (var42.minecraft.level.netSetTile(bx, by, bz, blockId)) {
+                                                if (oldBlockId > 0 && blockId == 0) { // Broken
+                                                    Block block = Block.blocks[oldBlockId];
+                                                    if (block != null) {
+                                                        if (block.stepsound != net.classicremastered.minecraft.level.tile.Tile$SoundType.none) {
+                                                            float vol = (block.stepsound.getVolume() + 1.0F) / 2.0F;
+                                                            float pitch = block.stepsound.getPitch() * 0.8F;
+                                                            var42.minecraft.level.playSound(block.stepsound.pool, (float)bx + 0.5F, (float)by + 0.5F, (float)bz + 0.5F, vol, pitch);
+                                                        }
+                                                        if (var42.minecraft.particleManager != null) {
+                                                            block.spawnBreakParticles(var42.minecraft.level, bx, by, bz, var42.minecraft.particleManager);
+                                                        }
+                                                    }
+                                                } else if (blockId > 0) { // Placed
+                                                    Block block = Block.blocks[blockId];
+                                                    if (block != null && block.stepsound != net.classicremastered.minecraft.level.tile.Tile$SoundType.none) {
+                                                        float vol = (block.stepsound.getVolume() + 1.0F) / 2.0F;
+                                                        float pitch = block.stepsound.getPitch() * 0.8F;
+                                                        var42.minecraft.level.playSound(block.stepsound.pool, (float)bx + 0.5F, (float)by + 0.5F, (float)bz + 0.5F, vol, pitch);
+                                                    }
+                                                }
+                                            }
                                         }
                                     } else {
                                         byte var9;

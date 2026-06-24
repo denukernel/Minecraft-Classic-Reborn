@@ -19,8 +19,12 @@ import java.util.Random;
 
 public class Player extends Mob {
     public Player(Level var1) {
+        this(var1, true);
+    }
+
+    public Player(Level var1, boolean isLocal) {
         super(var1);
-        if (var1 != null) {
+        if (isLocal && var1 != null) {
             var1.player = this;
             var1.removeEntity(this);
             var1.addEntity(this);
@@ -32,6 +36,9 @@ public class Player extends Mob {
         this.rotOffs = 180.0F;
         this.ai = new Player$1(this);
     }
+
+    public boolean helmet = false;
+    public boolean armor = false;
 
     private int portalCooldown = 0; // ticks before re-using a portal
 
@@ -479,6 +486,9 @@ public class Player extends Mob {
 
     @Override
     public void render(TextureManager var1, float var2) {
+        if (this.getClass() != Player.class || (this.minecraft != null && this.minecraft.cameraMode > 0)) {
+            super.render(var1, var2);
+        }
     }
 
     // --- Hard kill that bypasses Creative's "no damage" guard ---

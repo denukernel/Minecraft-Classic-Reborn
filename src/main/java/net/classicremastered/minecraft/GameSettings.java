@@ -30,6 +30,9 @@ public final class GameSettings
 	}
 	public net.classicremastered.minecraft.Difficulty difficulty = net.classicremastered.minecraft.Difficulty.NORMAL;
 	public float menuLighting = 0.2f; // brightness multiplier for main menu dirt
+	public String mpUsername = "Player";
+	public String lastServerIp = "127.0.0.1";
+	public int lastServerPort = 25565;
 
 	private static final String[] renderDistances = new String[]{"FAR", "NORMAL", "SHORT", "TINY"};
 	public boolean music = true;
@@ -231,6 +234,15 @@ public final class GameSettings
 					if (setting[0].equals("difficulty")) {
 					    difficulty = net.classicremastered.minecraft.Difficulty.fromString(setting[1], net.classicremastered.minecraft.Difficulty.NORMAL);
 					}
+					if (setting[0].equals("mpUsername")) {
+						mpUsername = setting[1];
+					}
+					if (setting[0].equals("lastServerIp")) {
+						lastServerIp = setting[1];
+					}
+					if (setting[0].equals("lastServerPort")) {
+						lastServerPort = Integer.parseInt(setting[1]);
+					}
 
 					if(setting[0].equals("sound"))
 					{
@@ -295,7 +307,7 @@ public final class GameSettings
 		}
 	}
 
-	private void save()
+	public void save()
 	{
 		try {
 			FileWriter fileWriter = new FileWriter(this.settingsFile);
@@ -312,6 +324,9 @@ public final class GameSettings
 			writer.println("difficulty:" + difficulty.name());
 			writer.println("smoothing:" + smoothing);
 			writer.println("anisotropic:" + anisotropic);
+			writer.println("mpUsername:" + mpUsername);
+			writer.println("lastServerIp:" + lastServerIp);
+			writer.println("lastServerPort:" + lastServerPort);
 
 			for(int binding = 0; binding < bindings.length; binding++)
 			{

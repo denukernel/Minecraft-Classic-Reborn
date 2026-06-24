@@ -10,8 +10,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
+import net.classicremastered.minecraft.gui.GuiScreen;
+
 public class NetworkManager
 {
+	public GuiScreen parentScreen;
 	public NetworkManager(Minecraft minecraft, String server, int port, String username, String key)
 	{
 		minecraft.online = true;

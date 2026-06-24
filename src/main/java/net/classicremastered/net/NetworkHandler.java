@@ -23,28 +23,21 @@ public final class NetworkHandler {
    private byte[] stringBytes = new byte[64];
 
 
-   public NetworkHandler(String var1, int var2) {
-	   try
-	   {
-		   channel = SocketChannel.open();
-		   this.channel.connect(new InetSocketAddress(var1, var2));
-		   this.channel.configureBlocking(false);
-		   System.currentTimeMillis();
-		   this.sock = this.channel.socket();
-		   this.connected = true;
-		   this.in.clear();
-		   this.out.clear();
-		   this.sock.setTcpNoDelay(true);
-		   this.sock.setTrafficClass(24);
-		   this.sock.setKeepAlive(false);
-		   this.sock.setReuseAddress(false);
-		   this.sock.setSoTimeout(100);
-		   this.sock.getInetAddress().toString();
-	   } catch (SocketException e) {
-		   e.printStackTrace();
-	   } catch (IOException e) {
-		   e.printStackTrace();
-	   }
+   public NetworkHandler(String var1, int var2) throws IOException {
+	   channel = SocketChannel.open();
+	   this.channel.connect(new InetSocketAddress(var1, var2));
+	   this.channel.configureBlocking(false);
+	   System.currentTimeMillis();
+	   this.sock = this.channel.socket();
+	   this.connected = true;
+	   this.in.clear();
+	   this.out.clear();
+	   this.sock.setTcpNoDelay(true);
+	   this.sock.setTrafficClass(24);
+	   this.sock.setKeepAlive(false);
+	   this.sock.setReuseAddress(false);
+	   this.sock.setSoTimeout(100);
+	   this.sock.getInetAddress().toString();
    }
 
    public final void close() {

@@ -82,6 +82,11 @@ public class GameMode {
 
         if (!canPlaceWithoutColliding(player, x, y, z, blockId)) return false;
 
+        if (minecraft.isOnline() && minecraft.networkManager != null) {
+            minecraft.networkManager.sendBlockChange(x, y, z, -1, blockId);
+            return true;
+        }
+
         int current = level.getTile(x, y, z);
         if (current != 0) {
             Block cur = Block.blocks[current];
@@ -128,6 +133,13 @@ public class GameMode {
 
         int id = level.getTile(x, y, z);
         Block block = id > 0 ? Block.blocks[id] : null;
+
+        if (minecraft.isOnline() && minecraft.networkManager != null) {
+            int held = minecraft.player.inventory.getSelected();
+            int heldBlockId = (held >= 0 && held < 256) ? held : 0;
+            minecraft.networkManager.sendBlockChange(x, y, z, 0, heldBlockId);
+            return;
+        }
 
         boolean success;
         if (level instanceof LevelInfiniteTerrain) {

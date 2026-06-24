@@ -301,27 +301,32 @@ public void setupCamera(float partial) {
         GL11.glNormal3f(0.0F, -1.0F, 0.0F);
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 
-        Block b = Block.blocks[lvl.getTile((int) pl.x, (int) (pl.y + 0.12F), (int) pl.z)];
-        if (b != null && b.getLiquidType() != LiquidType.NOT_LIQUID) {
-            LiquidType l = b.getLiquidType();
-            GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_EXP2);
+        if (lvl != null && pl != null) {
+            Block b = Block.blocks[lvl.getTile((int) pl.x, (int) (pl.y + 0.12F), (int) pl.z)];
+            if (b != null && b.getLiquidType() != LiquidType.NOT_LIQUID) {
+                LiquidType l = b.getLiquidType();
+                GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_EXP2);
 
-            if (l == LiquidType.WATER) {
-                // Vision capped at ~8 blocks
-                GL11.glFogf(GL11.GL_FOG_DENSITY, 0.35F);
-                GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
-            } else if (l == LiquidType.LAVA) {
-                // Vision capped at ~3 blocks
-                GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
-                GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
+                if (l == LiquidType.WATER) {
+                    // Vision capped at ~8 blocks
+                    GL11.glFogf(GL11.GL_FOG_DENSITY, 0.35F);
+                    GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
+                } else if (l == LiquidType.LAVA) {
+                    // Vision capped at ~3 blocks
+                    GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
+                    GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
+                }
+                GL11.glEnable(GL11.GL_COLOR_MATERIAL);
+                GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);
+                return;
             }
-        } else {
-            // Normal air fog
-            GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_LINEAR);
-            GL11.glFogf(GL11.GL_FOG_START, 0.0F);
-            GL11.glFogf(GL11.GL_FOG_END, this.fogEnd);
-            GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(1.0F, 1.0F, 1.0F, 1.0F));
         }
+
+        // Normal air fog
+        GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_LINEAR);
+        GL11.glFogf(GL11.GL_FOG_START, 0.0F);
+        GL11.glFogf(GL11.GL_FOG_END, this.fogEnd);
+        GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(1.0F, 1.0F, 1.0F, 1.0F));
 
         GL11.glEnable(GL11.GL_COLOR_MATERIAL);
         GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);

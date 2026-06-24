@@ -218,8 +218,10 @@ public final class SkyRenderer {
         GL11.glPushMatrix();
         GL11.glTranslatef(px, py, pz);
 
+        float worldMax = Math.max(Math.max(level.width, level.height), level.depth);
+        float R = Math.max(64f, worldMax * 0.8f);
         final float zFarSafe = Math.max(level.depth * 1.2f, 128f);
-        final float scale = (zFarSafe * 0.85f) / 4000f;
+        final float scale = (zFarSafe * 0.85f) / R;
         GL11.glScalef(scale, scale, scale);
 
         GL11.glDisable(GL11.GL_TEXTURE_2D);

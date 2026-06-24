@@ -33,7 +33,8 @@ public final class MainMenuScreen extends GuiScreen {
         int x = (this.width - btnW) / 2;
         int y = this.height / 4 + 24;
         String singleplayer = "Singleplayer";
-        this.buttons.add(new Button(ID_SELECTLEVEL, x, y + 1 * 24, btnW, btnH, singleplayer));
+        this.buttons.add(new Button(ID_SELECTLEVEL, x, y, btnW, btnH, singleplayer));
+        this.buttons.add(new Button(7, x, y + 24, btnW, btnH, "Multiplayer"));
         String options = this.minecraft.lang.tr("menu.options");
 
         this.buttons.add(new Button(ID_OPTIONS, x, y + 2 * 24, btnW, btnH, options));
@@ -158,6 +159,9 @@ public final class MainMenuScreen extends GuiScreen {
         }
         case 6:
             this.minecraft.setCurrentScreen(new DebugScreen());
+            break;
+        case 7:
+            this.minecraft.setCurrentScreen(new MultiplayerConnectScreen(this));
             break;
 
         }
