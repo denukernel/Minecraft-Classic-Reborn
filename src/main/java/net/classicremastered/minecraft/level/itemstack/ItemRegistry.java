@@ -30,6 +30,10 @@ public final class ItemRegistry {
         Item.items[11] = new GravityGunItem(11);
         Item.GRAVITYGUN = (GravityGunItem) Item.items[11];
 
+        Item.BUCKET_EMPTY = new BucketItem(12, 0);
+        Item.BUCKET_WATER = new BucketItem(13, 1);
+        Item.BUCKET_LAVA  = new BucketItem(14, 2);
+
         
         // --- Spawn eggs ---
         int eggBaseId = 100; // free range, safe above your tools/items

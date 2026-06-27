@@ -44,6 +44,29 @@ public class LiquidBlock extends Block {
    }
 
    public void update(Level level, int x, int y, int z, Random rand) {
+      if (this.type == LiquidType.LAVA) {
+         for (int i = 0; i < 3; ++i) {
+            int rx = x + rand.nextInt(3) - 1;
+            int ry = y + rand.nextInt(3) - 1;
+            int rz = z + rand.nextInt(3) - 1;
+            if (level.isInBounds(rx, ry, rz) && level.getTile(rx, ry, rz) == 0) {
+               if (FireBlock.isFlammable(level.getTile(rx - 1, ry, rz)) ||
+                   FireBlock.isFlammable(level.getTile(rx + 1, ry, rz)) ||
+                   FireBlock.isFlammable(level.getTile(rx, ry - 1, rz)) ||
+                   FireBlock.isFlammable(level.getTile(rx, ry + 1, rz)) ||
+                   FireBlock.isFlammable(level.getTile(rx, ry, rz - 1)) ||
+                   FireBlock.isFlammable(level.getTile(rx, ry, rz + 1))) {
+                  level.setTile(rx, ry, rz, Block.FIRE.id);
+               }
+            }
+         }
+      }
+
+      if (level.minecraft != null && level.minecraft.settings != null && level.minecraft.settings.finiteWater) {
+         updateFinite(level, x, y, z, rand);
+         return;
+      }
+
       boolean var7 = false;
       z = z;
       y = y;
@@ -74,6 +97,128 @@ public class LiquidBlock extends Block {
          level.addToTickNextTick(x, y, z, this.movingId);
       }
 
+   }
+
+   private void updateFinite(Level level, int x, int y, int z, Random rand) {
+      int currentLevel = level.getFlowLevel(x, y, z);
+      if (currentLevel < 0) return;
+
+      int targetLevel = calculateTargetFlowLevel(level, x, y, z);
+      int maxLevel = (this.type == LiquidType.WATER) ? 8 : 4;
+
+      if (targetLevel >= maxLevel) {
+         level.setTile(x, y, z, 0);
+         return;
+      }
+
+      if (targetLevel != currentLevel) {
+         level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) targetLevel);
+         level.addToTickNextTick(x, y, z, this.movingId);
+         level.updateNeighborsAt(x, y, z, this.movingId);
+         return;
+      }
+
+      // Check if we can flow down
+      int downTile = level.getTile(x, y - 1, z);
+      boolean flowedDown = false;
+      if (y > 0) {
+         if (downTile == 0) {
+            if (this.canFlow(level, x, y - 1, z)) {
+               if (level.setTile(x, y - 1, z, this.movingId)) {
+                  level.flowLevels.put(Level.getCoordKey(x, y - 1, z), (byte) 1);
+                  level.addToTickNextTick(x, y - 1, z, this.movingId);
+                  flowedDown = true;
+               }
+            }
+         } else if (Block.blocks[downTile] != null && Block.blocks[downTile].getLiquidType() == this.type) {
+            int downLevel = level.getFlowLevel(x, y - 1, z);
+            if (downLevel > 1) {
+               level.flowLevels.put(Level.getCoordKey(x, y - 1, z), (byte) 1);
+               level.addToTickNextTick(x, y - 1, z, this.movingId);
+               flowedDown = true;
+            } else {
+               flowedDown = true;
+            }
+         }
+      }
+
+      // Flow horizontally if we didn't flow down
+      if (!flowedDown && targetLevel < (maxLevel - 1)) {
+         int nextLevel = targetLevel + 1;
+         flowHorizontal(level, x - 1, y, z, nextLevel);
+         flowHorizontal(level, x + 1, y, z, nextLevel);
+         flowHorizontal(level, x, y, z - 1, nextLevel);
+         flowHorizontal(level, x, y, z + 1, nextLevel);
+      }
+
+      if (targetLevel == 0) {
+         level.setTileNoUpdate(x, y, z, this.stillId);
+      }
+   }
+
+   private int calculateTargetFlowLevel(Level level, int x, int y, int z) {
+      int upTile = level.getTile(x, y + 1, z);
+      if (upTile > 0 && Block.blocks[upTile].getLiquidType() == this.type) {
+         return 1;
+      }
+
+      long key = Level.getCoordKey(x, y, z);
+      Byte val = level.flowLevels.get(key);
+      if (val != null && val == 0) {
+         return 0;
+      }
+      int tile = level.getTile(x, y, z);
+      if (tile == this.stillId) {
+         return 0;
+      }
+      if (y <= level.waterLevel && (tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)) {
+         return 0;
+      }
+
+      int minL = 99;
+      minL = Math.min(minL, getNeighborLevel(level, x - 1, y, z));
+      minL = Math.min(minL, getNeighborLevel(level, x + 1, y, z));
+      minL = Math.min(minL, getNeighborLevel(level, x, y, z - 1));
+      minL = Math.min(minL, getNeighborLevel(level, x, y, z + 1));
+
+      return minL + 1;
+   }
+
+   private int getNeighborLevel(Level level, int x, int y, int z) {
+      int tile = level.getTile(x, y, z);
+      if (tile <= 0 || Block.blocks[tile].getLiquidType() != this.type) {
+         return 99;
+      }
+      long key = Level.getCoordKey(x, y, z);
+      Byte val = level.flowLevels.get(key);
+      if (val != null) {
+         return val.intValue();
+      }
+      if (tile == this.stillId) {
+         return 0;
+      }
+      if (y <= level.waterLevel && (tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)) {
+         return 0;
+      }
+      return 0;
+   }
+
+   private void flowHorizontal(Level level, int x, int y, int z, int nextLevel) {
+      int tile = level.getTile(x, y, z);
+      if (tile == 0) {
+         if (this.canFlow(level, x, y, z)) {
+            if (level.setTile(x, y, z, this.movingId)) {
+               level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) nextLevel);
+               level.addToTickNextTick(x, y, z, this.movingId);
+            }
+         }
+      } else if (Block.blocks[tile] != null && Block.blocks[tile].getLiquidType() == this.type) {
+         int curLevel = level.getFlowLevel(x, y, z);
+         if (curLevel > nextLevel) {
+            level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) nextLevel);
+            level.addToTickNextTick(x, y, z, this.movingId);
+         }
+      }
    }
 
    private boolean canFlow(Level var1, int var2, int var3, int var4) {

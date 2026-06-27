@@ -20,7 +20,7 @@ public final class GameSettings
 	        };
 
 
-		settingCount = 11;
+		settingCount = 12;
 
 		this.minecraft = minecraft;
 
@@ -43,6 +43,7 @@ public final class GameSettings
 	public boolean viewBobbing = true;
 	public boolean anaglyph = false;
 	public boolean limitFramerate = false;
+	public boolean finiteWater = false;
 	public KeyBinding flyToggleKey = new KeyBinding("Fly", Keyboard.KEY_V);
 	public KeyBinding forwardKey = new KeyBinding("Forward", 17);
 	public KeyBinding leftKey = new KeyBinding("Left", 30);
@@ -192,6 +193,9 @@ public final class GameSettings
 		if (setting == 10) {
 		    difficulty = difficulty.next();
 		}
+		if (setting == 11) {
+		    finiteWater = !finiteWater;
+		}
 
 		save();
 	}
@@ -209,7 +213,8 @@ public final class GameSettings
 				: (id == 8 ? "Smoothing: " + smoothingOptions[smoothing]
 				: (id == 9 ? "Anisotropic: " + anisotropicOptions[anisotropic]
 				        : (id == 10 ? "Difficulty: " + difficulty.getLabel()
-				        : ""))))))))));
+				        : (id == 11 ? "Finite Liquids: " + (finiteWater ? "ON" : "OFF")
+				        : "")))))))))));
 	}
 
 	private void load()
@@ -279,6 +284,11 @@ public final class GameSettings
 						limitFramerate = setting[1].equals("true");
 					}
 
+					if(setting[0].equals("finiteWater"))
+					{
+						finiteWater = setting[1].equals("true");
+					}
+
 					if(setting[0].equals("smoothing"))
 					{
 						smoothing = Integer.parseInt(setting[1]);
@@ -321,6 +331,7 @@ public final class GameSettings
 			writer.println("bobView:" + viewBobbing);
 			writer.println("anaglyph3d:" + anaglyph);
 			writer.println("limitFramerate:" + limitFramerate);
+			writer.println("finiteWater:" + finiteWater);
 			writer.println("difficulty:" + difficulty.name());
 			writer.println("smoothing:" + smoothing);
 			writer.println("anisotropic:" + anisotropic);

@@ -68,6 +68,53 @@ public class Level implements Serializable {
     public transient LightEngine lightEngine = new LightEngine(this);
     public final LevelHelper helper;
 
+    public transient java.util.HashMap<Long, Byte> flowLevels = new java.util.HashMap<>();
+
+    public static long getCoordKey(int x, int y, int z) {
+        return ((long) x & 0x3FFFFFFL) << 38 | ((long) z & 0x3FFFFFFL) << 12 | ((long) y & 0xFFFL);
+    }
+
+    public int getFlowLevel(int x, int y, int z) {
+        int tile = getTile(x, y, z);
+        if (tile != Block.WATER.id && tile != Block.STATIONARY_WATER.id &&
+            tile != Block.LAVA.id && tile != Block.STATIONARY_LAVA.id) {
+            return -1;
+        }
+
+        if (this.flowLevels == null) {
+            this.flowLevels = new java.util.HashMap<>();
+        }
+
+        long key = getCoordKey(x, y, z);
+        Byte val = this.flowLevels.get(key);
+        if (val != null) {
+            return val.intValue();
+        }
+
+        if (tile == Block.STATIONARY_WATER.id || tile == Block.STATIONARY_LAVA.id) {
+            return 0;
+        }
+        if (y <= waterLevel && (tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)) {
+            return 0;
+        }
+
+        return (tile == Block.WATER.id) ? 7 : 3;
+    }
+
+    protected void updateFlowLevelMap(int x, int y, int z, int id) {
+        if (this.flowLevels == null) {
+            this.flowLevels = new java.util.HashMap<>();
+        }
+        if (id == Block.WATER.id || id == Block.STATIONARY_WATER.id || id == Block.LAVA.id || id == Block.STATIONARY_LAVA.id) {
+            long key = getCoordKey(x, y, z);
+            if (!this.flowLevels.containsKey(key)) {
+                this.flowLevels.put(key, (byte) 0);
+            }
+        } else {
+            this.flowLevels.remove(getCoordKey(x, y, z));
+        }
+    }
+
     public Level() {
         this.randId = this.random.nextInt();
         this.tickList = new ArrayList();
@@ -148,6 +195,7 @@ public class Level implements Serializable {
             this.listeners = new ArrayList();
             this.blockers = new int[this.width * this.height];
             Arrays.fill(this.blockers, this.depth);
+            this.flowLevels = new java.util.HashMap<>();
             this.calcLightDepths(0, 0, this.width, this.height);
             this.random = new Random();
             this.randId = this.random.nextInt();
@@ -359,6 +407,7 @@ public class Level implements Serializable {
                 int idx = (var2 * this.height + var3) * this.width + var1;
                 int prevId = this.blocks[idx] & 0xFF;
                 this.blocks[idx] = (byte) var4;
+                this.updateFlowLevelMap(var1, var2, var3, var4);
                 if (prevId != 0) {
                     Block.blocks[prevId].onRemoved(this, var1, var2, var3);
                 }
@@ -476,9 +525,10 @@ public class Level implements Serializable {
             if (var4 == this.blocks[(var2 * this.height + var3) * this.width + var1]) {
                 return false;
             } else {
-                this.blocks[(var2 * this.height + var3) * this.width + var1] = (byte) var4;
-                return true;
-            }
+                 this.blocks[(var2 * this.height + var3) * this.width + var1] = (byte) var4;
+                 this.updateFlowLevelMap(var1, var2, var3, var4);
+                 return true;
+             }
         } else {
             return false;
         }
@@ -1316,6 +1366,10 @@ public class Level implements Serializable {
     }
 
     public MovingObjectPosition clip(Vec3D var1, Vec3D var2, boolean checkSolidOnly) {
+        return this.clip(var1, var2, checkSolidOnly, false);
+    }
+
+    public MovingObjectPosition clip(Vec3D var1, Vec3D var2, boolean checkSolidOnly, boolean checkLiquids) {
         if (!Float.isNaN(var1.x) && !Float.isNaN(var1.y) && !Float.isNaN(var1.z)) {
             if (!Float.isNaN(var2.x) && !Float.isNaN(var2.y) && !Float.isNaN(var2.z)) {
                 int var3 = (int) Math.floor((double) var2.x);
@@ -1435,7 +1489,7 @@ public class Level implements Serializable {
 
                     int var22 = this.getTile(var6, var7, var8);
                     Block var21 = Block.blocks[var22];
-                    if (var22 > 0 && var21.getLiquidType() == LiquidType.NOT_LIQUID) {
+                    if (var22 > 0 && (var21.getLiquidType() == LiquidType.NOT_LIQUID || checkLiquids)) {
                         if (checkSolidOnly && var21.getCollisionBox(var6, var7, var8) == null) {
                             continue;
                         }

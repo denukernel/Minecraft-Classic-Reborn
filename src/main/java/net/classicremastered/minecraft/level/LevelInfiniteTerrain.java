@@ -121,6 +121,7 @@ public final class LevelInfiniteTerrain extends Level {
             return false;
 
         chunks.setBlock(x, y, z, (byte) id);
+        updateFlowLevelMap(x, y, z, id);
 
         // no neighbor updates or hooks; still mark chunk slices for rebuild
         markSliceAndNeighbors(x, y, z);
@@ -596,6 +597,7 @@ public final class LevelInfiniteTerrain extends Level {
             return false;
 
         chunks.setBlock(x, y, z, (byte) id);
+        updateFlowLevelMap(x, y, z, id);
 
         // --- update light if block emits light ---
         if (id > 0 && Block.blocks[id] != null) {
@@ -631,6 +633,7 @@ public final class LevelInfiniteTerrain extends Level {
         this.listeners = new ArrayList<>();
         this.random = new java.util.Random();
         this.tickCount = 0;
+        this.flowLevels = new java.util.HashMap<>();
 
         // keep the existing infinite-aware blockMap
         if (this.blockMap == null) {
@@ -664,6 +667,7 @@ public final class LevelInfiniteTerrain extends Level {
             return false;
 
         chunks.setBlock(x, y, z, (byte) id);
+        updateFlowLevelMap(x, y, z, id);
 
         if (old > 0 && Block.blocks[old] != null) {
             Block.blocks[old].onRemoved(this, x, y, z);

@@ -431,14 +431,10 @@ public final class GuiCrafting extends GuiScreen {
         } else {
             int idx = id - 256;
              if (idx >= 0 && idx < Item.items.length && Item.items[idx] != null) {
-                int tex = minecraft.textureManager.load(Item.items[idx].getTexture());
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
-                ShapeRenderer.instance.begin();
-                ShapeRenderer.instance.vertexUV(x, y + 16, 0, 0, 1);
-                ShapeRenderer.instance.vertexUV(x + 16, y + 16, 0, 1, 1);
-                ShapeRenderer.instance.vertexUV(x + 16, y, 0, 1, 0);
-                ShapeRenderer.instance.vertexUV(x, y, 0, 0, 0);
-                ShapeRenderer.instance.end();
+                GL11.glPushMatrix();
+                GL11.glTranslatef(x, y, 0);
+                Item.items[idx].renderIcon(minecraft.textureManager, ShapeRenderer.instance);
+                GL11.glPopMatrix();
              }
         }
     }

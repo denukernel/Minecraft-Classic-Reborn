@@ -425,15 +425,11 @@ public class InventoryScreen extends GuiScreen {
             int itemId = id - 256;
             if (itemId >= 0 && itemId < Item.items.length) {
                 Item it = Item.items[itemId];
-                if (it != null && it.getTexture() != null) {
-                    int tex = this.minecraft.textureManager.load(it.getTexture());
-                    GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
-                    ShapeRenderer.instance.begin();
-                    ShapeRenderer.instance.vertexUV(sx, sy + 16, 0, 0, 1);
-                    ShapeRenderer.instance.vertexUV(sx + 16, sy + 16, 0, 1, 1);
-                    ShapeRenderer.instance.vertexUV(sx + 16, sy, 0, 1, 0);
-                    ShapeRenderer.instance.vertexUV(sx, sy, 0, 0, 0);
-                    ShapeRenderer.instance.end();
+                if (it != null) {
+                    GL11.glPushMatrix();
+                    GL11.glTranslatef(sx, sy, 0);
+                    it.renderIcon(this.minecraft.textureManager, ShapeRenderer.instance);
+                    GL11.glPopMatrix();
                 }
             }
         }

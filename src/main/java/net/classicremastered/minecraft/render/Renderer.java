@@ -420,19 +420,9 @@ public void setupCamera(float partial) {
         GL11.glRotatef(-7.0F, 0.7F, 0F, 2F);
 
         // draw icon
-        String tex = it.getTexture();
-        if (tex != null) {
-            int texId = minecraft.textureManager.load(tex);
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
-            GL11.glDisable(GL11.GL_CULL_FACE);
-            ShapeRenderer.instance.begin();
-            ShapeRenderer.instance.vertexUV(0, 16, 0, 0, 1);
-            ShapeRenderer.instance.vertexUV(16, 16, 0, 1, 1);
-            ShapeRenderer.instance.vertexUV(16, 0, 0, 1, 0);
-            ShapeRenderer.instance.vertexUV(0, 0, 0, 0, 0);
-            ShapeRenderer.instance.end();
-            GL11.glEnable(GL11.GL_CULL_FACE);
-        }
+        GL11.glDisable(GL11.GL_CULL_FACE);
+        it.renderIcon(minecraft.textureManager, ShapeRenderer.instance);
+        GL11.glEnable(GL11.GL_CULL_FACE);
 
         GL11.glPopMatrix();
     }

@@ -188,17 +188,7 @@ public final class HUDScreen extends Screen {
                         }
 
                         GL11.glTranslatef(x + 2, y - 4, -50);
-                        String tex = it.getTexture();
-                        if (tex != null) {
-                            int texId = this.mc.textureManager.load(tex);
-                            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
-                            sr.begin();
-                            sr.vertexUV(0, 16, 0, 0, 1);
-                            sr.vertexUV(16, 16, 0, 1, 1);
-                            sr.vertexUV(16, 0, 0, 1, 0);
-                            sr.vertexUV(0, 0, 0, 0, 0);
-                            sr.end();
-                        }
+                        it.renderIcon(this.mc.textureManager, sr);
                         GL11.glPopMatrix();
                     }
                 }

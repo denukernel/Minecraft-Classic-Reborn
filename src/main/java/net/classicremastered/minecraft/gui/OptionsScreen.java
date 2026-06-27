@@ -28,9 +28,9 @@ public final class OptionsScreen extends GuiScreen {
         int btnW = compact ? 120 : 150;
         int btnH = compact ? 16 : 18;
 
-        // Settings toggles (all except difficulty → handled separately below)
+        // Settings toggles (all except difficulty & finite water → handled separately below)
         for (int i = 0; i < this.settings.settingCount; ++i) {
-            if (i == 10) continue; // skip difficulty here
+            if (i == 10 || i == 11) continue; // skip difficulty and finite water here
             int x = this.width / 2 - 155 + i % 2 * 160;
             int y = this.height / 6 + 24 * (i >> 1);
             OptionButton b = new OptionButton(i, x, y, this.settings.getSetting(i));
@@ -53,8 +53,14 @@ public final class OptionsScreen extends GuiScreen {
         controls.height = btnH;
         this.buttons.add(controls);
 
-        // Language (row below, center)
-        Button lang = new Button(101, this.width / 2 - btnW / 2, baseY + 24, "Language...");
+        // Finite Water (row 6, left)
+        OptionButton finiteWaterBtn = new OptionButton(11, this.width / 2 - 155, baseY + 24, this.settings.getSetting(11));
+        finiteWaterBtn.width = btnW;
+        finiteWaterBtn.height = btnH;
+        this.buttons.add(finiteWaterBtn);
+
+        // Language (row 6, right)
+        Button lang = new Button(101, this.width / 2 - 155 + 160, baseY + 24, "Language...");
         lang.width = btnW;
         lang.height = btnH;
         this.buttons.add(lang);

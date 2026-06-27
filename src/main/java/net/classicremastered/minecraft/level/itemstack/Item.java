@@ -23,6 +23,7 @@ public class Item {
 
 	public static FeatherItem FEATHER;
 
+    public static Item BUCKET_EMPTY, BUCKET_WATER, BUCKET_LAVA;
     public static GravityGunItem GRAVITYGUN;
 
     // --- Constructors ---

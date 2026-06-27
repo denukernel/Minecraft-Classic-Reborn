@@ -45,6 +45,9 @@ public final class StillLiquidBlock extends LiquidBlock {
 
         // turn into flowing liquid if needed
         if (needsFlow) {
+            if (level.minecraft != null && level.minecraft.settings != null && level.minecraft.settings.finiteWater) {
+                level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) 0);
+            }
             level.setTileNoUpdate(x, y, z, this.movingId);
             level.addToTickNextTick(x, y, z, this.movingId);
         }
