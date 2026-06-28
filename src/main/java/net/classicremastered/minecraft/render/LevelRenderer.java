@@ -271,7 +271,7 @@ public final class LevelRenderer {
             if (!e.removed) e.render(textureManager, partial);
         }
 
-        // Draw gravity gun beams for grabbed mobs
+        // Draw gravity gun and physics gun beams for grabbed mobs
         for (Entity e : level.entityList) {
             if (e instanceof Player) {
                 Player p = (Player) e;
@@ -280,6 +280,12 @@ public final class LevelRenderer {
                     net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
                     if (grabbed != null && !grabbed.removed) {
                         net.classicremastered.minecraft.level.itemstack.GravityGunItem.renderMobBeam(p, grabbed, textureManager, partial);
+                    }
+                }
+                if (selId >= 256 && (selId - 256) == 10) {
+                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.getGrabbed(p);
+                    if (grabbed != null && !grabbed.removed) {
+                        net.classicremastered.minecraft.level.itemstack.TelekinesisItem.renderMobBeam(p, grabbed, textureManager, partial);
                     }
                 }
             }

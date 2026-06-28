@@ -32,6 +32,8 @@ public final class StillLiquidBlock extends LiquidBlock {
             needsFlow = true;
         if (level.isInBounds(x, y - 1, z) && level.getTile(x, y - 1, z) == 0)
             needsFlow = true;
+        if (level.isInBounds(x, y + 1, z) && level.getTile(x, y + 1, z) == 0)
+            needsFlow = true;
 
         // water vs lava → stone
         if (changedId != 0) {

@@ -62,7 +62,7 @@ public final class IronGolem extends Mob {
         }
         this.yRot = (float)(Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
 
-        if (dist < 3.0f && this.attackTime == 0) {
+        if (dist < 2.0f && this.attackTime == 0) {
             this.attackTime = 40; // 2s cooldown
             e.hurt(this, 10);
 

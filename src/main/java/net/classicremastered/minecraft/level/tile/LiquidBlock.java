@@ -137,7 +137,7 @@ public class LiquidBlock extends Block {
                level.addToTickNextTick(x, y - 1, z, this.movingId);
                flowedDown = true;
             } else {
-               flowedDown = true;
+               flowedDown = (currentLevel > 0);
             }
          }
       }

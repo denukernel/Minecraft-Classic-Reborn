@@ -68,7 +68,7 @@ public class InputManager {
             if (button == 0) {
                 if (!mc.entityWithinReach(mc.selected.entity))
                     return;
-                int dmg = 2;
+                int dmg = 3;
                 if (selId >= 256) {
                     int itemId = selId - 256;
                     if (itemId >= 0 && itemId < net.classicremastered.minecraft.level.itemstack.Item.items.length) {

@@ -19,7 +19,7 @@ public final class GravityGunItem extends ToolItem {
     public static final java.util.Map<net.classicremastered.minecraft.mob.Mob, Integer> armedMobs = new java.util.WeakHashMap<>();
  
     public GravityGunItem(int id) {
-        super(id, "Gravity Gun", "/items/bow.png");
+        super(id, "Gravity Gun", "/items/gravity_gun.png");
     }
  
     public static boolean isHoldingAnything(Player p) {
@@ -249,11 +249,11 @@ public final class GravityGunItem extends ToolItem {
         if (owner == null || mob == null) return;
  
         float ex = mob.xo + (mob.x - mob.xo) * partial;
-        float ey = mob.yo + (mob.y - mob.yo) * partial + mob.heightOffset + mob.bbHeight / 2.0F;
+        float ey = mob.yo + (mob.y - mob.yo) * partial - mob.heightOffset + mob.bbHeight / 2.0F;
         float ez = mob.zo + (mob.z - mob.zo) * partial;
  
         float px = owner.xo + (owner.x - owner.xo) * partial;
-        float py = owner.yo + (owner.y - owner.yo) * partial + owner.heightOffset - 0.2f;
+        float py = owner.yo + (owner.y - owner.yo) * partial - 0.2f;
         float pz = owner.zo + (owner.z - owner.zo) * partial;
  
         GL11.glPushMatrix();

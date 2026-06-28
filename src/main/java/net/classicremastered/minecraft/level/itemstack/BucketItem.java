@@ -94,12 +94,12 @@ public class BucketItem extends ToolItem {
             if (side == 5) nx++;
 
             if (level.isInBounds(nx, ny, nz) && level.getTile(nx, ny, nz) == 0) {
-                int placeTile = (bucketType == 1) ? Block.STATIONARY_WATER.id : Block.STATIONARY_LAVA.id;
+                int placeTile = (bucketType == 1) ? Block.WATER.id : Block.LAVA.id;
                 level.setTile(nx, ny, nz, placeTile);
                 
                 // Add to flowLevels map as level 0 (source) so it flows properly
                 level.flowLevels.put(Level.getCoordKey(nx, ny, nz), (byte) 0);
-                level.addToTickNextTick(nx, ny, nz, placeTile);
+                Block.blocks[placeTile].onPlace(level, nx, ny, nz);
 
                 level.playSound("random/pop", player, 0.5f, 1.0f);
                 player.inventory.slots[slot] = Item.BUCKET_EMPTY.id + 256;

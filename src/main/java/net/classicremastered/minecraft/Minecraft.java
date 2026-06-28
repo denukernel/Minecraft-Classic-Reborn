@@ -2162,7 +2162,8 @@ public final class Minecraft implements Runnable {
                     if (rightDown && held != null) {
                         // Held → tick
                         held.tick(this.player, this.level);
-                    } else if (held instanceof net.classicremastered.minecraft.level.itemstack.GravityGunItem) {
+                    } else if (held instanceof net.classicremastered.minecraft.level.itemstack.GravityGunItem
+                            || held instanceof net.classicremastered.minecraft.level.itemstack.TelekinesisItem) {
                         held.tick(this.player, this.level);
                     }
                     if (!rightDown && wasRightDown && held != null) {

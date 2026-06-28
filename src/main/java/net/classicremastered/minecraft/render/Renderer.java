@@ -173,6 +173,17 @@ public void setupCamera(float partial) {
             GL11.glRotatef(-t * 14.0F, 0.0F, 0.0F, 1.0F);
             GL11.glRotatef(dir, 0.0F, 1.0F, 0.0F);
         }
+
+        // ===== Physics Gun Camera Shake =====
+        float shake = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.cameraShake;
+        if (shake > 0.0f) {
+            float shakeX = (float) (Math.random() - 0.5D) * shake;
+            float shakeY = (float) (Math.random() - 0.5D) * shake;
+            float shakeZ = (float) (Math.random() - 0.5D) * shake;
+            GL11.glTranslatef(shakeX * 0.2f, shakeY * 0.2f, shakeZ * 0.2f);
+            GL11.glRotatef((float) (Math.random() - 0.5D) * shake * 15f, 0.0F, 1.0F, 0.0F);
+            GL11.glRotatef((float) (Math.random() - 0.5D) * shake * 15f, 1.0F, 0.0F, 0.0F);
+        }
     }
 
     public void applyBobbing(float partial) {

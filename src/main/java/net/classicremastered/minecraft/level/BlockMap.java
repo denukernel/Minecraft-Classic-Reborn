@@ -225,7 +225,7 @@ public class BlockMap implements Serializable {
             }
         }
 
-        // Draw gravity gun beams for grabbed mobs
+        // Draw gravity gun and physics gun beams for grabbed mobs
         for (Entity e : entities) {
             if (e instanceof Player) {
                 Player p = (Player) e;
@@ -234,6 +234,12 @@ public class BlockMap implements Serializable {
                     net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
                     if (grabbed != null && !grabbed.removed) {
                         net.classicremastered.minecraft.level.itemstack.GravityGunItem.renderMobBeam(p, grabbed, tex, partial);
+                    }
+                }
+                if (selId >= 256 && (selId - 256) == 10) {
+                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.getGrabbed(p);
+                    if (grabbed != null && !grabbed.removed) {
+                        net.classicremastered.minecraft.level.itemstack.TelekinesisItem.renderMobBeam(p, grabbed, tex, partial);
                     }
                 }
             }
