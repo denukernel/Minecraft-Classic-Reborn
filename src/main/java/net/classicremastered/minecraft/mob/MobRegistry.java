@@ -127,8 +127,11 @@ public final class MobRegistry {
         tryRegister((short) 27, "IronGolem", IronGolem.class, (l,x,y,z) -> new IronGolem(l, x, y, z));
         tryRegister((short) 28, "SignMob", SignMob.class, (l,x,y,z)->new SignMob(l,x,y,z));
         tryRegister((short) 29, "LeggedMonster", LeggedMonster.class, (l,x,y,z)->new LeggedMonster(l,x,y,z));
+        tryRegister((short) 30, "LongNeckMan", LongNeckMan.class, (l,x,y,z)->new LongNeckMan(l,x,y,z));
         tryRegister((short) 60, "PlayerClone", Bot.class,
                 (l,x,y,z)->new Bot(l,x,y,z));
+        tryRegister(BlueForestGolem.REGISTRY_ID, "BlueForestGolem", BlueForestGolem.class,
+                (l,x,y,z)->new BlueForestGolem(l,x,y,z));
         tryRegister((short) 42, "ShulkerMan", ShulkerMan.class,
                 (l, x, y, z) -> new ShulkerMan(l, x, y, z));
 

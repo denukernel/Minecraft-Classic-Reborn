@@ -20,6 +20,7 @@ public final class SelectLevelScreen extends GuiScreen {
     private static final int ID_RENAME = 14;
     private static final int ID_PREV = 15;
     private static final int ID_NEXT = 16;
+    private static final int ID_SELECT_ALL = 17;
     private static final int ID_SLOTBASE = 100; // 100..104
 
     private static final int LEVELS_PER_PAGE = 5;
@@ -30,6 +31,7 @@ public final class SelectLevelScreen extends GuiScreen {
     private final GuiScreen parent;
     private File levelsDir;
     private final List<File> levelFiles = new ArrayList<>();
+    private final List<Integer> selectedIndices = new ArrayList<>();
     private int page = 0;
     private int selected = -1; // global index in levelFiles
 
@@ -53,6 +55,14 @@ public final class SelectLevelScreen extends GuiScreen {
             // Sort by last modified DESCENDING (most recent first)
             Arrays.sort(files, (f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
             levelFiles.addAll(Arrays.asList(files));
+        }
+
+        // Validate selectedIndices
+        selectedIndices.removeIf(idx -> idx < 0 || idx >= levelFiles.size());
+        if (selectedIndices.isEmpty()) {
+            selected = -1;
+        } else {
+            selected = selectedIndices.get(0);
         }
 
         // Clamp page index
@@ -94,6 +104,11 @@ public final class SelectLevelScreen extends GuiScreen {
         this.buttons.add(new Button(ID_DELETE, cx + 70, actionY, 60, 20, "Delete"));
         this.buttons.add(new Button(ID_BACK, 6, 6, 60, 20, "Back"));
 
+        // Select All button (top right)
+        boolean allSelected = !levelFiles.isEmpty() && selectedIndices.size() == levelFiles.size();
+        String selectAllLabel = allSelected ? "Deselect All" : "Select All";
+        this.buttons.add(new Button(ID_SELECT_ALL, this.width - 96, 6, 90, 20, selectAllLabel));
+
         updateActionStates();
     }
 
@@ -102,11 +117,11 @@ public final class SelectLevelScreen extends GuiScreen {
         drawFadingBox(0, 0, width, height, 0x80202020, 0xFF000000);
         drawCenteredString(fontRenderer, "Select Level (Page " + (page + 1) + ")", width / 2, 28, 0xFFFFFF);
 
-        if (selected >= 0 && selected < levelFiles.size()) {
-            int start = page * LEVELS_PER_PAGE;
-            int end = Math.min(start + LEVELS_PER_PAGE, levelFiles.size());
-            if (selected >= start && selected < end) {
-                int pageIdx = selected - start;
+        int start = page * LEVELS_PER_PAGE;
+        int end = Math.min(start + LEVELS_PER_PAGE, levelFiles.size());
+        for (int i = start; i < end; i++) {
+            if (selectedIndices.contains(i)) {
+                int pageIdx = i - start;
                 Button b = findButton(ID_SLOTBASE + pageIdx);
                 if (b != null) {
                     int pad = 2;
@@ -117,19 +132,25 @@ public final class SelectLevelScreen extends GuiScreen {
 
         super.render(mx, my);
 
-        if (selected >= 0 && selected < levelFiles.size()) {
+        if (selectedIndices.size() == 1) {
+            int sel = selectedIndices.get(0);
             int y = this.height - 12; // 12px margin from bottom edge
-            File f = levelFiles.get(selected);
+            File f = levelFiles.get(sel);
             String name = f.getName();
             if (name.toLowerCase().endsWith(".lvl.gz")) {
                 name = name.substring(0, name.length() - 7);
             }
             drawCenteredString(fontRenderer, "Selected: " + name, this.width / 2, y, 0xA0FFFFFF);
+        } else if (selectedIndices.size() > 1) {
+            int y = this.height - 12;
+            drawCenteredString(fontRenderer, "Selected: " + selectedIndices.size() + " levels", this.width / 2, y, 0xA0FFFFFF);
         }
 
         // Confirmation warning
         if (confirmDelete) {
-            String warn1 = "Are you sure to delete this level?";
+            String warn1 = (selectedIndices.size() > 1) 
+                ? "Are you sure to delete " + selectedIndices.size() + " levels?" 
+                : "Are you sure to delete this level?";
             String warn2 = "This cannot be undone! Click Delete again to confirm.";
             drawCenteredString(fontRenderer, warn1, width / 2, height - 56, 0xFFFF5555);
             drawCenteredString(fontRenderer, warn2, width / 2, height - 44, 0xFFFF5555);
@@ -144,9 +165,11 @@ public final class SelectLevelScreen extends GuiScreen {
         if (id >= ID_SLOTBASE && id < ID_SLOTBASE + LEVELS_PER_PAGE) {
             int clickedGlobalIdx = page * LEVELS_PER_PAGE + (id - ID_SLOTBASE);
             if (clickedGlobalIdx < levelFiles.size()) {
+                selectedIndices.clear();
+                selectedIndices.add(clickedGlobalIdx);
                 selected = clickedGlobalIdx;
                 confirmDelete = false; // cancel any pending confirmation
-                updateActionStates();
+                onOpen();
             }
             return;
         }
@@ -177,6 +200,23 @@ public final class SelectLevelScreen extends GuiScreen {
             return;
         }
 
+        // Select All / Deselect All
+        if (id == ID_SELECT_ALL) {
+            confirmDelete = false;
+            boolean allSelected = !levelFiles.isEmpty() && selectedIndices.size() == levelFiles.size();
+            selectedIndices.clear();
+            if (!allSelected) {
+                for (int i = 0; i < levelFiles.size(); i++) {
+                    selectedIndices.add(i);
+                }
+                selected = 0;
+            } else {
+                selected = -1;
+            }
+            onOpen();
+            return;
+        }
+
         // New Level
         if (id == ID_NEW) {
             confirmDelete = false;
@@ -186,14 +226,13 @@ public final class SelectLevelScreen extends GuiScreen {
         }
 
         // Nothing selected yet below
-        if (selected < 0 || selected >= levelFiles.size())
+        if (selectedIndices.isEmpty())
             return;
 
-        File f = levelFiles.get(selected);
-
-        // Load
-        if (id == ID_LOAD) {
+        // Load (single select only)
+        if (id == ID_LOAD && selectedIndices.size() == 1) {
             confirmDelete = false;
+            File f = levelFiles.get(selectedIndices.get(0));
             if (f.exists()) {
                 try {
                     Level L = minecraft.levelIo.load(f);
@@ -209,9 +248,10 @@ public final class SelectLevelScreen extends GuiScreen {
             return;
         }
 
-        // Rename
-        if (id == ID_RENAME) {
+        // Rename (single select only)
+        if (id == ID_RENAME && selectedIndices.size() == 1) {
             confirmDelete = false;
+            final File f = levelFiles.get(selectedIndices.get(0));
             String currentName = f.getName();
             if (currentName.toLowerCase().endsWith(".lvl.gz")) {
                 currentName = currentName.substring(0, currentName.length() - 7);
@@ -231,10 +271,12 @@ public final class SelectLevelScreen extends GuiScreen {
                         return;
                     }
                     minecraft.setCurrentScreen(SelectLevelScreen.this);
+                    selectedIndices.clear();
                     onOpen();
                     // Select renamed file
                     for (int idx = 0; idx < levelFiles.size(); idx++) {
                         if (levelFiles.get(idx).getName().equals(newFile.getName())) {
+                            selectedIndices.add(idx);
                             selected = idx;
                             page = idx / LEVELS_PER_PAGE;
                             break;
@@ -246,28 +288,57 @@ public final class SelectLevelScreen extends GuiScreen {
             return;
         }
 
-        // Delete
+        // Delete (single or multiple)
         if (id == ID_DELETE) {
-            if (!f.exists()) {
+            // Check if files exist
+            boolean anyExist = false;
+            for (int idx : selectedIndices) {
+                if (idx >= 0 && idx < levelFiles.size() && levelFiles.get(idx).exists()) {
+                    anyExist = true;
+                    break;
+                }
+            }
+            if (!anyExist) {
                 confirmDelete = false;
+                selectedIndices.clear();
+                selected = -1;
                 onOpen();
                 return;
             }
+
             if (!confirmDelete) {
                 confirmDelete = true;
                 return;
             }
-            boolean ok = false;
-            try {
-                ok = f.delete();
-            } catch (Throwable t) {
-                t.printStackTrace();
-            }
+            
+            // Delete confirmed
             confirmDelete = false;
-            if (!ok && f.exists()) {
-                minecraft.setCurrentScreen(new ErrorScreen("Delete failed", "Could not delete:\n" + f.getName() + "\n\nFile may be in use.", this));
-                return;
+            List<File> failedDeletes = new ArrayList<>();
+            for (int idx : selectedIndices) {
+                if (idx >= 0 && idx < levelFiles.size()) {
+                    File f = levelFiles.get(idx);
+                    if (f.exists()) {
+                        try {
+                            boolean ok = f.delete();
+                            if (!ok) failedDeletes.add(f);
+                        } catch (Throwable t) {
+                            t.printStackTrace();
+                            failedDeletes.add(f);
+                        }
+                    }
+                }
             }
+
+            if (!failedDeletes.isEmpty()) {
+                StringBuilder sb = new StringBuilder("Could not delete:\n");
+                for (File f : failedDeletes) {
+                    sb.append(f.getName()).append("\n");
+                }
+                sb.append("\nFiles may be in use.");
+                minecraft.setCurrentScreen(new ErrorScreen("Delete failed", sb.toString(), this));
+            }
+            
+            selectedIndices.clear();
             selected = -1;
             onOpen();
             return;
@@ -326,21 +397,27 @@ public final class SelectLevelScreen extends GuiScreen {
     }
 
     private void updateActionStates() {
-        boolean hasSelection = (selected >= 0 && selected < levelFiles.size());
-        File f = hasSelection ? levelFiles.get(selected) : null;
-        boolean fileExists = (f != null && f.exists());
+        boolean hasSelection = !selectedIndices.isEmpty();
+        boolean singleSelection = selectedIndices.size() == 1;
 
         Button load = findButton(ID_LOAD);
         if (load != null)
-            load.active = fileExists;
+            load.active = singleSelection;
 
         Button rename = findButton(ID_RENAME);
         if (rename != null)
-            rename.active = fileExists;
+            rename.active = singleSelection;
 
         Button del = findButton(ID_DELETE);
         if (del != null)
-            del.active = fileExists;
+            del.active = hasSelection;
+            
+        Button selectAll = findButton(ID_SELECT_ALL);
+        if (selectAll != null) {
+            boolean allSelected = !levelFiles.isEmpty() && selectedIndices.size() == levelFiles.size();
+            selectAll.text = allSelected ? "Deselect All" : "Select All";
+            selectAll.active = !levelFiles.isEmpty();
+        }
     }
 
     private Button findButton(int id) {

@@ -20,7 +20,7 @@ public final class GameSettings
 	        };
 
 
-		settingCount = 12;
+		settingCount = 14;
 
 		this.minecraft = minecraft;
 
@@ -37,6 +37,7 @@ public final class GameSettings
 	private static final String[] renderDistances = new String[]{"FAR", "NORMAL", "SHORT", "TINY"};
 	public boolean music = true;
 	public boolean sound = true;
+	public boolean allowMobSounds = true;
 	public boolean invertMouse = false;
 	public boolean showFrameRate = false;
 	public int viewDistance = 0;
@@ -44,6 +45,7 @@ public final class GameSettings
 	public boolean anaglyph = false;
 	public boolean limitFramerate = false;
 	public boolean finiteWater = false;
+	public boolean multithreaded = true;
 	public KeyBinding flyToggleKey = new KeyBinding("Fly", Keyboard.KEY_V);
 	public KeyBinding forwardKey = new KeyBinding("Forward", 17);
 	public KeyBinding leftKey = new KeyBinding("Left", 30);
@@ -196,6 +198,12 @@ public final class GameSettings
 		if (setting == 11) {
 		    finiteWater = !finiteWater;
 		}
+		if (setting == 12) {
+		    allowMobSounds = !allowMobSounds;
+		}
+		if (setting == 13) {
+		    multithreaded = !multithreaded;
+		}
 
 		save();
 	}
@@ -214,7 +222,9 @@ public final class GameSettings
 				: (id == 9 ? "Anisotropic: " + anisotropicOptions[anisotropic]
 				        : (id == 10 ? "Difficulty: " + difficulty.getLabel()
 				        : (id == 11 ? "Finite Liquids: " + (finiteWater ? "ON" : "OFF")
-				        : "")))))))))));
+				        : (id == 12 ? "Allow mob sounds: " + (allowMobSounds ? "ON" : "OFF")
+				        : (id == 13 ? "Multithreading: " + (multithreaded ? "ON" : "OFF")
+				        : "")))))))))))));
 	}
 
 	private void load()
@@ -252,6 +262,11 @@ public final class GameSettings
 					if(setting[0].equals("sound"))
 					{
 						sound = setting[1].equals("true");
+					}
+
+					if(setting[0].equals("allowMobSounds"))
+					{
+						allowMobSounds = setting[1].equals("true");
 					}
 
 					if(setting[0].equals("invertYMouse"))
@@ -299,6 +314,11 @@ public final class GameSettings
 						anisotropic = Integer.parseInt(setting[1]);
 					}
 
+					if(setting[0].equals("multithreaded"))
+					{
+						multithreaded = setting[1].equals("true");
+					}
+
 					for(int index = 0; index < this.bindings.length; index++)
 					{
 						if(setting[0].equals("key_" + bindings[index].name))
@@ -315,6 +335,12 @@ public final class GameSettings
 
 			e.printStackTrace();
 		}
+
+		// Also check system property override if set by launcher
+		String mtProp = System.getProperty("minecraft.multithreaded");
+		if (mtProp != null && !mtProp.isEmpty()) {
+			multithreaded = Boolean.parseBoolean(mtProp);
+		}
 	}
 
 	public void save()
@@ -325,6 +351,7 @@ public final class GameSettings
 
 			writer.println("music:" + music);
 			writer.println("sound:" + sound);
+			writer.println("allowMobSounds:" + allowMobSounds);
 			writer.println("invertYMouse:" + invertMouse);
 			writer.println("showFrameRate:" + showFrameRate);
 			writer.println("viewDistance:" + viewDistance);
@@ -335,6 +362,7 @@ public final class GameSettings
 			writer.println("difficulty:" + difficulty.name());
 			writer.println("smoothing:" + smoothing);
 			writer.println("anisotropic:" + anisotropic);
+			writer.println("multithreaded:" + multithreaded);
 			writer.println("mpUsername:" + mpUsername);
 			writer.println("lastServerIp:" + lastServerIp);
 			writer.println("lastServerPort:" + lastServerPort);

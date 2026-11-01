@@ -76,6 +76,24 @@ public abstract class Mob extends Entity {
         this.footSize = 0.5F;
     }
 
+    /** Resize the live collision box immediately while retaining its feet position. */
+    @Override
+    public void setSize(float width, float height) {
+        super.setSize(width, height);
+        if (bb != null) {
+            float half = width * .5f;
+            bb.x0 = x - half; bb.x1 = x + half;
+            bb.z0 = z - half; bb.z1 = z + half;
+            bb.y1 = bb.y0 + height;
+        }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        // Older saves can contain a stale box left over from the superclass constructor.
+        setSize(bbWidth, bbHeight);
+    }
+
     // Mob.java (inside class)
     protected String soundIdle = null;
     protected String soundHurt = null;
@@ -114,14 +132,17 @@ public abstract class Mob extends Entity {
     @Override
     public void tick() {
         super.tick();
+        net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.beforeMobTick(this);
 
         if (this.tickCount < Integer.MAX_VALUE)
             this.tickCount++;
         // play idle sound every few seconds
         if (this.health > 0 && this.soundIdle != null) {
             if (--idleSoundDelay <= 0) {
-                float pitch = randPitch(idlePitchMin, idlePitchMax);
-                this.level.playSound(this.soundIdle, this, 1.0F, pitch);
+                if (this.level == null || this.level.minecraft == null || this.level.minecraft.settings == null || this.level.minecraft.settings.allowMobSounds) {
+                    float pitch = randPitch(idlePitchMin, idlePitchMax);
+                    this.level.playSound(this.soundIdle, this, 1.0F, pitch);
+                }
                 idleSoundDelay = 80; // 80 ticks ≈ 4 seconds at 20 TPS
             }
         }
@@ -186,7 +207,7 @@ public abstract class Mob extends Entity {
         this.xRotO = this.xRot;
 
         // Always run physics
-        if (this.rider == null) {
+        if (this.rider == null && !net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.moveHeld(this)) {
             this.aiStep();
         }
 
@@ -530,6 +551,8 @@ public abstract class Mob extends Entity {
         Model m = modelCache.getModel(this.modelName);
         if (m == null)
             return;
+        if (m instanceof net.classicremastered.minecraft.model.SkeletonModel skeletonModel)
+            skeletonModel.setRenderTextures(tm);
         if (this instanceof net.classicremastered.minecraft.mob.Chicken
                 && m instanceof net.classicremastered.minecraft.model.ChickenModel) {
             ((net.classicremastered.minecraft.model.ChickenModel) m)
@@ -543,7 +566,18 @@ public abstract class Mob extends Entity {
         m.setRotationAngles(anim, runAmt, ageInTicks, yaw, pitch, scale);
 
 // Draw
-        m.render(anim, runAmt, ageInTicks, yaw, pitch, scale);
+        if (this instanceof net.classicremastered.minecraft.player.Player player
+                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
+                && net.classicremastered.minecraft.model.GunModel.isGun(player.inventory.getSelected()-256)) {
+            humanoid.renderHoldingGun(anim,runAmt,ageInTicks,yaw,pitch,scale);
+        } else if (this instanceof net.classicremastered.minecraft.player.Player player
+                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
+                && player.inventory.getSelected()==262) {
+            var bow=(net.classicremastered.minecraft.level.itemstack.BowItem)net.classicremastered.minecraft.level.itemstack.Item.BOW;
+            humanoid.renderHoldingBow(anim,runAmt,ageInTicks,yaw,pitch,scale,bow.getDrawProgress(player,partial),bow.isDrawing(player));
+        } else {
+            m.render(anim, runAmt, ageInTicks, yaw, pitch, scale);
+        }
     }
 
     public void heal(int amt) {
@@ -577,8 +611,10 @@ public abstract class Mob extends Entity {
 
         // ✅ Only play hurt sound if still alive after damage
         if (this.health > 0 && this.soundHurt != null && this.level != null) {
-            float pitch = randPitch(hurtPitchMin, hurtPitchMax);
-            this.level.playSound(this.soundHurt, this, 1.0F, pitch);
+            if (this.level.minecraft == null || this.level.minecraft.settings == null || this.level.minecraft.settings.allowMobSounds) {
+                float pitch = randPitch(hurtPitchMin, hurtPitchMax);
+                this.level.playSound(this.soundHurt, this, 1.0F, pitch);
+            }
         }
 
         this.hurtDir = 0.0F;
@@ -643,8 +679,10 @@ public abstract class Mob extends Entity {
             this.unmount();
         }
         if (this.soundDeath != null && this.level != null) {
-            float pitch = randPitch(deathPitchMin, deathPitchMax);
-            this.level.playSound(this.soundDeath, this, 1.0F, pitch);
+            if (this.level.minecraft == null || this.level.minecraft.settings == null || this.level.minecraft.settings.allowMobSounds) {
+                float pitch = randPitch(deathPitchMin, deathPitchMax);
+                this.level.playSound(this.soundDeath, this, 1.0F, pitch);
+            }
         }
         this.dead = true;
         this.attackTime = 0;
@@ -675,7 +713,7 @@ public abstract class Mob extends Entity {
         int dmg = (int) Math.ceil((double) (dist - 3.0F));
         if (dmg > 0) {
             // Check if this mob was thrown by a player
-            net.classicremastered.minecraft.player.Player thrower = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.thrownBy
+            net.classicremastered.minecraft.player.Player thrower = net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.thrownBy
                     .get(this);
 
             if (thrower != null) {
@@ -766,3 +804,4 @@ public abstract class Mob extends Entity {
         return this.footSize > 0 ? this.footSize : 0.5F;
     }
 }
+

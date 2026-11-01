@@ -246,41 +246,6 @@ public final class GravityGunItem extends ToolItem {
     }
  
     public static void renderMobBeam(Player owner, net.classicremastered.minecraft.mob.Mob mob, TextureManager tm, float partial) {
-        if (owner == null || mob == null) return;
- 
-        float ex = mob.xo + (mob.x - mob.xo) * partial;
-        float ey = mob.yo + (mob.y - mob.yo) * partial - mob.heightOffset + mob.bbHeight / 2.0F;
-        float ez = mob.zo + (mob.z - mob.zo) * partial;
- 
-        float px = owner.xo + (owner.x - owner.xo) * partial;
-        float py = owner.yo + (owner.y - owner.yo) * partial - 0.2f;
-        float pz = owner.zo + (owner.z - owner.zo) * partial;
- 
-        GL11.glPushMatrix();
-        GL11.glDisable(GL11.GL_TEXTURE_2D);
-        GL11.glDisable(GL11.GL_LIGHTING);
-        GL11.glEnable(GL11.GL_BLEND);
-        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
- 
-        // Outer glowing beam
-        GL11.glColor4f(0.0f, 0.6f, 1.0f, 0.4f);
-        GL11.glLineWidth(8.0f);
-        GL11.glBegin(GL11.GL_LINES);
-        GL11.glVertex3f(ex, ey, ez);
-        GL11.glVertex3f(px, py, pz);
-        GL11.glEnd();
- 
-        // Inner bright core
-        GL11.glColor4f(0.8f, 0.95f, 1.0f, 0.9f);
-        GL11.glLineWidth(3.0f);
-        GL11.glBegin(GL11.GL_LINES);
-        GL11.glVertex3f(ex, ey, ez);
-        GL11.glVertex3f(px, py, pz);
-        GL11.glEnd();
- 
-        GL11.glEnable(GL11.GL_TEXTURE_2D);
-        GL11.glEnable(GL11.GL_LIGHTING);
-        GL11.glDisable(GL11.GL_BLEND);
-        GL11.glPopMatrix();
+        net.classicremastered.minecraft.render.GunBeamRenderer.render(owner, mob, partial, true);
     }
 }

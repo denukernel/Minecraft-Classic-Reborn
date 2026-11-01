@@ -34,9 +34,6 @@ public final class SheepRenderer extends MobRenderer<Sheep> {
         // base body
         model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
 
-        // restore head offsets
-        s.head.y = oldY; s.head.z = oldZ;
-
         // fur pass
         if (mob.hasFur) {
             bind(tm, "/mob/sheep_fur.png");
@@ -44,7 +41,7 @@ public final class SheepRenderer extends MobRenderer<Sheep> {
 
             // copy pose from s → fur (subset needed for shape match)
             fur.head.yaw  = s.head.yaw;  fur.head.pitch  = s.head.pitch;
-            fur.head.y    = s.head.y;    fur.head.x      = s.head.x;
+            fur.head.y    = s.head.y;    fur.head.x      = s.head.x;    fur.head.z      = s.head.z;
             fur.body.yaw  = s.body.yaw;  fur.body.pitch  = s.body.pitch;
             fur.leg1.pitch= s.leg1.pitch; fur.leg2.pitch = s.leg2.pitch;
             fur.leg3.pitch= s.leg3.pitch; fur.leg4.pitch = s.leg4.pitch;
@@ -56,5 +53,8 @@ public final class SheepRenderer extends MobRenderer<Sheep> {
             fur.leg3.render(MODEL_SCALE);
             fur.leg4.render(MODEL_SCALE);
         }
+
+        // restore head offsets
+        s.head.y = oldY; s.head.z = oldZ;
     }
 }

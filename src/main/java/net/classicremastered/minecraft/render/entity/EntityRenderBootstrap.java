@@ -9,7 +9,7 @@ public final class EntityRenderBootstrap {
     public static void init(ModelManager mm) {
         RenderManager.register(Zombie.class,        new ZombieRenderer(mm.getModel("zombie")));
         RenderManager.register(Husk.class,          new HuskRenderer(mm.getModel("husk")));
-        RenderManager.register(Skeleton.class,      new SkeletonRenderer((NewSkeletonModel) mm.getModel("skeleton")));
+        RenderManager.register(Skeleton.class,      new SkeletonRenderer((SkeletonModel) mm.getModel("skeleton")));
         RenderManager.register(Spider.class,        new SpiderRenderer((SpiderModel) mm.getModel("spider")));
         RenderManager.register(Sheep.class,         new SheepRenderer((SheepModel) mm.getModel("sheep"), (SheepFurModel) mm.getModel("sheep.fur")));
         RenderManager.register(Enderman.class,      new EndermanRenderer((EndermanModel) mm.getModel("enderman")));
@@ -30,5 +30,9 @@ public final class EntityRenderBootstrap {
         // ✅ NEW MOB: LeggedMonster
         RenderManager.register(LeggedMonster.class,
             new LeggedMonsterRenderer(mm.getModel("leggedmonster")));
+
+        // ✅ NEW MOB: LongNeckMan
+        RenderManager.register(LongNeckMan.class,
+            new LongNeckManRenderer(mm.getModel("longneckman")));
     }
 }

@@ -91,12 +91,14 @@ public class DroppedItem extends Entity {
                           yo + (y - yo) * partial + 0.1F,
                           zo + (z - zo) * partial);
         GL11.glRotatef((System.currentTimeMillis() / 10) % 360, 0, 1, 0);
-        // Center item vertically and flip Y scale to render right-side up in 3D space
-        GL11.glScalef(0.03F, -0.03F, 0.1F);
-        GL11.glDisable(GL11.GL_CULL_FACE);
-        GL11.glTranslatef(-8.0F, -8.0F, 0.0F); // Offset to rotate around center
-        it.renderIcon(tm, ShapeRenderer.instance);
-        GL11.glEnable(GL11.GL_CULL_FACE);
+        if (net.classicremastered.minecraft.model.GunModel.isGun(lookupId)) {
+            GL11.glScalef(.6f,.6f,.6f);
+            net.classicremastered.minecraft.model.GunModel.render(lookupId, getBrightness(partial));
+            GL11.glPopMatrix();
+            return;
+        }
+        GL11.glScalef(.5f,.5f,.5f);
+        net.classicremastered.minecraft.render.ItemMeshRenderer.renderItem(tm,it,getBrightness(partial));
         GL11.glPopMatrix();
     }
 
@@ -105,3 +107,4 @@ public class DroppedItem extends Entity {
     @Override
     public boolean isPushable() { return true; }
 }
+

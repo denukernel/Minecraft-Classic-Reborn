@@ -231,6 +231,29 @@ public class InventoryScreen extends GuiScreen {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         drawImage(x0, y0, 0, 0, GUI_W, GUI_H);
 
+        // Draw tabs if in creative mode
+        if (this.minecraft != null && !this.minecraft.gamemode.isSurvival()) {
+            int cx1 = x0 + 10;
+            int cx2 = x0 + 65;
+            int cy1 = y0 - 15;
+            int cy2 = y0;
+            
+            int sx1 = x0 + 70;
+            int sx2 = x0 + 125;
+            int sy1 = y0 - 15;
+            int sy2 = y0;
+            
+            // Draw Blocks tab (inactive)
+            boolean hoverCreative = mouseX >= cx1 && mouseX < cx2 && mouseY >= cy1 && mouseY < cy2;
+            int cBg = hoverCreative ? 0x60FFFFFF : 0x30FFFFFF;
+            drawBox(cx1, cy1, cx2, cy2, cBg);
+            drawCenteredString(this.fontRenderer, "Blocks", cx1 + 27, cy1 + 4, 14737632);
+            
+            // Draw Survival tab (active)
+            drawBox(sx1, sy1, sx2, sy2, -1878719232); // matching GUI background
+            drawCenteredString(this.fontRenderer, "Survival", sx1 + 27, sy1 + 4, 16777120);
+        }
+
         // --- player preview (LEAVE AS IS / DO NOT TOUCH) ---
         {
             net.classicremastered.minecraft.player.Player pl = this.minecraft.player;
@@ -243,9 +266,10 @@ public class InventoryScreen extends GuiScreen {
 
                     // mouse → head look
                     float cx = pvX + pvW * 0.5f, cy = pvY + pvH * 0.5f;
-                    float netHeadYawDeg = (mouseX - cx) * 0.6f; // left/right
-                    float headPitchDeg = (cy - mouseY) * 0.6f; // up/down
+                    float netHeadYawDeg = -(mouseX - cx) * 0.6f; // left/right (inverted to look at cursor)
+                    float headPitchDeg = -(cy - mouseY) * 0.6f; // up/down (inverted to look at cursor)
 
+                    GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F); // Reset GL color to avoid black rendering
                     this.minecraft.renderer.setLighting(true);
 
                     GL11.glPushMatrix();
@@ -476,6 +500,20 @@ public class InventoryScreen extends GuiScreen {
     // ---------- input ----------
     @Override
     protected void onMouseClick(int mx, int my, int button) {
+        if (this.minecraft != null && !this.minecraft.gamemode.isSurvival()) {
+            int x0 = (this.width - GUI_W) / 2;
+            int y0 = (this.height - GUI_H) / 2;
+            int cx1 = x0 + 10;
+            int cx2 = x0 + 65;
+            int cy1 = y0 - 15;
+            int cy2 = y0;
+            if (mx >= cx1 && mx < cx2 && my >= cy1 && my < cy2 && button == 0) {
+                flushCarriedBackIntoInventory();
+                this.minecraft.setCurrentScreen(new BlockSelectScreen());
+                return;
+            }
+        }
+
         Inventory inv = this.minecraft.player.inventory;
 
         if (totalPages > 1) {

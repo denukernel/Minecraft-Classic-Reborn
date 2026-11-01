@@ -1,172 +1,57 @@
 package net.classicremastered.minecraft.mob.ai;
 
-import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.player.Player;
 
+/** Shared navigation for home travel, wandering, fleeing, and hostile villagers. */
 public class VillagerAI extends BasicAI {
-
-    private static final long serialVersionUID = 0L;
-
-    public float homeX, homeY, homeZ;
-    public float homeRadius = 3.0f;
-    public boolean enforceInsideAtNight = true; // go home & stay put at night
-
-    public VillagerAI(float hx, float hy, float hz, float radius) {
-        super();
-        this.homeX = hx;
-        this.homeY = hy;
-        this.homeZ = hz;
-        this.homeRadius = radius;
-        // gentle walk speed for villagers
-        this.runSpeed = 0.6F;
-        this.walkSpeed = 0.10f;
+    private static final long serialVersionUID=0L;
+    public float homeX,homeY,homeZ;
+    public float homeRadius=3f;
+    public boolean enforceInsideAtNight=true;
+    private boolean freeWander,returningHome;
+    @Override protected boolean usesWanderNavigation(){return false;}
+    @Override protected boolean usesPlannedWandering(){return freeWander;}
+    public VillagerAI(float x,float y,float z,float radius) {
+        homeX=x;homeY=y;homeZ=z;homeRadius=radius;
+        runSpeed=0.6f;walkSpeed=0.1f;
     }
-
-    @Override
-    protected void update() {
-        if (this.level == null || this.mob == null) {
-            super.update();
-            return;
+    @Override protected void update() {
+        freeWander=false;
+        xxa=yya=yRotA=0;jumping=running=false;
+        if(level==null || !(mob instanceof Villager villager))return;
+        boolean home=villager.hasHome;
+        if(home) {
+            homeX=villager.homeX;homeY=villager.homeY;homeZ=villager.homeZ;homeRadius=villager.homeRadius;
         }
-
-        if (checkAndPerformFlee()) {
-            return;
-        }
-
-        boolean reportedHome = false;
-        Villager villager = null;
-        if (this.mob instanceof Villager) {
-            villager = (Villager) this.mob;
-            reportedHome = villager.hasHome;
-            if (reportedHome) {
-                this.homeX = villager.homeX;
-                this.homeY = villager.homeY;
-                this.homeZ = villager.homeZ;
-                this.homeRadius = villager.homeRadius;
-            }
-        }
-
-        // --- Hostile villagers: break out & chase player ---
-        if (villager != null && villager.isHostile()) {
-            this.runSpeed = 1.2F; // zombie speed
-            this.walkSpeed = 0.3f;
-
-            if (reportedHome) {
-                // If inside home area → head for the door with per-villager separation
-                if (Math.abs(villager.x - homeX) < homeRadius && Math.abs(villager.z - homeZ) < homeRadius) {
-                    float sepOffset = (villager.hashCode() % 3 - 1) * 0.8f; // -0.8, 0, +0.8
-                    int doorX = (int) (homeX + sepOffset);
-                    int doorY = (int) homeY;
-                    int doorZ = (int) (homeZ - homeRadius - 0.5f);
-
-                    // If door is blocked, smash through
-                    int block = level.getTile(doorX, doorY, doorZ);
-                    if (block != 0 && net.classicremastered.minecraft.level.tile.Block.blocks[block] != null
-                            && net.classicremastered.minecraft.level.tile.Block.blocks[block] != net.classicremastered.minecraft.level.tile.Block.BEDROCK) {
-                        level.setTile(doorX, doorY, doorZ, 0);
-                        if (level.minecraft != null && level.minecraft.hud != null) {
-                            level.minecraft.hud.addChat("&4A villager smashes the door!");
-                        }
-                    }
-
-                    // Move toward door
-                    float dx = (doorX + 0.5f) - mob.x;
-                    float dz = (doorZ + 0.5f) - mob.z;
-                    float targetYaw = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
-
-                    float dyaw = targetYaw - mob.yRot;
-                    while (dyaw < -180.0F)
-                        dyaw += 360.0F;
-                    while (dyaw >= 180.0F)
-                        dyaw -= 360.0F;
-
-                    this.yRotA = dyaw * 0.5F;
-                    this.yya = this.runSpeed;
-                    this.running = true;
-                    this.jumping = false; // no stuck jump at door
-                    return;
+        if(checkAndPerformFlee())return;
+        if(villager.isHostile()) {
+            runSpeed=1.2f;walkSpeed=0.3f;
+            if(home && Math.abs(mob.x-homeX)<homeRadius && Math.abs(mob.z-homeZ)<homeRadius) {
+                float separation=(villager.hashCode()%3-1)*0.8f;
+                int x=(int)(homeX+separation),y=(int)homeY,z=(int)(homeZ-homeRadius-0.5f);
+                int id=level.getTile(x,y,z);
+                if(id!=0 && Block.blocks[id]!=null && Block.blocks[id]!=Block.BEDROCK) {
+                    level.setTile(x,y,z,0);
+                    if(level.minecraft!=null && level.minecraft.hud!=null)level.minecraft.hud.addChat("&4A villager smashes the door!");
                 }
+                navigateTo(x+0.5f,homeY-1,z+0.5f,runSpeed);
+                return;
             }
-
-            // --- Outside home → chase player within 40 blocks ---
-            Player target = (this.level != null) ? (Player) this.level.player : null;
-            if (target != null) {
-                float dx = target.x - mob.x;
-                float dz = target.z - mob.z;
-                float dist2 = dx * dx + dz * dz;
-
-                if (dist2 < 40 * 40) {
-                    float targetYaw = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
-
-                    float dyaw = targetYaw - mob.yRot;
-                    while (dyaw < -180.0F)
-                        dyaw += 360.0F;
-                    while (dyaw >= 180.0F)
-                        dyaw -= 360.0F;
-
-                    this.yRotA = dyaw * 0.5F;
-                    this.yya = this.runSpeed;
-                    this.running = true;
-                    return;
-                }
+            Player target=level.getNearestPlayer(mob.x,mob.y,mob.z,40);
+            if(target!=null && target.health>0 && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(target)) {
+                navigateTo(target.x,target.bb.y0,target.z,runSpeed);return;
             }
-
-            // Default hostile wander
-            super.update();
-            return;
+        } else if(home) {
+            float dx=homeX-mob.x,dz=homeZ-mob.z,distance=dx*dx+dz*dz;
+            boolean night=enforceInsideAtNight && !level.isDaytime();
+            if(distance>homeRadius*homeRadius*(night?1f:1.6f))returningHome=true;
+            if(distance<homeRadius*homeRadius*0.5f)returningHome=false;
+            if(returningHome) {navigateTo(homeX,homeY-1,homeZ,runSpeed);return;}
+            if(night)return;
         }
-
-        // --- Peaceful villagers: original home/night behavior ---
-        if (reportedHome && enforceInsideAtNight && !this.level.isDaytime()) {
-            float dx = homeX - mob.x;
-            float dz = homeZ - mob.z;
-            float dist2 = dx * dx + dz * dz;
-            float r2 = homeRadius * homeRadius;
-
-            if (dist2 > r2) {
-                float targetYaw = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
-                float dyaw = targetYaw - mob.yRot;
-                while (dyaw < -180.0F)
-                    dyaw += 360.0F;
-                while (dyaw >= 180.0F)
-                    dyaw -= 360.0F;
-
-                this.yRotA = dyaw * 0.5F;
-                this.yya = this.runSpeed;
-                this.running = true;
-            } else {
-                this.yya = 0.0F;
-                this.xxa = 0.0F;
-                this.running = false;
-                this.jumping = false;
-            }
-            return;
-        }
-
-        // --- Daytime: gentle bias to stay near home ---
+        freeWander=true;
         super.update();
-
-        if (reportedHome) {
-            float dx = homeX - mob.x;
-            float dz = homeZ - mob.z;
-            float dist2 = dx * dx + dz * dz;
-            float softLimit = homeRadius * homeRadius * 1.6f;
-
-            if (dist2 > softLimit) {
-                float targetYaw = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
-                float dyaw = targetYaw - mob.yRot;
-                while (dyaw < -180.0F)
-                    dyaw += 360.0F;
-                while (dyaw >= 180.0F)
-                    dyaw -= 360.0F;
-
-                this.yRotA += dyaw * 0.05F;
-                this.yya += 0.2f;
-                this.noActionTime = 0;
-            }
-        }
     }
-
 }

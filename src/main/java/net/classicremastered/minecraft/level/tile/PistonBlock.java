@@ -22,31 +22,4 @@ public final class PistonBlock extends Block {
         if (side == 1) return topTex;
         return sideTex;
     }
-
-
-    private void pushBlock(Level level, int x, int y, int z, int dir) {
-        int tx = x, ty = y, tz = z;
-        if (dir == 0) ty--;
-        if (dir == 1) ty++;
-        if (dir == 2) tz--;
-        if (dir == 3) tz++;
-        if (dir == 4) tx--;
-        if (dir == 5) tx++;
-
-        int id = level.getTile(tx, ty, tz);
-        if (id != 0) {
-            int fx = tx, fy = ty, fz = tz;
-            if (dir == 0) fy--;
-            if (dir == 1) fy++;
-            if (dir == 2) fz--;
-            if (dir == 3) fz++;
-            if (dir == 4) fx--;
-            if (dir == 5) fx++;
-
-            if (level.getTile(fx, fy, fz) == 0) {
-                level.setTileNoUpdate(fx, fy, fz, id);
-                level.setTileNoUpdate(tx, ty, tz, 0);
-            }
-        }
-    }
 }

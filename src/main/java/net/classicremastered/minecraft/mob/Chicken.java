@@ -8,6 +8,9 @@ import net.classicremastered.minecraft.level.itemstack.Item;
 
 public class Chicken extends Mob {
 
+    private static final float WIDTH = .6F;
+    private static final float HEIGHT = .95F;
+
     // --- Wing physics (Beta 1.8 style) ---
     public float wingRotation = 0.0F; // accumulates rotation
     public float destPos = 0.0F;      // flap progress target
@@ -18,9 +21,14 @@ public class Chicken extends Mob {
         super(level);
         this.modelName = "chicken";
         this.textureName = "/mob/chicken.png";
+        this.setSize(WIDTH, HEIGHT);
         this.setPos(x, y, z);
-        this.setSize(0.3F, 0.4F); 
         this.health = 4;
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        setSize(WIDTH, HEIGHT);
     }
 
     @Override

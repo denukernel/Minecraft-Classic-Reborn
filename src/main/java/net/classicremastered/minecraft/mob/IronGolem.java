@@ -31,38 +31,29 @@ public final class IronGolem extends Mob {
 
     @Override
     public void aiStep() {
-        super.aiStep();
         if (level == null) return;
         if (this.health <= 0) return;
-
+        Entity target=null;
         if (builtByPlayer) {
-            // Defender mode: attack hostile mobs
-            Mob target = findNearestHostile(16.0f);
-            if (target != null) {
-                moveTowardAndAttack(target);
-            }
+            target=findNearestHostile(32.0f);
         } else {
-            // Hostile mode: attack player
-            Player p = level.minecraft != null ? level.minecraft.player : null;
-            if (p == null || p.removed || p.health <= 0) return;
-            if (level.creativeMode) return;
-            moveTowardAndAttack(p);
+            Entity candidate=level.getPlayer();
+            if(candidate instanceof Player p && !p.removed && p.health>0 && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(p))target=p;
         }
+        if(ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic)basic.attackTarget=target;
+        super.aiStep();
+        if(target!=null)attackNearby(target);
     }
 
     // --- helper: move toward & attack any entity ---
-    private void moveTowardAndAttack(Entity e) {
+    private void attackNearby(Entity e) {
         float dx = e.x - this.x;
         float dz = e.z - this.z;
         float dist = (float)Math.sqrt(dx*dx + dz*dz);
 
-        if (dist > 0.001f) {
-            this.xd += (dx / dist) * 0.05f;
-            this.zd += (dz / dist) * 0.05f;
-        }
-        this.yRot = (float)(Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
-
-        if (dist < 2.0f && this.attackTime == 0) {
+        if (dist < 2.0f && this.attackTime == 0 && level.clip(
+                new net.classicremastered.minecraft.model.Vec3D(x,bb.y0+bbHeight*0.7f,z),
+                new net.classicremastered.minecraft.model.Vec3D(e.x,e.bb.y0+e.bbHeight*0.5f,e.z))==null) {
             this.attackTime = 40; // 2s cooldown
             e.hurt(this, 10);
 

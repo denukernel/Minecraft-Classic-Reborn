@@ -89,7 +89,10 @@ public class HumanoidModel extends Model {
     public void render(float limbSwing, float limbSwingAmount, float ageInTicks,
                        float netHeadYaw, float headPitch, float scale) {
         this.setRotationAngles(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, scale);
+        renderParts(scale);
+    }
 
+    private void renderParts(float scale) {
         head.render(scale);
         headwear.render(scale);
         body.render(scale);
@@ -99,12 +102,35 @@ public class HumanoidModel extends Model {
         leftLeg.render(scale);
     }
 
+    public void renderHoldingGun(float limbSwing, float limbSwingAmount, float ageInTicks,
+                                 float netHeadYaw, float headPitch, float scale) {
+        setRotationAngles(limbSwing,limbSwingAmount,ageInTicks,netHeadYaw,headPitch,scale);
+        float rp=rightArm.pitch,lp=leftArm.pitch,ry=rightArm.yaw,ly=leftArm.yaw;
+        try {
+            rightArm.pitch=-1.3f+headPitch/57.295776f;
+            leftArm.pitch=-1.15f+headPitch/57.295776f;
+            rightArm.yaw=-.12f;leftArm.yaw=.30f;
+            renderParts(scale);
+        } finally {
+            rightArm.pitch=rp;leftArm.pitch=lp;rightArm.yaw=ry;leftArm.yaw=ly;
+        }
+    }
+
+    public void renderHoldingBow(float limb,float amount,float age,float yaw,float pitch,float scale,float draw,boolean aiming) {
+        setRotationAngles(limb,amount,age,yaw,pitch,scale);
+        try {
+            BowPose.apply(this,yaw/57.295776f,pitch/57.295776f,draw,aiming);
+            renderParts(scale);
+        } finally {setRotationAngles(limb,amount,age,yaw,pitch,scale);}
+    }
+
     @Override
     public void setRotationAngles(float limbSwing, float limbSwingAmount, float ageInTicks,
                                   float netHeadYaw, float headPitch, float scale) {
         // Head follows look direction
         head.yaw   = netHeadYaw / 57.295776F;
         head.pitch = headPitch  / 57.295776F;
+        rightArm.yaw=leftArm.yaw=0;
 
         // Arms: swing opposite each other, synced with legs
         rightArm.pitch = MathHelper.cos(limbSwing * 0.6662F + (float)Math.PI) * 1.5F * limbSwingAmount;

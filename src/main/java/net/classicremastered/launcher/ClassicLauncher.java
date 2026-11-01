@@ -50,11 +50,24 @@ public final class ClassicLauncher {
 
     private final JFrame frame = new JFrame("Minecraft Classic Launcher");
 
-    private final JComboBox<String> cbResolution = new JComboBox<>(new String[] { "854 x 480", "1280 x 720" });
+    private final JComboBox<String> cbResolution = new JComboBox<>(new String[] {
+        "854 x 480",
+        "1280 x 720",
+        "1600 x 900",
+        "1920 x 1080"
+    });
+    private final JComboBox<String> cbMemory = new JComboBox<>(new String[] {
+        "1024 MB (1 GB)",
+        "2048 MB (2 GB)",
+        "4096 MB (4 GB - Recommended)",
+        "6144 MB (6 GB)",
+        "8192 MB (8 GB)"
+    });
     private final JCheckBox cbFullscreen = new JCheckBox("Fullscreen", false);
+    private final JCheckBox cbMultithreaded = new JCheckBox("Multithreaded Core Mode", true);
 
-    private final JButton btnPlay = new JButton("Play");
-    private final JButton btnQuit = new JButton("Quit");
+    private final JButton btnPlay = new MinecraftButton("Play");
+    private final JButton btnQuit = new MinecraftButton("Quit");
 
     private final LauncherConfig cfg = new LauncherConfig();
 
@@ -62,27 +75,176 @@ public final class ClassicLauncher {
         loadConfig();
 
         // Set launcher icon(s)
+        java.awt.Image logoIcon = null;
         try {
             var icons = loadIcons();
-            if (!icons.isEmpty())
+            if (!icons.isEmpty()) {
                 frame.setIconImages(icons);
+                logoIcon = icons.get(0);
+            }
         } catch (Throwable ignored) {
         }
 
-        JPanel root = new JPanel(new BorderLayout(12, 12));
-        root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        // Try loading Minecraft dirt/stone background texture
+        java.awt.image.BufferedImage bgTexture = null;
+        try {
+            java.io.InputStream in = ClassicLauncher.class.getResourceAsStream("/dirt.png");
+            if (in == null) in = ClassicLauncher.class.getResourceAsStream("/rock.png");
+            if (in != null) {
+                bgTexture = javax.imageio.ImageIO.read(in);
+            }
+        } catch (Throwable ignored) {
+        }
 
-        JLabel title = new JLabel("Minecraft 0.30 IMPROVED");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
-        root.add(title, BorderLayout.NORTH);
+        final java.awt.image.BufferedImage finalBgTexture = bgTexture;
+        final java.awt.Image finalLogoIcon = logoIcon;
 
-        JPanel pVideo = new JPanel(new GridLayout(2, 1, 6, 6));
-        pVideo.setBorder(BorderFactory.createTitledBorder("Video"));
-        pVideo.add(cbResolution);
-        pVideo.add(cbFullscreen);
-        root.add(pVideo, BorderLayout.CENTER);
+        // Custom Background Root Panel
+        JPanel root = new JPanel(new BorderLayout(14, 14)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                int w = getWidth();
+                int h = getHeight();
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+                if (finalBgTexture != null) {
+                    // Tile textured background (scaled 2x for retro pixel art feel)
+                    int tw = finalBgTexture.getWidth() * 2;
+                    int th = finalBgTexture.getHeight() * 2;
+                    for (int x = 0; x < w; x += tw) {
+                        for (int y = 0; y < h; y += th) {
+                            g2.drawImage(finalBgTexture, x, y, tw, th, null);
+                        }
+                    }
+                    // Dark overlay with slight vignette for sleek modern contrast
+                    g2.setColor(new Color(0, 0, 0, 165));
+                    g2.fillRect(0, 0, w, h);
+                } else {
+                    // Fallback sleek dark gradient
+                    g2.setPaint(new GradientPaint(0, 0, new Color(42, 42, 46), 0, h, new Color(20, 20, 24)));
+                    g2.fillRect(0, 0, w, h);
+                }
+                g2.dispose();
+            }
+        };
+        root.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
+
+        // --- Header / Title Area ---
+        JPanel headerPanel = new JPanel(new BorderLayout(10, 0));
+        headerPanel.setOpaque(false);
+
+        if (finalLogoIcon != null) {
+            JLabel iconLabel = new JLabel(new ImageIcon(finalLogoIcon.getScaledInstance(36, 36, Image.SCALE_FAST)));
+            headerPanel.add(iconLabel, BorderLayout.WEST);
+        }
+
+        JPanel titleTextPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        titleTextPanel.setOpaque(false);
+
+        JLabel title = new JLabel("Minecraft 0.30") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                // Shadow
+                g2.setFont(getFont());
+                g2.setColor(new Color(38, 38, 38));
+                g2.drawString(getText(), 2, getHeight() - 4);
+                // Main
+                g2.setColor(Color.WHITE);
+                g2.drawString(getText(), 0, getHeight() - 6);
+                g2.dispose();
+            }
+        };
+        title.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        title.setPreferredSize(new Dimension(220, 24));
+
+        JLabel subtitle = new JLabel("IMPROVED EDITION");
+        subtitle.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        subtitle.setForeground(new Color(255, 215, 64)); // Classic golden text
+
+        titleTextPanel.add(title);
+        titleTextPanel.add(subtitle);
+        headerPanel.add(titleTextPanel, BorderLayout.CENTER);
+
+        root.add(headerPanel, BorderLayout.NORTH);
+
+        // --- Settings Panel (Dark translucent card) ---
+        JPanel pSettings = new JPanel(new GridBagLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(0, 0, 0, 140));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.setColor(new Color(255, 255, 255, 30));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        pSettings.setOpaque(false);
+        pSettings.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(3, 4, 3, 4);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        // Row 0: Resolution
+        JLabel lblRes = new JLabel("Resolution:");
+        lblRes.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        lblRes.setForeground(new Color(220, 220, 220));
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 0.35;
+        pSettings.add(lblRes, gbc);
+
+        styleComboBox(cbResolution);
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        gbc.weightx = 0.65;
+        pSettings.add(cbResolution, gbc);
+
+        // Row 1: Memory (RAM)
+        JLabel lblMem = new JLabel("Memory (RAM):");
+        lblMem.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        lblMem.setForeground(new Color(220, 220, 220));
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.weightx = 0.35;
+        pSettings.add(lblMem, gbc);
+
+        styleComboBox(cbMemory);
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        gbc.weightx = 0.65;
+        pSettings.add(cbMemory, gbc);
+
+        // Row 2: Fullscreen CheckBox
+        styleCheckBox(cbFullscreen);
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        gbc.insets = new Insets(6, 4, 1, 4);
+        pSettings.add(cbFullscreen, gbc);
+
+        // Row 3: Multithreaded CheckBox
+        styleCheckBox(cbMultithreaded);
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 2;
+        gbc.insets = new Insets(2, 4, 2, 4);
+        pSettings.add(cbMultithreaded, gbc);
+
+        root.add(pSettings, BorderLayout.CENTER);
+
+        // --- Actions Footer ---
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        actions.setOpaque(false);
+        btnQuit.setPreferredSize(new Dimension(84, 30));
+        btnPlay.setPreferredSize(new Dimension(100, 30));
+
         actions.add(btnQuit);
         actions.add(btnPlay);
         root.add(actions, BorderLayout.SOUTH);
@@ -133,17 +295,150 @@ public final class ClassicLauncher {
         });
 
         cbResolution.setSelectedItem(cfg.resString());
+        cbMemory.setSelectedItem(cfg.ramString());
         cbFullscreen.setSelected(cfg.fullscreen);
+        cbMultithreaded.setSelected(cfg.multithreaded);
 
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.setContentPane(root);
-        frame.pack();
         frame.setResizable(false);
+        frame.pack();
+        frame.setSize(410, 310);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-
         frame.toFront();
         frame.requestFocus();
+    }
+
+    private static void styleComboBox(JComboBox<String> combo) {
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        combo.setBackground(new Color(36, 36, 40));
+        combo.setForeground(Color.WHITE);
+        combo.setFocusable(false);
+        combo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+                if (isSelected) {
+                    setBackground(new Color(75, 100, 150));
+                    setForeground(Color.WHITE);
+                } else {
+                    setBackground(new Color(36, 36, 40));
+                    setForeground(new Color(230, 230, 230));
+                }
+                return this;
+            }
+        });
+    }
+
+    private static void styleCheckBox(JCheckBox cb) {
+        cb.setOpaque(false);
+        cb.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        cb.setForeground(new Color(230, 230, 230));
+        cb.setFocusPainted(false);
+        cb.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    }
+
+    /**
+     * Custom styled Minecraft button matching classic stone button aesthetics
+     */
+    private static class MinecraftButton extends JButton {
+        public MinecraftButton(String text) {
+            super(text);
+            setContentAreaFilled(false);
+            setFocusPainted(false);
+            setBorderPainted(false);
+            setFont(new Font("Segoe UI", Font.BOLD, 13));
+            setForeground(new Color(224, 224, 224));
+            setCursor(new Cursor(Cursor.HAND_CURSOR));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+
+            int w = getWidth();
+            int h = getHeight();
+            boolean pressed = getModel().isPressed();
+            boolean hover = getModel().isRollover();
+            boolean enabled = isEnabled();
+
+            // Background stone base color
+            Color topBg, bottomBg, borderColor, highlightColor, shadowColor;
+
+            if (!enabled) {
+                topBg = new Color(70, 70, 70);
+                bottomBg = new Color(55, 55, 55);
+                borderColor = new Color(30, 30, 30);
+                highlightColor = new Color(90, 90, 90);
+                shadowColor = new Color(40, 40, 40);
+            } else if (pressed) {
+                topBg = new Color(65, 65, 65);
+                bottomBg = new Color(85, 85, 85);
+                borderColor = Color.BLACK;
+                highlightColor = new Color(50, 50, 50);
+                shadowColor = new Color(130, 130, 130);
+            } else if (hover) {
+                topBg = new Color(130, 140, 175);
+                bottomBg = new Color(105, 115, 150);
+                borderColor = Color.BLACK;
+                highlightColor = new Color(165, 175, 210);
+                shadowColor = new Color(70, 75, 100);
+            } else {
+                topBg = new Color(110, 110, 110);
+                bottomBg = new Color(88, 88, 88);
+                borderColor = Color.BLACK;
+                highlightColor = new Color(145, 145, 145);
+                shadowColor = new Color(55, 55, 55);
+            }
+
+            // Fill gradient body
+            g2.setPaint(new GradientPaint(0, 0, topBg, 0, h, bottomBg));
+            g2.fillRect(2, 2, w - 4, h - 4);
+
+            // Bevel highlights
+            g2.setColor(highlightColor);
+            g2.drawLine(2, 2, w - 3, 2); // Top inner
+            g2.drawLine(2, 2, 2, h - 3); // Left inner
+
+            // Bevel shadows
+            g2.setColor(shadowColor);
+            g2.drawLine(w - 3, 2, w - 3, h - 3); // Right inner
+            g2.drawLine(2, h - 3, w - 3, h - 3); // Bottom inner
+
+            // Outer dark border
+            g2.setColor(borderColor);
+            g2.drawRect(0, 0, w - 1, h - 1);
+
+            // Draw text with shadow
+            g2.setFont(getFont());
+            FontMetrics fm = g2.getFontMetrics();
+            int textX = (w - fm.stringWidth(getText())) / 2;
+            int textY = (h + fm.getAscent() - fm.getDescent()) / 2;
+
+            if (pressed) {
+                textX += 1;
+                textY += 1;
+            }
+
+            // Text Drop Shadow
+            g2.setColor(new Color(30, 30, 30));
+            g2.drawString(getText(), textX + 1, textY + 1);
+
+            // Text Fore color
+            if (!enabled) {
+                g2.setColor(new Color(140, 140, 140));
+            } else if (hover) {
+                g2.setColor(new Color(255, 255, 160)); // Classic hover yellow
+            } else {
+                g2.setColor(new Color(224, 224, 224));
+            }
+            g2.drawString(getText(), textX, textY);
+
+            g2.dispose();
+        }
     }
     // ClassicLauncher
 
@@ -188,6 +483,9 @@ public final class ClassicLauncher {
 
         win.setLayout(new BorderLayout());
         win.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+
+        System.setProperty("minecraft.ramMb", String.valueOf(cfg.ramMb));
+        System.setProperty("minecraft.multithreaded", String.valueOf(cfg.multithreaded));
 
         final MCraftApplet applet = new MCraftApplet();
         final MinecraftCanvas canvas = new MinecraftCanvas();
@@ -312,11 +610,27 @@ public final class ClassicLauncher {
         }
     }
 
+    private static int parseRam(String s) {
+        if (s == null) return 4096;
+        if (s.startsWith("1024")) return 1024;
+        if (s.startsWith("2048")) return 2048;
+        if (s.startsWith("4096")) return 4096;
+        if (s.startsWith("6144")) return 6144;
+        if (s.startsWith("8192")) return 8192;
+        try {
+            return Integer.parseInt(s.replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return 4096;
+        }
+    }
+
     private void saveConfig() {
         String res = (String) cbResolution.getSelectedItem();
         cfg.width = parseRes(res)[0];
         cfg.height = parseRes(res)[1];
         cfg.fullscreen = cbFullscreen.isSelected();
+        cfg.ramMb = parseRam((String) cbMemory.getSelectedItem());
+        cfg.multithreaded = cbMultithreaded.isSelected();
         try {
             cfg.save();
         } catch (IOException e) {
@@ -540,6 +854,8 @@ public final class ClassicLauncher {
     private static final class LauncherConfig {
         int width = 854, height = 480;
         boolean fullscreen = false;
+        int ramMb = 4096;
+        boolean multithreaded = true;
 
         private static Path propsPath() {
             String appData = System.getenv("APPDATA");
@@ -549,9 +865,16 @@ public final class ClassicLauncher {
         }
 
         String resString() {
-            if (width == 1280 && height == 720)
-                return "1280 x 720";
-            return "854 x 480";
+            return width + " x " + height;
+        }
+
+        String ramString() {
+            if (ramMb == 1024) return "1024 MB (1 GB)";
+            if (ramMb == 2048) return "2048 MB (2 GB)";
+            if (ramMb == 4096) return "4096 MB (4 GB - Recommended)";
+            if (ramMb == 6144) return "6144 MB (6 GB)";
+            if (ramMb == 8192) return "8192 MB (8 GB)";
+            return ramMb + " MB";
         }
 
         void load() throws IOException {
@@ -565,6 +888,8 @@ public final class ClassicLauncher {
             width = parseInt(p.getProperty("width"), width);
             height = parseInt(p.getProperty("height"), height);
             fullscreen = Boolean.parseBoolean(p.getProperty("fullscreen", String.valueOf(fullscreen)));
+            ramMb = parseInt(p.getProperty("ramMb"), ramMb);
+            multithreaded = Boolean.parseBoolean(p.getProperty("multithreaded", String.valueOf(multithreaded)));
         }
 
         void save() throws IOException {
@@ -572,6 +897,8 @@ public final class ClassicLauncher {
             p.setProperty("width", String.valueOf(width));
             p.setProperty("height", String.valueOf(height));
             p.setProperty("fullscreen", String.valueOf(fullscreen));
+            p.setProperty("ramMb", String.valueOf(ramMb));
+            p.setProperty("multithreaded", String.valueOf(multithreaded));
             Path path = propsPath();
             Files.createDirectories(path.getParent());
             try (OutputStream out = Files.newOutputStream(path)) {

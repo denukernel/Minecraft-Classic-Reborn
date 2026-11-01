@@ -25,6 +25,9 @@ public class BucketItem extends ToolItem {
         };
     }
 
+    @Override public float getModelTextureU0() { return bucketType/3f; }
+    @Override public float getModelTextureU1() { return (bucketType+1)/3f; }
+
     @Override
     public void renderIcon(TextureManager tm, ShapeRenderer sr) {
         String tex = getTexture();

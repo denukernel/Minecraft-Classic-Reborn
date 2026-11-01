@@ -21,7 +21,7 @@ public final class ChickenModel extends AnimalModel {
         super(0, 0.0F);
 
         int yOff = 16;
-        this.groundOffset = 24.5F;
+        this.groundOffset = 24.0F;
 
         this.head = new ModelPart(0, 0);
         this.head.setBounds(-2F, -6F, -2F, 4, 6, 3, 0F);

@@ -152,6 +152,12 @@ public final class PaulsCodeSoundManager {
             return;
         key = key.replace('\\', '/');
 
+        if (settings != null && !settings.allowMobSounds) {
+            if (key.startsWith("mob/") || key.startsWith("mob.")) {
+                return;
+            }
+        }
+
         String chosenKey = key;
 
         // Far Lands corruption rules (unchanged)

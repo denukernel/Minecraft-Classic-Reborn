@@ -15,7 +15,7 @@ import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.phys.AABB;
 
 public final class LevelInfiniteTerrain extends Level {
-    private final SimpleChunkManager chunks;
+    final SimpleChunkManager chunks;
     public final long randomSeed;
 
     // liquid/physics tick list
@@ -208,6 +208,7 @@ public final class LevelInfiniteTerrain extends Level {
     @Override
     public void tick() {
         tickCount++;
+        tickDayNightCycle();
 
         // --- Scheduled block ticks ---
         int processed = 0;
@@ -253,7 +254,7 @@ public final class LevelInfiniteTerrain extends Level {
 
         // --- Mob despawn ---
         if (this.blockMap != null && this.blockMap.all != null) {
-            final float DESPAWN_RANGE = 64f;
+            final float DESPAWN_RANGE = MobSpawner.DESPAWN_RADIUS;
             final float DESPAWN_D2 = DESPAWN_RANGE * DESPAWN_RANGE;
             for (int i = blockMap.all.size() - 1; i >= 0; --i) {
                 Object o = blockMap.all.get(i);
@@ -497,67 +498,6 @@ public final class LevelInfiniteTerrain extends Level {
 
     public int getHeight() {
         return this.depth;
-    }
-
-    // Add these fields to LevelInfiniteTerrain
-    private final java.util.HashMap<Long, Float> brightnessCache = new java.util.HashMap<>();
-    private int brightnessCacheTick = -1;
-
-    // Extracted heavy brightness logic into a private helper
-    private float computeBrightnessInternal(int x, int y, int z) {
-        if (y < 0)
-            return 0.05f;
-        if (y >= this.depth)
-            return 1.0f;
-
-        int id = getTile(x, y, z);
-        if (id > 0) {
-            Block b = Block.blocks[id];
-            if (b != null) {
-                int lv = b.getLightValue();
-                if (lv > 0)
-                    return 1.0f; // 🔥 fire/lava = full bright
-            }
-        }
-
-        // --- Nearby glow (reduced radius for performance) ---
-        final int R = 3; // 🔥 much smaller radius
-        final float R2 = R * R;
-        float maxGlow = 0f;
-
-        for (int dx = -R; dx <= R; dx++) {
-            for (int dy = -R; dy <= R; dy++) {
-                for (int dz = -R; dz <= R; dz++) {
-                    int idn = getTile(x + dx, y + dy, z + dz);
-                    if (idn <= 0)
-                        continue;
-                    Block nb = Block.blocks[idn];
-                    if (nb == null)
-                        continue;
-
-                    int lv = nb.getLightValue();
-                    if (lv <= 0)
-                        continue;
-
-                    float dist2 = dx * dx + dy * dy + dz * dz;
-                    if (dist2 > R2)
-                        continue;
-
-                    float strength = (lv / 15.0f) * (1.0f - (float) Math.sqrt(dist2) / R);
-                    if (strength > maxGlow)
-                        maxGlow = strength;
-                }
-            }
-        }
-
-        if (maxGlow > 0f) {
-            return Math.min(1.0f, 0.25f + maxGlow * 0.75f);
-        }
-
-        // Default: sky/cave brightness
-        final float outside = getDayFactorSmooth();
-        final float caveBase = 0.35f;
-        return isLit(x, y, z) ? outside : caveBase;
     }
 
     // === Core block access ===

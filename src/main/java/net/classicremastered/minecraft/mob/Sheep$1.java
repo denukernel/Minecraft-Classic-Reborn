@@ -14,6 +14,9 @@ final class Sheep$1 extends BasicAI {
    Sheep$1(Sheep var1) {
       this.sheep = var1;
    }
+   @Override protected boolean navigationAllowed() {
+      return !sheep.grazing && super.navigationAllowed();
+   }
 
    protected final void update() {
       float var1 = MathHelper.sin(this.sheep.yRot * 3.1415927F / 180.0F);

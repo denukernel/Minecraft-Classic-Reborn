@@ -31,16 +31,6 @@ public class Villager extends Mob {
         this.textureName = "/mob/villager.png";
         this.modelName = "villager";
 
-        this.idlePitchMin = 0.5F;
-        this.idlePitchMax = 0.75F;
-        this.soundIdle = "random/classic_hurt";
-        this.soundHurt = "random/classic_hurt";
-        this.soundDeath = "random/classic_hurt";
-        this.hurtPitchMin = 0.3F;
-        this.hurtPitchMax = 0.3F;
-        this.deathPitchMin = 0.6F;
-        this.deathPitchMax = 0.6F;
-
         this.coinDrop = -2;
         this.setPos(x, y, z);
     }
@@ -91,6 +81,17 @@ public class Villager extends Mob {
                 p.minecraft.hud.addChat("&cNot enough coins to trade!");
             }
         }
+    }
+
+    @Override
+    public void aiStep() {
+        if(hostile && ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
+                && !(ai instanceof net.classicremastered.minecraft.mob.ai.VillagerAI)) {
+            Player target=level.getNearestPlayer(x,y,z,32);
+            basic.attackTarget=target!=null && target.health>0
+                && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(target)?target:null;
+        }
+        super.aiStep();
     }
 
     @Override
@@ -162,7 +163,6 @@ public class Villager extends Mob {
                 float doorZ = this.homeZ - this.homeRadius; // assume south side door
                 if (Math.abs(this.x - this.homeX) < this.homeRadius
                         && Math.abs(this.z - this.homeZ) < this.homeRadius) {
-                    moveToward(doorX + 0.5f, doorZ + 0.5f, 0.15f);
                     return;
                 }
             }
@@ -173,11 +173,11 @@ public class Villager extends Mob {
             float dist2 = dx * dx + dz * dz;
             if (dist2 < 16 * 16) {
                 float mag = (float) Math.sqrt(dist2);
-                this.xd += (dx / mag) * 0.2f;
-                this.zd += (dz / mag) * 0.2f;
                 this.running = true;
 
-                if (mag < 2.0f && this.attackTime <= 0) {
+                if (mag < 2.0f && this.attackTime <= 0 && level.clip(
+                        new net.classicremastered.minecraft.model.Vec3D(x,bb.y0+bbHeight*0.85f,z),
+                        new net.classicremastered.minecraft.model.Vec3D(p.x,p.bb.y0+p.bbHeight*0.5f,p.z))==null) {
                     // ✅ Skip hurting Creative players
                     if (!this.level.creativeMode) {
                         p.hurt(this, 2);
@@ -186,17 +186,6 @@ public class Villager extends Mob {
                 }
             }
         }
-    }
-
-    private void moveToward(float tx, float tz, float speed) {
-        float dx = tx - this.x;
-        float dz = tz - this.z;
-        float mag = (float) Math.sqrt(dx * dx + dz * dz);
-        if (mag < 0.01f)
-            return;
-        this.xd += (dx / mag) * speed;
-        this.zd += (dz / mag) * speed;
-        this.running = true;
     }
 
     private void safePlaySound(String key, float volume, float pitch) {

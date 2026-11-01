@@ -229,6 +229,7 @@ public class BlockMap implements Serializable {
         for (Entity e : entities) {
             if (e instanceof Player) {
                 Player p = (Player) e;
+                net.classicremastered.minecraft.render.HeldItemRenderer.renderWorld(p, partial);
                 int selId = p.inventory.getSelected();
                 if (selId >= 256 && (selId - 256) == 11) {
                     net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
@@ -237,9 +238,30 @@ public class BlockMap implements Serializable {
                     }
                 }
                 if (selId >= 256 && (selId - 256) == 10) {
-                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.getGrabbed(p);
+                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.getGrabbed(p);
                     if (grabbed != null && !grabbed.removed) {
-                        net.classicremastered.minecraft.level.itemstack.TelekinesisItem.renderMobBeam(p, grabbed, tex, partial);
+                        net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.renderMobBeam(p, grabbed, tex, partial);
+                    }
+                }
+                if (selId >= 256 && (selId - 256) == 18) {
+                    net.classicremastered.minecraft.model.Vec3D anchor = net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.get(p);
+                    if (anchor != null) {
+                        float px = p.xo + (p.x - p.xo) * partial;
+                        float py = p.yo + (p.y - p.yo) * partial - 0.2f;
+                        float pz = p.zo + (p.z - p.zo) * partial;
+
+                        org.lwjgl.opengl.GL11.glPushMatrix();
+                        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);
+                        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_LIGHTING);
+                        org.lwjgl.opengl.GL11.glColor4f(0.6f, 0.4f, 0.2f, 1.0f); // Brown rope color
+                        org.lwjgl.opengl.GL11.glLineWidth(3.0f);
+                        org.lwjgl.opengl.GL11.glBegin(org.lwjgl.opengl.GL11.GL_LINES);
+                        org.lwjgl.opengl.GL11.glVertex3f(px, py, pz);
+                        org.lwjgl.opengl.GL11.glVertex3f((float) anchor.x, (float) anchor.y, (float) anchor.z);
+                        org.lwjgl.opengl.GL11.glEnd();
+                        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);
+                        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_LIGHTING);
+                        org.lwjgl.opengl.GL11.glPopMatrix();
                     }
                 }
             }
@@ -299,3 +321,4 @@ public class BlockMap implements Serializable {
         return m.height;
     }
 }
+

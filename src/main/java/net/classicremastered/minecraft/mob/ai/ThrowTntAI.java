@@ -53,16 +53,20 @@ public class ThrowTntAI extends BasicAI {
     private int     frenzyHitsLeft = 0;
     private int     frenzyInterval = 0;
     private int     frenzyTicks    = 0;
+    private boolean combatActive;
+    @Override protected boolean usesPlannedWandering() {return !combatActive;}
+    @Override protected void update() {
+        if(combatActive) {xxa=yya=yRotA=0;jumping=false;return;}
+        super.update();
+    }
 
     @Override
     public void tick(Level level, Mob mob) {
+        Player playerTarget=level.getNearestPlayer(mob.x,mob.y,mob.z,32.0F);
+        combatActive=playerTarget!=null && playerTarget.health>0 && !playerTarget.removed
+            && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(playerTarget);
         super.tick(level, mob);
-        if (level.creativeMode) return;               // <- disable whole behavior
-        Player playerTarget = level.getNearestPlayer(mob.x, mob.y, mob.z, 32.0F);
-        if (playerTarget == null || playerTarget.removed) return;
-
-        // face current main target (player) by default; revenge will override below
-        faceSmooth(mob, playerTarget.x - mob.x, playerTarget.z - mob.z);
+        if (!combatActive) return;
 
         float walk = walkSpeed * (running ? 1.4F : 1.0F);
         float runFrenzy = walkSpeed * 1.4F * frenzySprintMultiplier;
@@ -76,8 +80,7 @@ public class ThrowTntAI extends BasicAI {
             float rdz = revengeTarget.z - mob.z;
             float rDist = MathHelper.sqrt(rdx * rdx + rdz * rdz);
 
-            faceSmooth(mob, rdx, rdz);
-            mob.moveRelative(0.0F, 1.0F, runRevenge);
+            accelerateTo(revengeTarget,runRevenge);
 
             if (rDist <= revengeRange) {
                 if (revengeTimer > 0) revengeTimer--;
@@ -106,8 +109,7 @@ public class ThrowTntAI extends BasicAI {
             // sprint toward player
             float dx = playerTarget.x - mob.x, dz = playerTarget.z - mob.z;
             float flatDist = MathHelper.sqrt(dx*dx + dz*dz);
-            faceSmooth(mob, dx, dz);
-            mob.moveRelative(0.0F, 1.0F, runFrenzy);
+            accelerateTo(playerTarget,runFrenzy);
 
             if (flatDist <= meleeRange) {
                 if (frenzyInterval > 0) frenzyInterval--;
@@ -141,22 +143,25 @@ public class ThrowTntAI extends BasicAI {
         float flatDist = MathHelper.sqrt(dx * dx + dz * dz);
 
         if (flatDist < preferredMin) {
+            faceSmooth(mob,dx,dz);
             mob.moveRelative(0.0F, -1.0F, walk);
             windup = 0;
             return;
         }
         if (flatDist > preferredMax) {
-            mob.moveRelative(0.0F, 1.0F, walk);
+            accelerateTo(playerTarget,walk);
             windup = 0;
             return;
         }
 
-        if (cooldown > 0) { cooldown--; return; }
         if (!hasLineOfSight(level, mob, playerTarget)) {
-            mob.moveRelative(0.0F, 0.6F, walk * 1.25F);
+            accelerateTo(playerTarget,walk*1.25f);
             windup = 0;
             return;
         }
+
+        faceSmooth(mob,dx,dz);
+        if (cooldown > 0) { cooldown--; return; }
 
         if (windup < windupTicks) {
             windup++;

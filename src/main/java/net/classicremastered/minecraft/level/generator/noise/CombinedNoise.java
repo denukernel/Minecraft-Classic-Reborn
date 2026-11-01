@@ -14,6 +14,12 @@ public final class CombinedNoise extends Noise
 		return noise1.compute(x + noise2.compute(x, z), z);
 	}
 
+	@Override
+	public double compute(double x, double y, double z)
+	{
+		return noise1.compute(x + noise2.compute(x, y, z), y, z);
+	}
+
 	private Noise noise1;
 	private Noise noise2;
 }

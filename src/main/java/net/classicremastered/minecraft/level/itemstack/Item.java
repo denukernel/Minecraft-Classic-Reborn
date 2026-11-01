@@ -25,6 +25,8 @@ public class Item {
 
     public static Item BUCKET_EMPTY, BUCKET_WATER, BUCKET_LAVA;
     public static GravityGunItem GRAVITYGUN;
+    public static PhysicsGunItem PHYSICS_GUN;
+    public static Item BAG_OF_SALT, HEALTH_DRINK, DAMAGE_BOTTLE, GRAPPLING_HOOK, GLASS_LOOKER, ENDER_PEARL;
 
     // --- Constructors ---
     public Item(int id, String name, String texture) {
@@ -67,6 +69,10 @@ public class Item {
     public String getTexture() {
         return this.texture;
     }
+
+    public float getModelTextureU0() { return 0; }
+    public float getModelTextureU1() { return 1; }
+    public int getModelTint() { return 0xffffff; }
 
     /** Convenience: non-stackable tools report true. */
     public boolean isTool() { return this.maxStackSize == 1; }

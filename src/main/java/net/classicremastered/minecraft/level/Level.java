@@ -130,8 +130,15 @@ public class Level implements Serializable {
     }
 
     public float getCelestialAngle(float partial) {
-        int t = (int) ((timeOfDay + (partial < 0 ? 0 : partial)) % dayLength);
-        return (float) t / (float) dayLength; // 0..1
+        return celestialAngleAt(timeOfDay + Math.max(0f, Math.min(1f, partial)) * 2f);
+    }
+
+    private float celestialAngleAt(float time) {
+        // Keep this project noon-based clock and Classic speed. Ease only the orbit:
+        // slower at the horizons, faster overhead, as in the modern daylight cycle.
+        float fraction = ((time % dayLength) + dayLength) % dayLength / dayLength;
+        float eased = (1f - (float) Math.cos(fraction * Math.PI)) * 0.5f;
+        return fraction + (eased - fraction) / 3f;
     }
 
     /** Vanilla-ish daylight: 0.2 (midnight) .. 1.0 (noon) with a cosine curve. */
@@ -153,7 +160,8 @@ public class Level implements Serializable {
 
     /** For star alpha: dark nights, zero at day. */
     public float getStarBrightness() {
-        float d = 1.0f - daylight01();
+        float daylight = (getDayFactorSmooth() - 0.25f) / 0.75f;
+        float d = Math.max(0f, Math.min(1f, 1f - daylight));
         return d * d; // softer transition
     }
 
@@ -257,6 +265,7 @@ public class Level implements Serializable {
         this.blockers = new int[var1 * var3];
         Arrays.fill(this.blockers, this.depth);
         this.calcLightDepths(0, 0, var1, var3);
+        this.updateEmissiveList();
 
         for (var1 = 0; var1 < this.listeners.size(); ++var1) {
             ((LevelRenderer) this.listeners.get(var1)).refresh();
@@ -522,11 +531,17 @@ public class Level implements Serializable {
 
     public boolean setTileNoUpdate(int var1, int var2, int var3, int var4) {
         if (var1 >= 0 && var2 >= 0 && var3 >= 0 && var1 < this.width && var2 < this.depth && var3 < this.height) {
-            if (var4 == this.blocks[(var2 * this.height + var3) * this.width + var1]) {
+            int old = this.blocks[(var2 * this.height + var3) * this.width + var1] & 0xFF;
+            if (var4 == old) {
                 return false;
             } else {
                  this.blocks[(var2 * this.height + var3) * this.width + var1] = (byte) var4;
                  this.updateFlowLevelMap(var1, var2, var3, var4);
+                 int oldLv = (old > 0 && Block.blocks[old] != null) ? Block.blocks[old].getLightValue() : 0;
+                 int newLv = (var4 > 0 && Block.blocks[var4] != null) ? Block.blocks[var4].getLightValue() : 0;
+                 if (oldLv > 0 || newLv > 0) {
+                     updateEmissiveList();
+                 }
                  return true;
              }
         } else {
@@ -598,18 +613,7 @@ public class Level implements Serializable {
         // Update per-tick lighting context (cached)
         maybeUpdateLightingContext(tickCount);
 
-        // === Day/Night cycle & light engine update ===
-        if (doDayNightCycle) {
-            tickTime();
-            updateDayNightColorsSmooth();
-
-            // Ask LightEngine if skylight changed enough to rebuild chunks
-            if (lightEngine.shouldRefreshChunks()) {
-                for (int i = 0; i < listeners.size(); i++) {
-                    ((net.classicremastered.minecraft.render.LevelRenderer) listeners.get(i)).refresh();
-                }
-            }
-        }
+        tickDayNightCycle();
 
         int var1 = 1;
         int var2;
@@ -665,6 +669,19 @@ public class Level implements Serializable {
             }
         }
 
+        despawnDistantMobs();
+
+        // ---- Universal mob spawning (RAM safe throttle) ----
+        // Spawn whenever this level is authoritative (not a network-client/proxy).
+        if (!this.isNetworkMode()) {
+            if (this.tickCount % 20 == 0) { // once per second
+                MobSpawner spawner = new MobSpawner(this);
+                spawner.spawn(6, this.player, null, true);
+            }
+        }
+    }
+
+    protected void despawnDistantMobs() {
         // ---- Despawn pass ----
         if (!this.isNetworkMode() && this.blockMap != null && this.blockMap.all != null) {
             Player p = (this.player instanceof Player) ? (Player) this.player : null;
@@ -689,21 +706,13 @@ public class Level implements Serializable {
                     continue; // must live 10s
                 if (p != null) {
                     float dx = m.x - p.x, dy = m.y - p.y, dz = m.z - p.z;
-                    if (dx * dx + dy * dy + dz * dz > 40f * 40f) {
+                    if (dx * dx + dy * dy + dz * dz > MobSpawner.DESPAWN_RADIUS * MobSpawner.DESPAWN_RADIUS) {
                         m.remove();
                     }
                 }
             }
         }
 
-        // ---- Universal mob spawning (RAM safe throttle) ----
-        // Spawn whenever this level is authoritative (not a network-client/proxy).
-        if (!this.isNetworkMode()) {
-            if (this.tickCount % 20 == 0) { // once per second
-                MobSpawner spawner = new MobSpawner(this);
-                spawner.spawn(6, this.player, null, true);
-            }
-        }
     }
 
     public void forceUpdateLightingContext() {
@@ -742,7 +751,10 @@ public class Level implements Serializable {
         if (Math.abs(f - lastDayFactor) > 0.02f) { // ~2% step
             lastDayFactor = f;
             for (int i = 0; i < this.listeners.size(); i++) {
-                ((net.classicremastered.minecraft.render.LevelRenderer) this.listeners.get(i)).refresh();
+                Object l = this.listeners.get(i);
+                if (l instanceof net.classicremastered.minecraft.render.LevelRenderer) {
+                    ((net.classicremastered.minecraft.render.LevelRenderer) l).onLightingChanged();
+                }
             }
         }
     }
@@ -925,12 +937,21 @@ public class Level implements Serializable {
 
 //Level.java
     public void tickTime() {
-        if (!doDayNightCycle)
-            return;
         lastTimeOfDay = timeOfDay;
+        if (doDayNightCycle) timeOfDay = (timeOfDay + 2) % dayLength;
+    }
 
-        // 24000 / (20 TPS * 120s) = 10 units per tick
-        timeOfDay = (timeOfDay + 2) % 24000;
+    /** Shared by finite and infinite world tick implementations. */
+    public void tickDayNightCycle() {
+        tickTime();
+        updateDayNightColorsSmooth();
+        if (lightEngine.shouldRefreshChunks()) notifyLightingChanged();
+    }
+
+    private void notifyLightingChanged() {
+        for (Object listener : listeners) {
+            if (listener instanceof LevelRenderer renderer) renderer.onLightingChanged();
+        }
     }
 
     public void setRenderPartial(float partial) {
@@ -949,18 +970,13 @@ public class Level implements Serializable {
 
     public float getCelestialAngleSmooth() { // 0..1
         float t = lerpWrapped(lastTimeOfDay, timeOfDay, renderPartial, dayLength);
-        return t / dayLength;
+        return celestialAngleAt(t);
     }
 
-    public float getDayFactorSmooth() { // 0.25..1.0 (your mapping)
+    public float getDayFactorSmooth() { // 0.25 at midnight, 1.0 at noon
         float a = getCelestialAngleSmooth() * (float) Math.PI * 2f;
         float c = MathHelper.cos(a) * 0.5f + 0.5f; // 0..1 (noon=1)
-        float dl = (c - 0.2f) / 0.8f; // normalize like before
-        if (dl < 0)
-            dl = 0;
-        if (dl > 1)
-            dl = 1;
-        return 0.25f + 0.75f * dl; // your outside brightness
+        return 0.25f + 0.75f * c;
     }
 
     public void updateDayNightColorsSmooth() {
@@ -1103,71 +1119,56 @@ public class Level implements Serializable {
         }
     }
 
-    public float getBrightness(int x, int y, int z) {
-        return lightEngine.getBrightness(x, y, z);
-    }
+    public int[] emissiveBlocks = null;
+    public int emissiveCount = 0;
 
-    /**
-     * Returns 0..1 glow factor from emissive blocks around (x,y,z). Cheap & local.
-     */
-    private float getEmissiveBoost(int x, int y, int z) {
-        // if the cell itself glows, full bright
-        int id = getTile(x, y, z);
-        if (id > 0) {
-            Block b = Block.blocks[id];
-            if (b != null && b.getLightValue() > 0)
-                return 1.0f;
+    public synchronized void updateEmissiveList() {
+        if (blocks == null) {
+            emissiveBlocks = null;
+            emissiveCount = 0;
+            return;
         }
-
-        final int R = 6; // search radius in blocks
-        final float R2 = R * R;
-        float max = 0f;
-
-        for (int dy = -R; dy <= R; dy++) {
-            int yy = y + dy;
-            if (yy < 0 || yy >= this.depth)
-                continue;
-            for (int dz = -R; dz <= R; dz++) {
-                int zz = z + dz;
-                if (zz < 0 || zz >= this.height)
-                    continue;
-                for (int dx = -R; dx <= R; dx++) {
-                    int xx = x + dx;
-                    if (xx < 0 || xx >= this.width)
-                        continue;
-
-                    float d2 = dx * dx + dy * dy + dz * dz;
-                    if (d2 > R2)
-                        continue;
-
-                    int bid = getTile(xx, yy, zz);
-                    if (bid <= 0)
-                        continue;
-                    Block bb = Block.blocks[bid];
-                    if (bb == null)
-                        continue;
-
-                    int lv = bb.getLightValue(); // 0..15
-                    if (lv <= 0)
-                        continue;
-
-                    float L = lv / 15.0f;
-                    // simple radial falloff (linear). You can try 1/(1+d2) for smoother.
-                    float fall = 1.0f - (float) Math.sqrt(d2) / (float) R;
-                    if (fall < 0f)
-                        fall = 0f;
-
-                    float g = L * fall;
-                    if (g > max) {
-                        max = g;
-                        if (max >= 1.0f)
-                            return 1.0f;
+        int count = 0;
+        for (int i = 0; i < blocks.length; i++) {
+            int id = blocks[i] & 0xFF;
+            if (id > 0) {
+                Block b = Block.blocks[id];
+                if (b != null && b.getLightValue() > 0) {
+                    count++;
+                }
+            }
+        }
+        if (count == 0) {
+            emissiveBlocks = null;
+            emissiveCount = 0;
+            return;
+        }
+        int[] list = new int[count];
+        int listIdx = 0;
+        for (int y = 0; y < depth; y++) {
+            for (int z = 0; z < height; z++) {
+                for (int x = 0; x < width; x++) {
+                    int id = getTile(x, y, z);
+                    if (id > 0) {
+                        Block b = Block.blocks[id];
+                        if (b != null) {
+                            int lv = b.getLightValue();
+                            if (lv > 0 && listIdx < count) {
+                                list[listIdx++] = (x & 0x3FF) | ((z & 0x3FF) << 10) | ((y & 0xFF) << 20) | (lv << 28);
+                            }
+                        }
                     }
                 }
             }
         }
-        return max;
+        emissiveBlocks = list;
+        emissiveCount = listIdx;
     }
+
+    public float getBrightness(int x, int y, int z) {
+        return lightEngine.getBrightness(x, y, z);
+    }
+
 
     public float getCaveness(float var1, float var2, float var3, float var4) {
         int var5 = (int) var1;
@@ -1848,7 +1849,13 @@ public class Level implements Serializable {
     }
 
     public void setTime(int time) {
-        this.timeOfDay = time % 24000;
+        this.timeOfDay = Math.floorMod(time, dayLength);
+        // A time jump is immediate, rather than an interpolation across the old day.
+        this.lastTimeOfDay = this.timeOfDay;
+        updateDayNightColorsSmooth();
+        lightEngine.shouldRefreshChunks();
+        notifyLightingChanged();
     }
 
 }
+

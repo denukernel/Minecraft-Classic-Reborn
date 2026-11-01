@@ -105,7 +105,9 @@ public class AABB implements Serializable {
                var2 = var3;
             }
 
-            if(var2 < 0.0F && var1.y0 >= this.y1 && (var3 = this.y1 - var1.y0 + this.epsilon) > var2) {
+            // Decimal mob heights can round a grounded foot a few ulps below
+            // the surface. Treat that numerical overlap as contact, not a fall.
+            if(var2 < 0.0F && var1.y0 >= this.y1 - 0.00001F && (var3 = this.y1 - var1.y0 + this.epsilon) > var2) {
                var2 = var3;
             }
 

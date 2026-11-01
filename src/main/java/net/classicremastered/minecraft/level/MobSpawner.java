@@ -14,6 +14,9 @@ import net.classicremastered.minecraft.mob.*;
  */
 public final class MobSpawner {
     public Level level;
+    public static final int SPAWN_RADIUS = 48;
+    public static final int DESPAWN_RADIUS = 64;
+    public static final int LOCAL_MOB_CAP = 32;
 
     public MobSpawner(Level level) {
         this.level = level;
@@ -33,6 +36,7 @@ public final class MobSpawner {
             if (!(o instanceof Entity)) continue;
             if (!cls.isAssignableFrom(o.getClass())) continue;
             Entity e = (Entity) o;
+            if (e.removed || e instanceof net.classicremastered.minecraft.player.Player) continue;
             float dx = e.x - cx, dy = e.y - cy, dz = e.z - cz;
             if (dx * dx + dy * dy + dz * dz <= r2 && ++n >= limit) break;
         }
@@ -60,6 +64,21 @@ public final class MobSpawner {
             int y2 = guessY + d; if (isFeetOk(x, y2, z)) return y2;
         }
         return -1;
+    }
+
+    private void ensureColumn(int x, int z) {
+        if (level instanceof LevelInfiniteTerrain terrain) terrain.chunks().getOrCreate(x >> 4, z >> 4);
+        else if (level instanceof LevelInfiniteFlat flat) flat.chunks.getOrCreate(x >> 4, z >> 4);
+    }
+
+    private boolean withinSpawnRange(float x, float y, float z, Entity near) {
+        float dx = x - (near == null ? level.xSpawn : near.x);
+        float dy = y - (near == null ? level.ySpawn : near.y);
+        float dz = z - (near == null ? level.zSpawn : near.z);
+        float distance = dx * dx + dy * dy + dz * dz;
+        // Initial finite-world seeding may populate the whole map. Runtime spawning
+        // stays inside the active population radius, with a quiet area around the player.
+        return distance >= 24 * 24 && (near == null || distance <= SPAWN_RADIUS * SPAWN_RADIUS);
     }
 
     // ==== API ================================================================
@@ -101,7 +120,7 @@ public final class MobSpawner {
         if (!allowThisCallToSpawn(brightDay)) return 0;
 
         int area;
-        final boolean isInfinite = (level instanceof LevelInfiniteTerrain);
+        final boolean isInfinite = level instanceof LevelInfiniteTerrain || level instanceof LevelInfiniteFlat;
         if (isInfinite) {
             final int SIM_RADIUS = 128;
             area = Math.max(1, ((SIM_RADIUS * 2) / 16) * ((SIM_RADIUS * 2) / 16));
@@ -110,7 +129,7 @@ public final class MobSpawner {
         }
 
         // spawn caps
-        final int GLOBAL_CAP    = area * 60;
+        final int GLOBAL_CAP    = near == null ? area * 60 : Math.min(area * 60, LOCAL_MOB_CAP);
         final int ZOMBIE_CAP    = area * 20;
         final int SKELETON_CAP  = area * 20;
         final int CREEPER_CAP   = area * 15;
@@ -125,7 +144,8 @@ public final class MobSpawner {
 
         final int IRON_GOLEM_CAP = area * 4; // NEW: rare cap
 
-        int countAll      = this.level.countInstanceOf(Mob.class);
+        int countAll      = near == null ? this.level.countInstanceOf(Mob.class)
+            : countNearby(Mob.class, near.x, near.y, near.z, DESPAWN_RADIUS, Integer.MAX_VALUE);
         int countZombie   = this.level.countInstanceOf(Zombie.class);
         int countSkel     = this.level.countInstanceOf(Skeleton.class);
         int countCreeper  = this.level.countInstanceOf(Creeper.class);
@@ -138,7 +158,7 @@ public final class MobSpawner {
         int countIronGolem= this.level.countInstanceOf(IronGolem.class); // NEW
 
         final int w = this.level.width, h = this.level.height, d = this.level.depth;
-        final int SIM_RADIUS = 128;
+        final int SIM_RADIUS = SPAWN_RADIUS;
 
         for (int b = 0; b < batches; ++b) {
             if (bar != null && batches > 1) bar.setProgress(b * 100 / (batches - 1));
@@ -150,10 +170,15 @@ public final class MobSpawner {
                 int pz = (near != null) ? (int) near.z : level.zSpawn;
                 x0 = px + level.random.nextInt(SIM_RADIUS * 2) - SIM_RADIUS;
                 z0 = pz + level.random.nextInt(SIM_RADIUS * 2) - SIM_RADIUS;
-                ((LevelInfiniteTerrain) level).chunks().getOrCreate(x0 >> 4, z0 >> 4);
+                ensureColumn(x0, z0);
             } else {
-                x0 = this.level.random.nextInt(w);
-                z0 = this.level.random.nextInt(h);
+                int minX = near == null ? 0 : Math.max(0, (int) Math.floor(near.x) - SPAWN_RADIUS);
+                int maxX = near == null ? w - 1 : Math.min(w - 1, (int) Math.floor(near.x) + SPAWN_RADIUS);
+                int minZ = near == null ? 0 : Math.max(0, (int) Math.floor(near.z) - SPAWN_RADIUS);
+                int maxZ = near == null ? h - 1 : Math.min(h - 1, (int) Math.floor(near.z) + SPAWN_RADIUS);
+                if (minX > maxX || minZ > maxZ) break;
+                x0 = minX + this.level.random.nextInt(maxX - minX + 1);
+                z0 = minZ + this.level.random.nextInt(maxZ - minZ + 1);
             }
 
             int ySurface = this.level.getHighestTile(x0, z0);
@@ -167,7 +192,7 @@ public final class MobSpawner {
                 if (!isInfinite) {
                     if (x < 0 || z < 0 || x >= w || z >= h) continue;
                 } else {
-                    ((LevelInfiniteTerrain) level).chunks().getOrCreate(x >> 4, z >> 4);
+                    ensureColumn(x, z);
                 }
 
                 boolean tryCave;
@@ -177,15 +202,12 @@ public final class MobSpawner {
                     tryCave = (!surfaceLit) && (this.level.random.nextInt(6) == 0);
                 }
 
-                int guessY = tryCave ? yCave : ySurface;
+                int guessY = tryCave ? yCave : level.getHighestTile(x, z);
                 int feetY = findSafeFeetY(x, guessY, z);
                 if (feetY < 1 || feetY >= d - 2) continue;
 
                 float cx = x + 0.5f, cy = feetY + 1.0f, cz = z + 0.5f;
-                float dx, dy, dz;
-                if (near != null) { dx = cx - near.x; dy = cy - near.y; dz = cz - near.z; }
-                else { dx = cx - this.level.xSpawn; dy = cy - this.level.ySpawn; dz = cz - this.level.zSpawn; }
-                if (dx*dx + dy*dy + dz*dz < (24f * 24f)) {
+                if (!withinSpawnRange(cx, cy, cz, near)) {
                     continue;
                 }
 
@@ -247,7 +269,7 @@ public final class MobSpawner {
                     if (!isInfinite) {
                         if (sx < 0 || sz < 0 || sx >= w || sz >= h) continue;
                     } else {
-                        ((LevelInfiniteTerrain) level).chunks().getOrCreate(sx >> 4, sz >> 4);
+                        ensureColumn(sx, sz);
                     }
 
                     int syFeet = findSafeFeetY(sx, feetY, sz);
@@ -297,6 +319,7 @@ public final class MobSpawner {
                     }
 
                     if (!placed) continue;
+                    if (!withinSpawnRange(m.x, m.y, m.z, near)) continue;
 
                     if (m.y < 1f) {
                         m.y = 1f;

@@ -46,115 +46,23 @@ public final class Renderer {
         return new Vec3D(x, y, z);
     }
 
-// Renderer.java
-public void setupCamera(float partial) {
-    Player p = this.minecraft.player;
-    if (p == null) return;
+    private boolean localPlayerVisible=true;
+    public float thirdPersonDistance=4;
 
-    float yaw   = p.yRotO + (p.yRot - p.yRotO) * partial;
-    float pitch = p.xRotO + (p.xRot - p.xRotO) * partial;
-
-    if (minecraft.cameraMode == 0) {
-        // ===== First Person =====
-        GL11.glRotatef(pitch, 1.0F, 0.0F, 0.0F);
-        GL11.glRotatef(yaw,   0.0F, 1.0F, 0.0F);
-
-        float camX = p.xo + (p.x - p.xo) * partial;
-        float camY = p.yo + (p.y - p.yo) * partial;
-        float camZ = p.zo + (p.z - p.zo) * partial;
-        GL11.glTranslatef(-camX, -camY, -camZ);
-        return;
+    public boolean shouldRenderLocalPlayer() {
+        return minecraft.cameraMode!=0 && localPlayerVisible;
     }
 
-    // ===== Third Person (Indev style) =====
-    float dist = 4.0F;
-    float lookYaw = yaw;
-    float lookPitch = pitch;
-    if (minecraft.cameraMode == 1) { // back view
-        lookYaw += 180.0F;
+    public void setupCamera(float partial) {
+        Player player=minecraft.player;
+        if(player==null)return;
+        CameraView view=CameraView.resolve(player,minecraft.cameraMode,partial);
+        thirdPersonDistance=view.distance();
+        localPlayerVisible=minecraft.cameraMode!=0 && view.outsidePlayer(player);
+        if(minecraft.cameraMode!=0)GL11.glTranslatef(0,0,-view.distance());
+        GL11.glRotatef(view.pitch(),1,0,0);GL11.glRotatef(view.yaw(),0,1,0);
+        GL11.glTranslatef(-view.focus().x,-view.focus().y,-view.focus().z);
     }
-
-    double dirX = -MathHelper.sin(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(lookPitch * (float)Math.PI / 180.0F);
-    double dirY = -MathHelper.sin(lookPitch * (float)Math.PI / 180.0F);
-    double dirZ =  MathHelper.cos(lookYaw * (float)Math.PI / 180.0F) * MathHelper.cos(lookPitch * (float)Math.PI / 180.0F);
-
-    float startX = p.xo + (p.x - p.xo) * partial;
-    float startY = p.yo + (p.y - p.yo) * partial;
-    float startZ = p.zo + (p.z - p.zo) * partial;
-
-    // Raycast from 8 offsets to prevent block clipping (Indev standard)
-    if (p.level != null) {
-        for (int i = 0; i < 8; ++i) {
-            float ox = (float)(((i & 1) << 1) - 1) * 0.1F;
-            float oy = (float)(((i >> 1 & 1) << 1) - 1) * 0.1F;
-            float oz = (float)(((i >> 2 & 1) << 1) - 1) * 0.1F;
-
-            Vec3D startVec = new Vec3D(startX + ox, startY + oy, startZ + oz);
-            Vec3D endVec = new Vec3D(startX - (float)(dirX * 4.0D) + ox, startY - (float)(dirY * 4.0D) + oy, startZ - (float)(dirZ * 4.0D) + oz);
-            net.classicremastered.minecraft.MovingObjectPosition mop = p.level.clip(startVec, endVec);
-            if (mop != null) {
-                float collDist = mop.vec.distance(new Vec3D(startX, startY, startZ));
-                if (collDist < dist) {
-                    dist = collDist;
-                }
-            }
-        }
-    }
-
-    // Indev transformation order: Offset -> Camera Rotation -> Player translation
-    GL11.glTranslatef(0.0F, 0.0F, -dist);
-    GL11.glRotatef(lookPitch, 1.0F, 0.0F, 0.0F);
-    GL11.glRotatef(lookYaw, 0.0F, 1.0F, 0.0F);
-    GL11.glTranslatef(-startX, -startY, -startZ);
-
-    // ===== Render the player model in third person =====
-    HumanoidModel model = p.getModel();
-    if (model != null) {
-        GL11.glPushMatrix();
-
-        // move to interpolated player position
-        float px = p.xo + (p.x - p.xo) * partial;
-        float py = p.yo + (p.y - p.yo) * partial;
-        float pz = p.zo + (p.z - p.zo) * partial;
-        
-        // Match entity rendering brightness
-        float b = p.getBrightness(partial);
-        GL11.glColor3f(b, b, b);
-
-        // Calculate body vs camera rotation
-        float bodyYaw = p.yBodyRotO + (p.yBodyRot - p.yBodyRotO) * partial;
-        float headYawDiff = yaw - bodyYaw;
-        while (headYawDiff < -180.0F) headYawDiff += 360.0F;
-        while (headYawDiff >= 180.0F) headYawDiff -= 360.0F;
-
-        // Position model and apply base entity transforms
-        GL11.glTranslatef(px, py - p.heightOffset, pz);
-        
-        // Add ground lift and bobbing (matches Mob.render logic)
-        float limbSwing       = p.animStepO + (p.animStep - p.animStepO) * partial;
-        float limbSwingAmount = p.oRun + (p.run - p.oRun) * partial;
-        float bob = -Math.abs(MathHelper.cos(limbSwing * 0.6662F)) * 5.0F * limbSwingAmount - model.groundOffset;
-        GL11.glTranslatef(0.0F, -bob * 0.0625F, 0.0F);
-
-        GL11.glScalef(1.0F, -1.0F, 1.0F); // flip Y
-        GL11.glRotatef(180.0F - bodyYaw + p.rotOffs, 0.0F, 1.0F, 0.0F);
-        GL11.glScalef(-1.0F, 1.0F, 1.0F); // flip X (Classic entity standard)
-
-        // animate and render
-        float ageInTicks      = (float)p.tickCount + partial;
-        float headPitch       = pitch;
-        if (minecraft.cameraMode == 1) {
-            headPitch = -pitch;
-        }
-
-        p.bindTexture(minecraft.textureManager);
-        model.render(limbSwing, limbSwingAmount, ageInTicks, headYawDiff, headPitch, 0.0625F);
-
-        GL11.glPopMatrix();
-    }
-}
-
-
     public void hurtEffect(float partial) {
         Player pl = this.minecraft.player;
         float t = (float) pl.hurtTime - partial;
@@ -175,14 +83,16 @@ public void setupCamera(float partial) {
         }
 
         // ===== Physics Gun Camera Shake =====
-        float shake = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.cameraShake;
+        float shake = net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.cameraShake;
         if (shake > 0.0f) {
-            float shakeX = (float) (Math.random() - 0.5D) * shake;
-            float shakeY = (float) (Math.random() - 0.5D) * shake;
-            float shakeZ = (float) (Math.random() - 0.5D) * shake;
+            // World and held-item passes must use the same shake to keep the beam attached.
+            float phase = (pl.tickCount + partial) * 17f;
+            float shakeX = (float) Math.sin(phase) * .5f * shake;
+            float shakeY = (float) Math.sin(phase * 1.31f) * .5f * shake;
+            float shakeZ = (float) Math.sin(phase * 1.73f) * .5f * shake;
             GL11.glTranslatef(shakeX * 0.2f, shakeY * 0.2f, shakeZ * 0.2f);
-            GL11.glRotatef((float) (Math.random() - 0.5D) * shake * 15f, 0.0F, 1.0F, 0.0F);
-            GL11.glRotatef((float) (Math.random() - 0.5D) * shake * 15f, 1.0F, 0.0F, 0.0F);
+            GL11.glRotatef(shakeX * 15f, 0.0F, 1.0F, 0.0F);
+            GL11.glRotatef(shakeY * 15f, 1.0F, 0.0F, 0.0F);
         }
     }
 
@@ -355,87 +265,11 @@ public void setupCamera(float partial) {
      * (SwordItem): arc slash + wrist twist + slight lunge.
      */
     public void renderHeldItem() {
-        if (minecraft == null || minecraft.player == null)
-            return;
-        if (minecraft.cameraMode != 0)
-            return;
-        int selId = minecraft.player.inventory.getSelected();
-        if (selId < 256)
-            return; // only items here
-
-        int itemId = selId - 256;
-        net.classicremastered.minecraft.level.itemstack.Item[] itemsArr = net.classicremastered.minecraft.level.itemstack.Item.items;
-        if (itemId < 0 || itemId >= itemsArr.length)
-            return;
-
-        net.classicremastered.minecraft.level.itemstack.Item it = itemsArr[itemId];
-        if (it == null)
-            return;
-
-        // --- detect sword by class (safer than checking name strings) ---
-        boolean isSword = (it instanceof net.classicremastered.minecraft.level.itemstack.SwordItem); // added
-
-        GL11.glPushMatrix();
-
-        // Base position
-        GL11.glTranslatef(0.32F, 0.05F, -0.8F);
-
-        // Swing animation (re-using HeldBlock timing)
-        HeldBlock hb = this.heldBlock;
-        float partial = minecraft.timer.delta;
-        float swing = hb.lastPos + (hb.pos - hb.lastPos) * partial; // 0..1
-        if (hb.moving) {
-            float tSwing = ((float) hb.offset + partial) / 7.0F; // 0..1
-            float root = MathHelper.sqrt(tSwing);
-            float s1 = MathHelper.sin(root * (float) Math.PI); // sway
-            float s2 = MathHelper.sin(root * (float) Math.PI * 2.0F); // bob
-            float s3 = MathHelper.sin(tSwing * (float) Math.PI); // jab
-
-            if (!isSword) {
-                // default item swing
-                GL11.glTranslatef(-s1 * 0.4F, s2 * 0.2F, -s3 * 0.2F);
-            } else {
-                // SWORD SPECIAL SWING
-                // anticipation
-                GL11.glTranslatef(-0.05F, 0.0F, 0.05F); // added
-
-                // accelerated arc
-                float accel = swing * swing * (3f - 2f * swing); // smoothstep 0..1
-                float arcY = -65.0F * accel;
-                float twistZ = -30.0F * accel;
-                float dropX = 20.0F * accel;
-
-                GL11.glRotatef(dropX, 1.0F, 0.0F, 0.0F); // slight dip
-                GL11.glRotatef(arcY, 0.0F, 1.0F, 0.0F); // main arc
-                GL11.glRotatef(twistZ, 0.0F, 0.0F, 1.0F); // wrist twist
-
-                // forward lunge
-                GL11.glTranslatef(0.00F, -0.02F * accel, -0.10F * accel);
-
-                // tiny scale pump
-                float pump = 1.0F + 0.06F * accel;
-                GL11.glScalef(pump, pump, pump);
-            }
-        } else if (isSword) {
-            // idle micro-wobble so sword isn’t dead-still
-            float t = (this.levelTicks + partial) * 0.12f; // fixed
-            float wob = MathHelper.sin(t) * 0.01f;
-            GL11.glTranslatef(0.0F, -wob * 0.6F, wob * 0.5F);
-            GL11.glRotatef(wob * 12.0F, 0F, 0F, 1F);
-        }
-
-        // Face upright & scale
-        GL11.glScalef(0.05F, 0.053F, 0.02F);
-        GL11.glRotatef(180.0F, 0F, 1F, 0F);
-        GL11.glRotatef(180.0F, 0F, 0F, 1F);
-        GL11.glRotatef(-7.0F, 0.7F, 0F, 2F);
-
-        // draw icon
-        GL11.glDisable(GL11.GL_CULL_FACE);
-        it.renderIcon(minecraft.textureManager, ShapeRenderer.instance);
-        GL11.glEnable(GL11.GL_CULL_FACE);
-
-        GL11.glPopMatrix();
+        renderHeldItem(minecraft.timer.delta);
     }
 
+    public void renderHeldItem(float partial) {
+        HeldItemRenderer.render(this,partial);
+    }
 }
+

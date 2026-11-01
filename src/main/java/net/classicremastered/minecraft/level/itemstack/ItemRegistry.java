@@ -26,13 +26,20 @@ public final class ItemRegistry {
 
         Item.FLINT_AND_STEEL = new FlintAndSteelItem(9);
         Item.items[9]  = Item.FLINT_AND_STEEL;
-        Item.items[10] = new TelekinesisItem(10);
+        Item.PHYSICS_GUN = new PhysicsGunItem(10);
         Item.items[11] = new GravityGunItem(11);
         Item.GRAVITYGUN = (GravityGunItem) Item.items[11];
 
         Item.BUCKET_EMPTY = new BucketItem(12, 0);
         Item.BUCKET_WATER = new BucketItem(13, 1);
         Item.BUCKET_LAVA  = new BucketItem(14, 2);
+
+        Item.BAG_OF_SALT   = new BagOfSaltItem(15);
+        Item.HEALTH_DRINK  = new HealthDrinkItem(16);
+        Item.DAMAGE_BOTTLE = new DamageBottleItem(17);
+        Item.GRAPPLING_HOOK = new GrapplingHookItem(18);
+        Item.GLASS_LOOKER  = new GlassLookerItem(19);
+        Item.ENDER_PEARL   = new EnderPearlItem(20);
 
         
         // --- Spawn eggs ---
@@ -47,3 +54,4 @@ public final class ItemRegistry {
         }
     }
 }
+

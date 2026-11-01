@@ -11,7 +11,7 @@ import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.phys.AABB;
 
 public final class LevelInfiniteFlat extends Level {
-    private final SimpleChunkManager chunks;
+    public final SimpleChunkManager chunks;
     public final long randomSeed;
 
     public LevelInfiniteFlat(long seed, int depthY) {
@@ -37,6 +37,7 @@ public final class LevelInfiniteFlat extends Level {
 
         // explicitly flat mode
         this.chunks = new SimpleChunkManager(seed, depthY, SimpleChunkManager.Mode.FLAT);
+        this.chunks.level = this;
         this.waterLevel = Math.max(1, depthY / 2);
 
         this.findSpawn();
@@ -208,30 +209,7 @@ public final class LevelInfiniteFlat extends Level {
 
     @Override
     public float getBrightness(int x, int y, int z) {
-        if (y < 0)
-            return 0.05f;
-        if (y >= this.depth)
-            return 1.0f;
-        if (isLit(x, y, z))
-            return getDayFactorSmooth();
-
-        int id = getTile(x, y, z);
-        if (id > 0) {
-            Block b = Block.blocks[id];
-            if (b != null && b.getLightValue() > 0)
-                return 0.8f;
-        }
-
-        final int[][] dirs = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
-        for (int[] d : dirs) {
-            int nid = getTile(x + d[0], y + d[1], z + d[2]);
-            if (nid > 0) {
-                Block b = Block.blocks[nid];
-                if (b != null && b.getLightValue() > 0)
-                    return 0.6f;
-            }
-        }
-        return 0.35f;
+        return lightEngine.getBrightness(x, y, z);
     }
 
     // === Block ticks (fire spread, sand, liquids, etc.) ===
@@ -240,6 +218,7 @@ public final class LevelInfiniteFlat extends Level {
     @Override
     public void tick() {
         tickCount++;
+        tickDayNightCycle();
 
         // --- scheduled updates (fire, fluids, TNT, etc.) ---
         int processed = 0;
@@ -256,6 +235,11 @@ public final class LevelInfiniteFlat extends Level {
                 }
             }
             processed++;
+        }
+
+        despawnDistantMobs();
+        if (!isNetworkMode() && tickCount % 20 == 0) {
+            new MobSpawner(this).spawn(4, player, null, true);
         }
 
         // --- random block updates around player ---

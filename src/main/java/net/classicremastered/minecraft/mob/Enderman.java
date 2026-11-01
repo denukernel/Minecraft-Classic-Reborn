@@ -25,12 +25,15 @@ public final class Enderman extends Mob {
         this.coinDrop = 6;
         this.footSize = COLLISION_WIDTH;
         this.getAndSetAABB(COLLISION_WIDTH, COLLISION_HEIGHT);
-        this.soundIdle  = "random/breath";
-        this.idlePitchMin = 0.5F; this.idlePitchMax = 0.8F;
-        this.soundHurt  = "random/breath";
-        this.soundDeath = "random/breath";
-        this.deathPitchMin= 0.6F; this.deathPitchMax= 0.6F;
         this.ai = new EndermanAI();
+    }
+
+    /** Enderman positions use feet height, including teleport destinations. */
+    @Override public void setPos(float x,float feetY,float z) {
+        this.x=x;this.y=feetY;this.z=z;
+        this.bbWidth=COLLISION_WIDTH;this.bbHeight=COLLISION_HEIGHT;
+        this.heightOffset=0;
+        getAndSetAABB(COLLISION_WIDTH,COLLISION_HEIGHT);
     }
 
 

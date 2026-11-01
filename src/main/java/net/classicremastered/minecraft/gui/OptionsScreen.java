@@ -27,49 +27,57 @@ public final class OptionsScreen extends GuiScreen {
 
         int btnW = compact ? 120 : 150;
         int btnH = compact ? 16 : 18;
+        int startY = Math.max(26, this.height / 6 - 12);
+        int rowSpacing = 22;
 
-        // Settings toggles (all except difficulty & finite water → handled separately below)
-        for (int i = 0; i < this.settings.settingCount; ++i) {
-            if (i == 10 || i == 11) continue; // skip difficulty and finite water here
-            int x = this.width / 2 - 155 + i % 2 * 160;
-            int y = this.height / 6 + 24 * (i >> 1);
-            OptionButton b = new OptionButton(i, x, y, this.settings.getSetting(i));
-            b.width = btnW;
-            b.height = btnH;
-            this.buttons.add(b);
-        }
+        int leftX = this.width / 2 - 155;
+        int rightX = this.width / 2 + 5;
 
-        int baseY = this.height / 6 + 120;
+        // Row 0: Music & Sound
+        addOptionButton(0, leftX, startY + rowSpacing * 0, btnW, btnH);
+        addOptionButton(1, rightX, startY + rowSpacing * 0, btnW, btnH);
 
-        // Difficulty (bottom row, left)
-        OptionButton diff = new OptionButton(10, this.width / 2 - 155, baseY, this.settings.getSetting(10));
-        diff.width = btnW;
-        diff.height = btnH;
-        this.buttons.add(diff);
+        // Row 1: Allow Mob Sounds & Invert Mouse
+        addOptionButton(12, leftX, startY + rowSpacing * 1, btnW, btnH);
+        addOptionButton(2, rightX, startY + rowSpacing * 1, btnW, btnH);
 
-        // Controls (bottom row, right)
-        Button controls = new Button(100, this.width / 2 - 155 + 160, baseY, "Controls...");
+        // Row 2: Show FPS & Limit Framerate
+        addOptionButton(3, leftX, startY + rowSpacing * 2, btnW, btnH);
+        addOptionButton(7, rightX, startY + rowSpacing * 2, btnW, btnH);
+
+        // Row 3: Render Distance & View Bobbing
+        addOptionButton(4, leftX, startY + rowSpacing * 3, btnW, btnH);
+        addOptionButton(5, rightX, startY + rowSpacing * 3, btnW, btnH);
+
+        // Row 4: 3D Anaglyph & Smoothing
+        addOptionButton(6, leftX, startY + rowSpacing * 4, btnW, btnH);
+        addOptionButton(8, rightX, startY + rowSpacing * 4, btnW, btnH);
+
+        // Row 5: Anisotropic & Finite Liquids
+        addOptionButton(9, leftX, startY + rowSpacing * 5, btnW, btnH);
+        addOptionButton(11, rightX, startY + rowSpacing * 5, btnW, btnH);
+
+        // Row 6: Difficulty & Multithreading
+        addOptionButton(10, leftX, startY + rowSpacing * 6, btnW, btnH);
+        addOptionButton(13, rightX, startY + rowSpacing * 6, btnW, btnH);
+
+        // Row 7: Controls & Done
+        Button controls = new Button(100, leftX, startY + rowSpacing * 7 + 2, "Controls...");
         controls.width = btnW;
         controls.height = btnH;
         this.buttons.add(controls);
 
-        // Finite Water (row 6, left)
-        OptionButton finiteWaterBtn = new OptionButton(11, this.width / 2 - 155, baseY + 24, this.settings.getSetting(11));
-        finiteWaterBtn.width = btnW;
-        finiteWaterBtn.height = btnH;
-        this.buttons.add(finiteWaterBtn);
-
-        // Language (row 6, right)
-        Button lang = new Button(101, this.width / 2 - 155 + 160, baseY + 24, "Language...");
-        lang.width = btnW;
-        lang.height = btnH;
-        this.buttons.add(lang);
-
-        // Done (last row, center)
-        Button done = new Button(200, this.width / 2 - btnW / 2, baseY + 24 * 2, "Done");
+        Button done = new Button(200, rightX, startY + rowSpacing * 7 + 2, "Done");
         done.width = btnW;
         done.height = btnH;
         this.buttons.add(done);
+    }
+
+    private void addOptionButton(int id, int x, int y, int w, int h) {
+        OptionButton b = new OptionButton(id, x, y, this.settings.getSetting(id));
+        b.width = w;
+        b.height = h;
+        this.buttons.add(b);
     }
 
     @Override
@@ -99,7 +107,7 @@ public final class OptionsScreen extends GuiScreen {
     @Override
     public final void render(int mouseX, int mouseY) {
         drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA1000000);
-        drawCenteredString(this.fontRenderer, this.title, this.width / 2, 20, 0xFFFFFF);
+        drawCenteredString(this.fontRenderer, this.title, this.width / 2, 12, 0xFFFFFF);
         super.render(mouseX, mouseY);
     }
 

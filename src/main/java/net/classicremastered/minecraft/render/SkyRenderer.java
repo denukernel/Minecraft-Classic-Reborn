@@ -137,6 +137,9 @@ public final class SkyRenderer {
     }
 
     public void renderSunMoon(Player cam, float partial) {
+        if (level == null || texMgr == null || cam == null)
+            return;
+
         int sunTex = texMgr.load("/terrain/sun.png");
         int moonTex = texMgr.load("/terrain/moon.png");
 
@@ -144,21 +147,30 @@ public final class SkyRenderer {
         float py = cam.yo + (cam.y - cam.yo) * partial;
         float pz = cam.zo + (cam.z - cam.zo) * partial;
 
-        float R = level != null ? level.depth * 2.0f : 512.0f;
-        float SUN = R * 0.3f;
-        float MOON = R * 0.2f;
+        float zFar = 128.0f;
+        if (level.minecraft != null && level.minecraft.renderer != null) {
+            zFar = level.minecraft.renderer.fogEnd;
+        }
+        if (zFar <= 0) zFar = 128.0f;
+
+        // Keep R safely inside zFar so all quad corners never clip against the far plane
+        float R = Math.max(16.0f, zFar * 0.50f);
+        float SUN = R * 0.30f;
+        float MOON = R * 0.20f;
 
         GL11.glPushMatrix();
         GL11.glTranslatef(px, py, pz);
 
-        GL11.glEnable(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glDepthMask(false);
         GL11.glDisable(GL11.GL_FOG);
         GL11.glDisable(GL11.GL_LIGHTING);
         GL11.glEnable(GL11.GL_TEXTURE_2D);
         GL11.glEnable(GL11.GL_BLEND);
-        GL11.glBlendFunc(GL11.GL_ONE, GL11.GL_ONE);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
 
+        // East (+X) to west (-X), with the same eased orbit used by sky lighting.
+        GL11.glRotatef(-90f, 0f, 1f, 0f);
         GL11.glRotatef(level.getCelestialAngleSmooth() * 360.0f, 1f, 0f, 0f);
 
         ShapeRenderer sr = ShapeRenderer.instance;
@@ -193,21 +205,19 @@ public final class SkyRenderer {
         GL11.glPopMatrix();
 
         GL11.glDisable(GL11.GL_BLEND);
+        GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glEnable(GL11.GL_FOG);
         GL11.glDepthMask(true);
         GL11.glPopMatrix();
     }
 
-
-
-
     public void renderStars(Player cam, float partial) {
-        if (level == null)
+        if (level == null || cam == null)
             return;
         if (starList == -1)
             buildStarField();
 
-        float alpha = Math.max(0.02f, level.getStarBrightness());
+        float alpha = level.getStarBrightness();
         if (alpha <= 0.01f)
             return;
 
@@ -215,24 +225,28 @@ public final class SkyRenderer {
         float py = cam.yo + (cam.y - cam.yo) * partial;
         float pz = cam.zo + (cam.z - cam.zo) * partial;
 
-        GL11.glPushMatrix();
-        GL11.glTranslatef(px, py, pz);
+        float zFar = 128.0f;
+        if (level.minecraft != null && level.minecraft.renderer != null) {
+            zFar = level.minecraft.renderer.fogEnd;
+        }
+        if (zFar <= 0) zFar = 128.0f;
 
         float worldMax = Math.max(Math.max(level.width, level.height), level.depth);
         float R = Math.max(64f, worldMax * 0.8f);
-        final float zFarSafe = Math.max(level.depth * 1.2f, 128f);
-        final float scale = (zFarSafe * 0.85f) / R;
+        final float scale = (zFar * 0.50f) / R;
+
+        GL11.glPushMatrix();
+        GL11.glTranslatef(px, py, pz);
         GL11.glScalef(scale, scale, scale);
+        // Keep the star field fixed relative to the sun and moon throughout the day.
+        GL11.glRotatef(-90f, 0f, 1f, 0f);
+        GL11.glRotatef(level.getCelestialAngleSmooth() * 360.0f, 1f, 0f, 0f);
 
         GL11.glDisable(GL11.GL_TEXTURE_2D);
         GL11.glDisable(GL11.GL_LIGHTING);
         GL11.glDisable(GL11.GL_FOG);
-
-        GL11.glEnable(GL11.GL_DEPTH_TEST);
-        GL11.glDepthFunc(GL11.GL_LEQUAL);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glDepthMask(false);
-        GL11.glDepthRange(0.999f, 1.0f);
-
         GL11.glEnable(GL11.GL_BLEND);
 
         if (isNightmareZone(cam)) {
@@ -251,14 +265,10 @@ public final class SkyRenderer {
         GL11.glCallList(starList);
 
         GL11.glDisable(GL11.GL_BLEND);
-        GL11.glDepthRange(0f, 1f);
+        GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glDepthMask(true);
-        GL11.glDepthFunc(GL11.GL_LEQUAL);
         GL11.glEnable(GL11.GL_FOG);
         GL11.glEnable(GL11.GL_TEXTURE_2D);
-        GL11.glEnable(GL11.GL_ALPHA_TEST);
-        GL11.glAlphaFunc(GL11.GL_GREATER, 0.0f);
-
         GL11.glPopMatrix();
     }
 }

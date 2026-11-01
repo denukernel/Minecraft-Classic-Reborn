@@ -2,20 +2,16 @@ package net.classicremastered.minecraft.render;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
-
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.LevelInfiniteFlat;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.player.Player;
-
 import java.nio.IntBuffer;
 import java.util.*;
 
 public final class LevelRenderer {
-
-    private int starList = -1;
     public Level level;
     public TextureManager textureManager;
     public int listId;
@@ -23,248 +19,215 @@ public final class LevelRenderer {
     public List<Chunk> chunks = new ArrayList<>();
     private Chunk[] loadQueue;
     public Chunk[] chunkCache;
-    private int xChunks;
-    private int yChunks;
-    private int zChunks;
-    private int baseListId;
+    private int xChunks, yChunks, zChunks;
+    private int baseListId, baseListCount;
     public Minecraft minecraft;
-    private int[] chunkDataCache = new int['\uc350'];
+    private int[] chunkDataCache = new int[65536];
     public int ticks = 0;
-    private float lastLoadX = -9999.0F;
-    private float lastLoadY = -9999.0F;
-    private float lastLoadZ = -9999.0F;
+    private float lastLoadX = -9999, lastLoadY = -9999, lastLoadZ = -9999;
     public float cracks;
-
     public boolean waterReady = false;
-    private int lightingCooldown = 0;
-    private float lastDayFactor = -1f;
-
-    // === Infinite world cache ===
     public final Map<Long, Chunk> infiniteCache = new HashMap<>();
-    private final ArrayDeque<Chunk> dirtyQueue = new ArrayDeque<>();
+    private final List<Chunk> renderWindow = new ArrayList<>();
+    private int windowX = Integer.MIN_VALUE, windowZ = Integer.MIN_VALUE, windowView = -1;
+    private static final long BUILD_BUDGET_NANOS = 3_000_000L;
 
     private static long key3(int cx, int sy, int cz) {
         return ((((long) cx) << 32) ^ (cz & 0xffffffffL)) ^ (((long) sy) << 56);
     }
 
     public LevelRenderer(Minecraft mc, TextureManager tex) {
-        this.minecraft = mc;
-        this.textureManager = tex;
-        this.listId = GL11.glGenLists(2);
-        this.baseListId = GL11.glGenLists(4096 << 6 << 1);
+        minecraft = mc;
+        textureManager = tex;
+        listId = GL11.glGenLists(2);
     }
 
-    // --- Helpers ---
     private boolean isInfiniteLevel() {
-        return (level instanceof LevelInfiniteFlat) || (level instanceof LevelInfiniteTerrain);
+        return level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain;
     }
 
     public void markDirty(int cx, int sy, int cz) {
-        Chunk c = infiniteCache.get(key3(cx, sy, cz));
-        if (c != null) {
-            c.setAllDirty();
-            if (!c.inBuildQueue) {
-                c.inBuildQueue = true;
-                dirtyQueue.add(c);
-            }
-        }
+        markDirty(infiniteCache.get(key3(cx, sy, cz)));
     }
 
     public void markDirty(Chunk c) {
-        if (c != null && !c.inBuildQueue) {
+        if (c == null) return;
+        c.setAllDirty();
+        if (!c.inBuildQueue) {
             c.inBuildQueue = true;
-            dirtyQueue.add(c);
+            c.loaded = true;
+            chunks.add(c);
         }
     }
 
+    /** One shared, time-limited rebuild batch per rendered view. */
     public void updateSomeChunks() {
-        int budget = 3;
-        while (!dirtyQueue.isEmpty() && budget-- > 0) {
-            Chunk c = dirtyQueue.poll();
-            if (c != null) {
-                c.inBuildQueue = false;
-                c.update();
-            }
-        }
-    }
-
-    // === Refresh ===
-    public final void refresh() {
-        if (isInfiniteLevel()) {
-            infiniteCache.clear();
-            dirtyQueue.clear();
-            if (chunkCache != null) {
-                for (Chunk c : chunkCache) if (c != null) c.dispose();
-            }
-            chunkCache = null;
-            loadQueue = null;
-            chunks.clear();
-            waterReady = false;
-            return;
-        }
-
-        // finite path
-        if (this.chunkCache != null) {
-            for (Chunk c : this.chunkCache) if (c != null) c.dispose();
-        }
-        try {
-            if (this.baseListId != 0) {
-                GL11.glDeleteLists(this.baseListId,
-                        this.chunkCache != null ? this.chunkCache.length * 2 : 0);
-            }
-        } catch (Throwable ignored) {}
-
-        this.buffer.clear().limit(0);
-
-        this.xChunks = this.level.width / 16;
-        this.yChunks = this.level.depth / 16;
-        this.zChunks = this.level.height / 16;
-
-        int chunkCount = this.xChunks * this.yChunks * this.zChunks;
-        try {
-            this.baseListId = GL11.glGenLists(chunkCount * 2);
-        } catch (Throwable t) {
-            this.baseListId = 0;
-        }
-
-        this.chunkCache = new Chunk[chunkCount];
-        this.loadQueue = new Chunk[chunkCount];
-
-        int offset = 0;
-        for (int cx = 0; cx < this.xChunks; ++cx) {
-            for (int cy = 0; cy < this.yChunks; ++cy) {
-                for (int cz = 0; cz < this.zChunks; ++cz) {
-                    int idx = (cz * this.yChunks + cy) * this.xChunks + cx;
-                    this.chunkCache[idx] =
-                            new Chunk(this.level, cx << 4, cy << 4, cz << 4, 16, this.baseListId + offset);
-                    this.loadQueue[idx] = this.chunkCache[idx];
-                    offset += 2;
+        long deadline = System.nanoTime() + BUILD_BUDGET_NANOS;
+        Player player = minecraft == null ? null : minecraft.player;
+        for (int built = 0; built < 8 && !chunks.isEmpty(); built++) {
+            int best = 0;
+            if (player != null) {
+                for (int i = 1; i < chunks.size(); i++) {
+                    Chunk candidate = chunks.get(i), previous = chunks.get(best);
+                    if ((candidate.visible && !previous.visible)
+                            || (candidate.visible == previous.visible
+                            && candidate.distanceSquared(player) < previous.distanceSquared(player))) best = i;
                 }
             }
+            Chunk c = chunks.get(best);
+            int last = chunks.size() - 1;
+            chunks.set(best, chunks.get(last));
+            chunks.remove(last);
+            c.inBuildQueue = false;
+            c.loaded = false;
+            if (c.dirty[0] || c.dirty[1]) c.update();
+            // A single mesh is indivisible; do not start another once the budget is spent.
+            if (System.nanoTime() >= deadline) break;
         }
-        this.chunks.clear();
-        this.queueChunks(0, 0, 0, this.level.width, this.level.depth, this.level.height);
     }
 
-    // === Sort & Draw ===
- // === Sort & Draw ===
-    public final int sortChunks(Player pl, int pass) {
-        updateSomeChunks();
-
+    public void onLightingChanged() {
         if (isInfiniteLevel()) {
-            final int pcx = (int) Math.floor(pl.x / 16.0);
-            final int pcz = (int) Math.floor(pl.z / 16.0);
-            final int view = 8;
-            final int slicesY = (this.level.depth + 15) >> 4;
+            for (Chunk c : infiniteCache.values()) markDirty(c);
+        } else if (chunkCache != null) {
+            for (Chunk c : chunkCache) markDirty(c);
+        }
+    }
 
-            int len = 0;
-            this.buffer.clear();
+    public final void refresh() {
+        for (Chunk c : infiniteCache.values()) c.disposeLists();
+        infiniteCache.clear();
+        renderWindow.clear();
+        windowX = windowZ = Integer.MIN_VALUE;
+        windowView = -1;
+        if (chunkCache != null) for (Chunk c : chunkCache) c.dispose();
+        if (baseListId != 0 && baseListCount > 0) GL11.glDeleteLists(baseListId, baseListCount);
+        baseListId = baseListCount = 0;
+        chunkCache = loadQueue = null;
+        chunks.clear();
+        waterReady = false;
+        buffer.clear().limit(0);
+        lastLoadX = lastLoadY = lastLoadZ = -9999;
+        if (isInfiniteLevel()) return;
+        xChunks = (level.width + 15) / 16;
+        yChunks = (level.depth + 15) / 16;
+        zChunks = (level.height + 15) / 16;
+        int count = xChunks * yChunks * zChunks;
+        baseListCount = count * 2;
+        if (baseListCount > 0) baseListId = GL11.glGenLists(baseListCount);
+        chunkCache = new Chunk[count];
+        loadQueue = new Chunk[count];
+        for (int cx = 0; cx < xChunks; cx++) for (int cy = 0; cy < yChunks; cy++)
+            for (int cz = 0; cz < zChunks; cz++) {
+                int idx = (cz * yChunks + cy) * xChunks + cx;
+                Chunk c = new Chunk(level, cx << 4, cy << 4, cz << 4, 16, baseListId + idx * 2);
+                chunkCache[idx] = loadQueue[idx] = c;
+                markDirty(c);
+            }
+    }
 
-            for (int ring = 0; ring <= view; ring++) {
-                for (int dx = -ring; dx <= ring; dx++) {
-                    for (int dz = -ring; dz <= ring; dz++) {
-                        if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+    private void prepareInfiniteWindow(Player player) {
+        int cx = (int) Math.floor(player.x / 16.0), cz = (int) Math.floor(player.z / 16.0);
+        int distance = minecraft != null && minecraft.settings != null ? minecraft.settings.viewDistance : 0;
+        int view = switch (distance) { case 0 -> 8; case 1 -> 6; case 2 -> 4; default -> 2; };
+        if (cx == windowX && cz == windowZ && view == windowView) return;
+        windowX = cx; windowZ = cz; windowView = view;
+        // Keep a small reuse margin while bounding GPU meshes during long journeys.
+        Set<Chunk> removed = new HashSet<>();
+        Iterator<Chunk> iterator = infiniteCache.values().iterator();
+        while (iterator.hasNext()) {
+            Chunk c = iterator.next();
+            if (c.outsideColumns(cx, cz, view + 2)) {
+                removed.add(c);
+                iterator.remove();
+                c.disposeLists();
+            }
+        }
+        chunks.removeIf(removed::contains);
+        renderWindow.clear();
+        if (minecraft != null && minecraft.settings != null && minecraft.settings.multithreaded) {
+            if (level instanceof LevelInfiniteTerrain terrain) terrain.chunks().prefetch(cx, cz, view);
+            else if (level instanceof LevelInfiniteFlat flat) flat.chunks.prefetch(cx, cz, view);
+        }
+        int slices = (level.depth + 15) >> 4;
+        for (int ring = 0; ring <= view; ring++) for (int dx = -ring; dx <= ring; dx++)
+            for (int dz = -ring; dz <= ring; dz++) {
+                if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                for (int sy = 0; sy < slices; sy++) {
+                    long key = key3(cx + dx, sy, cz + dz);
+                    Chunk c = infiniteCache.get(key);
+                    if (c == null) {
+                        c = new Chunk(level, (cx + dx) << 4, sy << 4, (cz + dz) << 4, 16, GL11.glGenLists(2));
+                        infiniteCache.put(key, c);
+                        markDirty(c);
+                    }
+                    renderWindow.add(c);
+                }
+            }
+    }
 
-                        final int cx = pcx + dx, cz = pcz + dz;
-                        for (int sy = 0; sy < slicesY; sy++) {
-                            final long k = key3(cx, sy, cz);
-                            Chunk c = infiniteCache.get(k);
-                            if (c == null) {
-                                int baseId = GL11.glGenLists(2); // one for terrain/lava, one for water
-                                c = new Chunk(this.level, (cx << 4), (sy << 4), (cz << 4), 16, baseId);
-                                c.setAllDirty();
-                                c.inBuildQueue = true;
-                                infiniteCache.put(k, c);
-                                dirtyQueue.add(c);
-                            }
-                            c.visible = true;
-                            len = c.appendLists(this.chunkDataCache, len, pass);
-                        }
+    public final int sortChunks(Player player, int pass) {
+        long start = System.nanoTime();
+        try {
+            boolean infinite = isInfiniteLevel();
+            if (pass == 0) {
+                if (infinite) prepareInfiniteWindow(player);
+                else {
+                    float dx = player.x - lastLoadX, dy = player.y - lastLoadY, dz = player.z - lastLoadZ;
+                    if (dx * dx + dy * dy + dz * dz > 64) {
+                        lastLoadX = player.x; lastLoadY = player.y; lastLoadZ = player.z;
+                        Arrays.sort(loadQueue, new ChunkDistanceComparator(player));
                     }
                 }
+                Frustrum frustum = FrustrumImpl.update();
+                if (infinite) for (Chunk c : renderWindow) c.clip(frustum);
+                else for (Chunk c : loadQueue) c.clip(frustum);
+                updateSomeChunks();
             }
-
+            int len = 0;
+            if (infinite) {
+                ensureDrawCapacity(renderWindow.size());
+                for (Chunk c : renderWindow) if (c.visible) len = c.appendLists(chunkDataCache, len, pass);
+            } else if (loadQueue != null) {
+                ensureDrawCapacity(loadQueue.length);
+                for (Chunk c : loadQueue) if (c.visible) len = c.appendLists(chunkDataCache, len, pass);
+            }
+            buffer.clear();
             if (len > 0) {
-                this.buffer.put(this.chunkDataCache, 0, len);
-                this.buffer.flip();
-
-                if (pass == 0) {
-                    // solids + lava → terrain atlas
-                    GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-                            this.textureManager.load("/terrain.png"));
-                } else {
-                    // water → water atlas
-                    GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-                            this.textureManager.load("/water.png"));
-                }
-
-                GL11.glCallLists(this.buffer);
+                buffer.put(chunkDataCache, 0, len).flip();
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D,
+                        textureManager.load(infinite && pass == 1 ? "/water.png" : "/terrain.png"));
+                GL11.glCallLists(buffer);
             }
             return len;
+        } finally {
+            net.classicremastered.minecraft.util.Debug.recordSortChunks(System.nanoTime() - start);
         }
+    }
 
-        // === finite path ===
-        float dx = pl.x - this.lastLoadX;
-        float dy = pl.y - this.lastLoadY;
-        float dz = pl.z - this.lastLoadZ;
-        if (dx * dx + dy * dy + dz * dz > 64.0F) {
-            this.lastLoadX = pl.x;
-            this.lastLoadY = pl.y;
-            this.lastLoadZ = pl.z;
-            Arrays.sort(this.loadQueue, new ChunkDistanceComparator(pl));
-        }
-
-        int len = 0;
-        for (Chunk c : this.loadQueue)
-            len = c.appendLists(this.chunkDataCache, len, pass);
-
-        this.buffer.clear();
-        if (len > 0) {
-            this.buffer.put(this.chunkDataCache, 0, len);
-            this.buffer.flip();
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureManager.load("/terrain.png"));
-            GL11.glCallLists(this.buffer);
-        }
-        return len;
+    private void ensureDrawCapacity(int count) {
+        if (count <= chunkDataCache.length) return;
+        int capacity = Math.max(count, chunkDataCache.length * 2);
+        chunkDataCache = new int[capacity];
+        buffer = BufferUtils.createIntBuffer(capacity);
     }
 
     public final void queueChunks(int x0, int y0, int z0, int x1, int y1, int z1) {
-        if (isInfiniteLevel()) return;
-
-        x0 /= 16; y0 /= 16; z0 /= 16;
-        x1 /= 16; y1 /= 16; z1 /= 16;
-        if (x0 < 0) x0 = 0;
-        if (y0 < 0) y0 = 0;
-        if (z0 < 0) z0 = 0;
-        if (x1 > this.xChunks - 1) x1 = this.xChunks - 1;
-        if (y1 > this.yChunks - 1) y1 = this.yChunks - 1;
-        if (z1 > this.zChunks - 1) z1 = this.zChunks - 1;
-
-        for (int cx = x0; cx <= x1; ++cx) {
-            for (int cy = y0; cy <= y1; ++cy) {
-                for (int cz = z0; cz <= z1; ++cz) {
-                    Chunk c = this.chunkCache[(cz * this.yChunks + cy) * this.xChunks + cx];
-                    if (!c.loaded) {
-                        c.loaded = true;
-                        this.chunks.add(c);
-                    }
-                }
+        int cx0 = Math.floorDiv(x0, 16), cy0 = Math.max(0, Math.floorDiv(y0, 16)), cz0 = Math.floorDiv(z0, 16);
+        int cx1 = Math.floorDiv(x1, 16), cy1 = Math.min((level.depth - 1) / 16, Math.floorDiv(y1, 16)), cz1 = Math.floorDiv(z1, 16);
+        boolean infinite = isInfiniteLevel();
+        if (!infinite) {
+            cx0 = Math.max(0, cx0); cz0 = Math.max(0, cz0);
+            cx1 = Math.min(xChunks - 1, cx1); cz1 = Math.min(zChunks - 1, cz1);
+        }
+        for (int cx = cx0; cx <= cx1; cx++) for (int cy = cy0; cy <= cy1; cy++)
+            for (int cz = cz0; cz <= cz1; cz++) {
+                if (infinite) markDirty(cx, cy, cz);
+                else markDirty(chunkCache[(cz * yChunks + cy) * xChunks + cx]);
             }
-        }
     }
 
-    public void onTimeOfDayMaybeChanged() {
-        if (level == null) return;
-        float f = level.getDayFactor();
-        if (lightingCooldown > 0) { lightingCooldown--; return; }
-        if (lastDayFactor < 0f) { lastDayFactor = f; return; }
-        if (Math.abs(f - lastDayFactor) > 0.10f) {
-            lastDayFactor = f;
-            lightingCooldown = 5;
-            refresh();
-        }
-    }
-
+    public void onTimeOfDayMaybeChanged() { }
     public void renderEntities(float partial) {
         if (level == null) return;
         for (Entity e : level.entityList) {
@@ -275,6 +238,7 @@ public final class LevelRenderer {
         for (Entity e : level.entityList) {
             if (e instanceof Player) {
                 Player p = (Player) e;
+                HeldItemRenderer.renderWorld(p, partial);
                 int selId = p.inventory.getSelected();
                 if (selId >= 256 && (selId - 256) == 11) {
                     net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
@@ -283,12 +247,14 @@ public final class LevelRenderer {
                     }
                 }
                 if (selId >= 256 && (selId - 256) == 10) {
-                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.TelekinesisItem.getGrabbed(p);
+                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.getGrabbed(p);
                     if (grabbed != null && !grabbed.removed) {
-                        net.classicremastered.minecraft.level.itemstack.TelekinesisItem.renderMobBeam(p, grabbed, textureManager, partial);
+                        net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.renderMobBeam(p, grabbed, textureManager, partial);
                     }
                 }
             }
         }
     }
 }
+
+

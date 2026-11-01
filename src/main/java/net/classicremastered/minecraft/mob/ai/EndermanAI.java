@@ -12,6 +12,7 @@ import net.classicremastered.util.MathHelper;
 import java.util.*;
 
 public final class EndermanAI extends BasicAI {
+    @Override protected boolean usesWanderNavigation() { return true; }
     private static final long serialVersionUID = 1L;
 
     private boolean angry = false;

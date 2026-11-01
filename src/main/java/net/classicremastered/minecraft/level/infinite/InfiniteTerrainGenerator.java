@@ -5,6 +5,7 @@ import java.util.Random;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.generator.noise.CombinedNoise;
 import net.classicremastered.minecraft.level.generator.noise.OctaveNoise;
+import net.classicremastered.minecraft.level.generator.noise.PerlinNoise;
 import net.classicremastered.minecraft.level.structure.HouseStructure;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Villager;
@@ -21,6 +22,7 @@ public final class InfiniteTerrainGenerator {
     private final CombinedNoise nE1, nE2;
     private final OctaveNoise nVar;
     private final OctaveNoise nBeachA, nBeachB;
+    private final PerlinNoise nCave;
 
     public InfiniteTerrainGenerator(long seed, int height) {
         this.seed = seed;
@@ -35,6 +37,7 @@ public final class InfiniteTerrainGenerator {
         nVar = new OctaveNoise(r, 8);
         nBeachA = new OctaveNoise(r, 8);
         nBeachB = new OctaveNoise(r, 8);
+        nCave = new PerlinNoise(r);
     }
 
     /**
@@ -52,6 +55,7 @@ public final class InfiniteTerrainGenerator {
     private void generateNormal(SimpleChunk c, int worldX, int worldZ, Level level) {
         final float SCALE = 1.3f;
         Random rand = new Random(seed ^ (worldX * 341873128712L + worldZ * 132897987541L));
+        int[] dirtTops = new int[CHUNK * CHUNK];
 
         for (int lx = 0; lx < CHUNK; lx++) {
             int gx = worldX + lx;
@@ -73,6 +77,7 @@ public final class InfiniteTerrainGenerator {
                     base = (((base - eFlag) / 2) << 1) + eFlag;
 
                 int dirtTop = base + waterLevel;
+                dirtTops[lx + lz * CHUNK] = dirtTop;
                 int stoneTop = dirtTop + ((int) (nVar.compute(gx, gz) / 24.0) - 4);
 
                 for (int y = 0; y < height; y++) {
@@ -110,14 +115,37 @@ public final class InfiniteTerrainGenerator {
             }
         }
 
-        populateOreVeins(c, worldX, worldZ, Block.COAL_ORE.id, 8, 18, height - 6);
-        populateOreVeins(c, worldX, worldZ, Block.IRON_ORE.id, 6, 12, height - 12);
-        populateOreVeins(c, worldX, worldZ, Block.GOLD_ORE.id, 3, 8, height / 2);
+        // Carve caves
+        for (int lx = 0; lx < CHUNK; lx++) {
+            int gx = worldX + lx;
+            for (int lz = 0; lz < CHUNK; lz++) {
+                int gz = worldZ + lz;
+                int dirtTop = dirtTops[lx + lz * CHUNK];
+                for (int y = 2; y < dirtTop - 4 && y < height; y++) {
+                    double caveVal = nCave.compute(gx * 0.04D, y * 0.06D, gz * 0.04D);
+                    if (Math.abs(caveVal) < 0.12D) {
+                        int idx = SimpleChunk.idx(lx, y, lz, height);
+                        if (c.blocks[idx] == (byte) Block.STONE.id) {
+                            if (y < 8) {
+                                c.blocks[idx] = (byte) Block.STATIONARY_LAVA.id;
+                            } else {
+                                c.blocks[idx] = 0; // air
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        populateOreVeins(c, worldX, worldZ, Block.COAL_ORE.id, 8, 18, height - 6, dirtTops);
+        populateOreVeins(c, worldX, worldZ, Block.IRON_ORE.id, 6, 12, height - 12, dirtTops);
+        populateOreVeins(c, worldX, worldZ, Block.GOLD_ORE.id, 3, 8, height / 2, dirtTops);
 
         decorateChunk(c, worldX, worldZ, rand);
         if (level != null) {
             generateHouseIfSpawned(c, worldX, worldZ, rand, level);
         }
+
         c.meshed = false;
     }
 
@@ -208,13 +236,16 @@ public final class InfiniteTerrainGenerator {
     }
 
 
-    private void populateOreVeins(SimpleChunk c, int worldX, int worldZ, int blockId, int attempts, int veinSize, int maxY) {
+    private void populateOreVeins(SimpleChunk c, int worldX, int worldZ, int blockId, int attempts, int veinSize, int maxY, int[] dirtTops) {
         Random rand = new Random(seed ^ (worldX * 341873128712L + worldZ * 132897987541L + blockId * 31L));
 
         for (int i = 0; i < attempts; i++) {
             int lx = rand.nextInt(CHUNK);
             int lz = rand.nextInt(CHUNK);
-            int ly = rand.nextInt(Math.max(1, maxY));
+
+            int localStoneTop = dirtTops[lx + lz * CHUNK] - 4;
+            if (localStoneTop < 5) localStoneTop = 5;
+            int ly = rand.nextInt(Math.min(localStoneTop, Math.max(1, maxY)));
 
             // Try to form a small cluster / vein
             for (int j = 0; j < veinSize; j++) {

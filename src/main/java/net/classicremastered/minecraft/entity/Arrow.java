@@ -394,6 +394,7 @@ public class Arrow extends Entity {
     private float xRotO;
 
     private boolean hasHit = false;
+    public boolean isEmbedded() { return hasHit; }
 
     private int stickTime = 0;
 

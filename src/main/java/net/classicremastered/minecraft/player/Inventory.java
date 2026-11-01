@@ -134,6 +134,18 @@ public class Inventory implements Serializable {
         }
     }
 
+    public void replaceSlotWithId(int id) {
+        if (id >= 0) {
+            int s;
+            if ((s = this.getSlot(id)) >= 0) {
+                this.slots[s] = this.slots[this.selected];
+                this.count[s] = this.count[this.selected];
+            }
+            this.slots[this.selected] = id;
+            this.count[this.selected] = 1;
+        }
+    }
+
  // Inventory.java
     public boolean addResource(int id) {
         if (id < 0) return false;
@@ -155,11 +167,12 @@ public class Inventory implements Serializable {
         final int CAP = 99;
 
         // --- pass 1: merge into existing stacks (hotbar first, then grid) ---
-        int s = getSlot(id); // hotbar
-        if (s >= 0 && count[s] < CAP) {
-            count[s]++;
-            popTime[s] = POP_TIME_DURATION;
-            return true;
+        for (int s = 0; s < HOTBAR_SIZE; s++) {
+            if (slots[s] == id && count[s] < CAP) {
+                count[s]++;
+                popTime[s] = POP_TIME_DURATION;
+                return true;
+            }
         }
         // grid merge
         for (int g = 0; g < gridSlots.length; g++) {

@@ -24,6 +24,9 @@ public final class MobEggColors {
     }
 
     public static EggColor get(String mobName) {
-        return colors.getOrDefault(mobName, new EggColor(0xAAAAAA, 0x555555)); // default gray
+        for (Map.Entry<String,EggColor> entry : colors.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(mobName)) return entry.getValue();
+        }
+        return new EggColor(0xAAAAAA, 0x555555);
     }
 }

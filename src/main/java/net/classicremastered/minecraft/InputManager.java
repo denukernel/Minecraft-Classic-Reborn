@@ -26,6 +26,11 @@ public class InputManager {
 
         final int selId = mc.player.inventory.getSelected();
 
+        if (selId == 266) {
+            if (button == 0) net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.launch(mc.player);
+            return;
+        }
+
         // If holding Gravity Gun and clicking Left Click while carrying something, drop gently
         if (selId >= 256 && (selId - 256) == 11) {
             if (button == 0 && net.classicremastered.minecraft.level.itemstack.GravityGunItem.isHoldingAnything(mc.player)) {

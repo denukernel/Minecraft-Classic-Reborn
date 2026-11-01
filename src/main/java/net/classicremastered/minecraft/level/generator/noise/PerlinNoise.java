@@ -113,6 +113,89 @@ public class PerlinNoise extends Noise
 										unknown0 - 1.0D))));
 	}
 
+	@Override
+	public double compute(double x, double y, double z)
+	{
+		double unknown0 = y;
+		double unknown1 = z;
+		double unknown2 = x;
+
+		int unknown3 = (int)Math.floor(x) & 255;
+		int unknown4 = (int)Math.floor(z) & 255;
+		int unknown5 = (int)Math.floor(y) & 255;
+
+		unknown2 -= Math.floor(unknown2);
+		unknown1 -= Math.floor(unknown1);
+		unknown0 -= Math.floor(unknown0);
+
+		double unknown6 = a(unknown2);
+		double unknown7 = a(unknown1);
+		double unknown8 = a(unknown0);
+
+		int unknown9 = noise[unknown3] + unknown4;
+		int unknown10 = noise[unknown9] + unknown5;
+
+		unknown9 = noise[unknown9 + 1] + unknown5;
+		unknown3 = noise[unknown3 + 1] + unknown4;
+		unknown4 = noise[unknown3] + unknown5;
+		unknown3 = noise[unknown3 + 1] + unknown5;
+
+		return lerp(
+				unknown8,
+				lerp(
+						unknown7,
+						lerp(
+								unknown6,
+								grad(
+										noise[unknown10],
+										unknown2,
+										unknown1,
+										unknown0),
+								grad(
+										noise[unknown4],
+										unknown2 - 1.0D,
+										unknown1,
+										unknown0)),
+						lerp(
+								unknown6,
+								grad(
+										noise[unknown9],
+										unknown2,
+										unknown1 - 1.0D,
+										unknown0),
+								grad(
+										noise[unknown3],
+										unknown2 - 1.0D,
+										unknown1 - 1.0D,
+										unknown0))),
+				lerp(
+						unknown7,
+						lerp(
+								unknown6,
+								grad(
+										noise[unknown10 + 1],
+										unknown2,
+										unknown1,
+										unknown0 - 1.0D),
+								grad(
+										noise[unknown4 + 1],
+										unknown2 - 1.0D,
+										unknown1,
+										unknown0 - 1.0D)),
+						lerp(
+								unknown6,
+								grad(
+										noise[unknown9 + 1],
+										unknown2,
+										unknown1 - 1.0D,
+										unknown0 - 1.0D),
+								grad(
+										noise[unknown3 + 1],
+										unknown2 - 1.0D,
+										unknown1 - 1.0D,
+										unknown0 - 1.0D))));
+	}
+
 	private int[] noise;
 
 	private static double a(double unknown0)

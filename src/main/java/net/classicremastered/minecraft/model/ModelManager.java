@@ -5,7 +5,7 @@ public final class ModelManager {
    private HumanoidModel human         = new HumanoidModel(0.0F);
    private HumanoidModel armoredHuman  = new HumanoidModel(1.0F);
    private CreeperModel creeper        = new CreeperModel();
-   private NewSkeletonModel skeleton   = new NewSkeletonModel();
+   private SkeletonModel skeleton      = new SkeletonModel();
    private ZombieModel zombie          = new ZombieModel();
    private AnimalModel pig             = new PigModel();
    private AnimalModel sheep           = new SheepModel();
@@ -35,6 +35,13 @@ public final class ModelManager {
 
    // NEW: LeggedMan model
    private LeggedMan leggedman = new LeggedMan();
+
+   // NEW: LongNeckMan model
+   private LongNeckManModel longneckman = new LongNeckManModel();
+
+   // NEW: Agent model
+   private AgentModel agent = new AgentModel();
+   private BlueForestGolemModel blueForestGolem = new BlueForestGolemModel();
 
    public final Model getModel(String key) {
       if (key == null) return null;
@@ -79,6 +86,13 @@ public final class ModelManager {
 
          // NEW: LeggedMan mapping
          case "leggedmonster":         return this.leggedman;
+
+         // NEW: LongNeckMan mapping
+         case "longneckman":           return this.longneckman;
+
+         // NEW: Agent mapping
+         case "agent":                 return this.agent;
+         case "blue_forest_golem":     return this.blueForestGolem;
 
          default:                      return null;
       }

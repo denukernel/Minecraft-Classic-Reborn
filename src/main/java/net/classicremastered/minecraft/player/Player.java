@@ -60,6 +60,9 @@ public class Player extends Mob {
     public int deltaCurseTicks = 0; // ticks remaining
     public int deltaCurseCounter = 0;
 
+    public int healthDrinkTimer = 0;
+    private int lastSelectedSlot = -1;
+
     // poison deals damage every poisonEvery ticks, for poisonTicks total ticks
     public int poisonTicks = 0;
     public int poisonEvery = 0;
@@ -218,6 +221,23 @@ public class Player extends Mob {
     @Override
     public void aiStep() {
         this.inventory.tick();
+
+        // Handle Health Drink healing timer
+        if (healthDrinkTimer > 0) {
+            healthDrinkTimer--;
+            if (healthDrinkTimer % 25 == 0) {
+                // Heals 2 hearts total over 5 seconds (4 hp total). 
+                // Since 100 ticks / 25 ticks = 4 pulses, healing 1 hp per pulse = 4 hp (2 hearts) total.
+                this.heal(1);
+            }
+        }
+
+        // Grappling Hook slot switch check
+        if (this.inventory.selected != lastSelectedSlot) {
+            net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.remove(this);
+            lastSelectedSlot = this.inventory.selected;
+        }
+
         this.oBob = this.bob;
         this.input.updateMovement();
         SimpleChunkManager.checkFarLandsWarning(minecraft, this);
@@ -486,6 +506,8 @@ public class Player extends Mob {
 
     @Override
     public void render(TextureManager var1, float var2) {
+        if (minecraft != null && minecraft.player == this && minecraft.renderer != null
+                && !minecraft.renderer.shouldRenderLocalPlayer()) return;
         if (this.getClass() != Player.class || (this.minecraft != null && this.minecraft.cameraMode > 0)) {
             super.render(var1, var2);
         }
@@ -536,6 +558,8 @@ public class Player extends Mob {
 
     @Override
     public void die(Entity killer) {
+        // Clear grappling hook anchor on death
+        net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.remove(this);
         // existing physics
         this.setSize(0.2F, 0.2F);
         this.setPos(this.x, this.y, this.z);

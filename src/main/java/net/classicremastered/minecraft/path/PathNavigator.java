@@ -1,163 +1,153 @@
-// file: src/com/mojang/minecraft/path/PathNavigator.java
 package net.classicremastered.minecraft.path;
 
+import java.util.*;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.util.MathHelper;
 
+/** Per-mob cached routes, with collision validation, bounded replans, and stuck recovery. */
 public final class PathNavigator {
-
     private final Level level;
-
-    private int   losSamples    = 12;
-    private float closeStop     = 0.25F;
-    private float waypointReach = 0.20F;
-
-    private float gx, gy, gz;
-    private boolean hasGoal = false;
-
-    private float wx, wy, wz;
-    private boolean hasWaypoint = false;
-
-    public PathNavigator(Level level) { this.level = level; }
-
-    public PathNavigator setGoal(float x, float y, float z) {
-        this.gx = x; this.gy = y; this.gz = z;
-        this.hasGoal = true;
-        this.hasWaypoint = false;
-        return this;
+    private float gx,gy,gz;
+    private boolean hasGoal;
+    private boolean movingGoal;
+    private List<Pathfinder.Node> path=Collections.emptyList();
+    private int index,replanTicks,progressTicks;
+    private float progressX,progressZ;
+    private boolean knownPosition;
+    private float lastX,lastY,lastZ;
+    private boolean aligning,alignZAxis;
+    private float alignX,alignY,alignZ;
+    public PathNavigator(Level level){this.level=level;}
+    public PathNavigator setGoal(float x,float feetY,float z) {
+        float movement=(x-gx)*(x-gx)+(z-gz)*(z-gz);
+        movingGoal=hasGoal && (movement>0.0001f || Math.abs(feetY-gy)>0.01f);
+        if(!hasGoal || movement>9 || (path.isEmpty() && movingGoal))replanTicks=0;
+        else if(movingGoal)replanTicks=Math.min(replanTicks,8);
+        gx=x;gy=feetY;gz=z;hasGoal=true;return this;
     }
-    public void clearGoal() { hasGoal = false; hasWaypoint = false; }
-    public boolean hasGoal() { return hasGoal; }
-
+    public void clearGoal(){hasGoal=false;aligning=false;path=Collections.emptyList();index=0;replanTicks=0;}
+    public boolean hasGoal(){return hasGoal;}
+    public List<Pathfinder.Node> pathSnapshot(){return List.copyOf(path);}
+    private void advance(Mob mob,GroundClearance ground) {
+        float reach=Math.max(0.035f,Math.min(0.18f,((float)Math.ceil(mob.bbWidth)-mob.bbWidth)*0.35f));
+        while(index<path.size()) {
+            Pathfinder.Node next=path.get(index);
+            float dx=next.x+ground.offset-mob.x,dz=next.z+ground.offset-mob.z;
+            if(dx*dx+dz*dz>reach*reach || Math.abs(mob.bb.y0-next.feetY)>0.2f)break;
+            index++;
+        }
+    }
     public Result steer(Mob mob) {
-        if (!hasGoal) return Result.idle();
-
-        float ddx = gx - mob.x, ddz = gz - mob.z;
-        if (ddx*ddx + ddz*ddz <= closeStop*closeStop) {
-            hasWaypoint = false; return Result.arrived();
+        if(!hasGoal || mob.bb==null)return Result.idle();
+        float mx=mob.x-lastX,mz=mob.z-lastZ;
+        if(knownPosition && (mx*mx+mz*mz>9 || Math.abs(mob.bb.y0-lastY)>2)) {
+            path=Collections.emptyList();index=0;replanTicks=0;progressTicks=0;
+            aligning=false;
         }
-
-        // Go straight if clear and not a >1-block drop
-        if (hasLineOfSightFlat(mob.x, mob.y + mob.heightOffset, mob.z, gx, gy, gz)
-                && !unsafeDropAhead(mob)) {
-            hasWaypoint = false;
-            return steerTo(mob, gx, gy, gz, stepUpAhead(mob));
+        lastX=mob.x;lastY=mob.bb.y0;lastZ=mob.z;knownPosition=true;
+        GroundClearance ground=new GroundClearance(level,mob.bbWidth,mob.bbHeight);
+        float feet=mob.bb.y0;
+        if(aligning) {
+            float lane=alignZAxis?Math.abs(mob.z-alignZ):Math.abs(mob.x-alignX);
+            if(lane<0.07f || Math.abs(feet-alignY)>0.5f
+                    || !ground.bodyLineClear(mob.x,Math.max(feet,alignY),mob.z,alignX,alignZ)) {
+                aligning=false;replanTicks=0;
+            } else return toward(mob,alignX,alignY,alignZ);
         }
-
-        if (!hasWaypoint || reached(mob, wx, wz)) pickGreedyNeighbor(mob);
-
-        if (!hasWaypoint) return steerTo(mob, gx, gy, gz, stepUpAhead(mob));
-        return steerTo(mob, wx, wy, wz, stepUpAhead(mob));
-    }
-
-    // ---------- internals ----------
-    private boolean reached(Mob mob, float x, float z) {
-        float dx = x - mob.x, dz = z - mob.z;
-        return (dx*dx + dz*dz) <= (waypointReach*waypointReach);
-    }
-
-    private Result steerTo(Mob mob, float tx, float ty, float tz, boolean wantJump) {
-        float dx = tx - mob.x, dz = tz - mob.z;
-        float yaw = (float)(Math.atan2((double)dz, (double)dx) * 180.0D / Math.PI) - 90.0F;
-        return new Result(yaw, true, wantJump);
-    }
-
-    private boolean hasLineOfSightFlat(float sx, float sy, float sz, float tx, float ty, float tz) {
-        float dx = tx - sx, dy = (ty - 0.2F) - sy, dz = tz - sz;
-        for (int i = 1; i <= losSamples; i++) {
-            float t = i / (float)losSamples;
-            int bx = (int)Math.floor(sx + dx*t);
-            int by = (int)Math.floor(sy + dy*t);
-            int bz = (int)Math.floor(sz + dz*t);
-            if (solid(level.getTile(bx, by, bz)) || solid(level.getTile(bx, by+1, bz))) return false;
+        float dx=gx-mob.x,dz=gz-mob.z;
+        if(dx*dx+dz*dz<0.4f*0.4f && Math.abs(feet-gy)<0.5f)return Result.arrived();
+        if(dx*dx+dz*dz<2.25f && ground.walkableLine(mob.x,feet,mob.z,gx,gy,gz))return toward(mob,gx,gy,gz);
+        replanTicks--;
+        advance(mob,ground);
+        if(index>=path.size() && !path.isEmpty())replanTicks=0;
+        boolean invalid=index<path.size()&&!ground.standable(path.get(index).x,path.get(index).feetY,path.get(index).z);
+        if(invalid){path=Collections.emptyList();index=0;replanTicks=Math.min(replanTicks,3);}
+        if(++progressTicks>=20) {
+            float px=mob.x-progressX,pz=mob.z-progressZ;
+            if(px*px+pz*pz<0.015f && index<path.size())replanTicks=0;
+            progressX=mob.x;progressZ=mob.z;progressTicks=0;
         }
-        return true;
-    }
-
-    private boolean unsafeDropAhead(Mob mob) {
-        float yaw = mob.yRot * ((float)Math.PI / 180F);
-        int ax = (int)Math.floor(mob.x - MathHelper.sin(yaw) * 0.8F);
-        int az = (int)Math.floor(mob.z + MathHelper.cos(yaw) * 0.8F);
-        int fy = (int)Math.floor(mob.y + 0.01F);
-
-        int groundY = fy - 1;
-        while (groundY > 0 && !solid(level.getTile(ax, groundY, az))) groundY--;
-        int drop = (fy - 1) - groundY;
-        return drop >= 2; // avoid dropping 2+ blocks
-    }
-
-    /** Greedy 8-dir step; allows ±1 Y. Bias upward if goal is ≥2 blocks above. */
-    private void pickGreedyNeighbor(Mob mob) {
-        int mx = (int)Math.floor(mob.x);
-        int my = (int)Math.floor(mob.y + 0.01F);
-        int mz = (int)Math.floor(mob.z);
-
-        boolean goalMuchHigher = (gy - my) >= 2.0F;
-
-        float best = Float.POSITIVE_INFINITY;
-        int bx=mx, by=my, bz=mz; boolean found=false;
-
-        for (int dy = -1; dy <= 1; dy++) {
-            int ny = my + dy;
-            // never allow drops >1 in a single step
-            if (dy < -1 || dy > 1) continue;
-
-            for (int dz = -1; dz <= 1; dz++) for (int dx = -1; dx <= 1; dx++) {
-                if (dx==0 && dz==0) continue;
-                int nx = mx + dx, nz = mz + dz;
-                if (!walkable(nx, ny, nz)) continue;
-
-                float gxz = Math.abs(gx - (nx + 0.5F)) + Math.abs(gz - (nz + 0.5F));
-                float vPenalty = (dy==0 ? 0.0F : 0.9F);
-
-                // If player is much higher, strongly prefer stepping up over flat/down
-                if (goalMuchHigher) {
-                    if (dy == 1) vPenalty -= 0.8F; // reward up step
-                    if (dy == -1) vPenalty += 1.2F; // discourage drops
-                } else {
-                    if (dy == -1) vPenalty += 0.4F;  // generally discourage down
-                }
-
-                float score = gxz + vPenalty;
-                if (score < best) { best=score; bx=nx; by=ny; bz=nz; found=true; }
+        if(replanTicks<=0 && (mob.onGround || path.isEmpty())) {
+            Pathfinder.Node goal=ground.chaseGoal(gx,gy,gz);
+            List<Pathfinder.Node> planned=goal==null?null:Pathfinder.findPath(level,mob,goal.x,goal.feetY,goal.z,1024);
+            if(planned!=null){path=planned;index=0;}
+            else if(index>=path.size()){path=Collections.emptyList();index=0;}
+            replanTicks=path.isEmpty()?10:movingGoal?8:20;
+            advance(mob,ground);
+            if(index==0 && path.size()>1) {
+                Pathfinder.Node successor=path.get(1);
+                float nx=successor.x+ground.offset,nz=successor.z+ground.offset;
+                float horizontal=(nx-mob.x)*(nx-mob.x)+(nz-mob.z)*(nz-mob.z);
+                float rise=successor.feetY-feet;
+                // A refreshed route must not send a descending or ascending mob
+                // back to a cell center that it has already passed on the step.
+                if(Math.abs(rise)>0.2f && Math.abs(rise)<=1.01f && horizontal<=2.56f
+                        && ground.bodyLineClear(mob.x,Math.max(feet,successor.feetY),mob.z,nx,nz))index=1;
             }
         }
-
-        if (found) { wx = bx+0.5F; wy = by+0.001F; wz = bz+0.5F; hasWaypoint=true; }
-        else hasWaypoint=false;
+        if(index>=path.size())return Result.idle();
+        if(index==0 && path.size()>1 && mob.onGround && crowded(mob)) {
+            Pathfinder.Node start=path.get(0),next=path.get(1);
+            float upper=Math.max(feet,next.feetY);
+            if(Math.abs(start.feetY-feet)<0.2f
+                    && !ground.bodyLineClear(mob.x,upper,mob.z,next.x+ground.offset,next.z+ground.offset)) {
+                boolean xLeg=next.x!=start.x;
+                float x=xLeg?mob.x:start.x+ground.offset,z=xLeg?start.z+ground.offset:mob.z;
+                float lane=xLeg?Math.abs(mob.z-z):Math.abs(mob.x-x);
+                if(lane>0.1f && ground.walkableLine(mob.x,feet,mob.z,x,start.feetY,z)) {
+                    // Finish the small lateral move into a narrow lane before
+                    // reconsidering shortcuts. Crowd pressure must not toggle
+                    // between a backward cell center and the forward doorway.
+                    aligning=true;alignZAxis=xLeg;alignX=x;alignY=start.feetY;alignZ=z;
+                    return toward(mob,alignX,alignY,alignZ);
+                }
+            }
+        }
+        // Skip redundant grid centers only across a fully supported, body-clear corridor.
+        // This also prevents periodic replans from steering back to the start-cell center.
+        for(int look=path.size()-1;look>index;look=look>index+6?index+6:look-1) {
+            Pathfinder.Node candidate=path.get(look);
+            if(ground.walkableLine(mob.x,feet,mob.z,candidate.x+ground.offset,candidate.feetY,candidate.z+ground.offset)) {
+                index=look;
+                break;
+            }
+        }
+        if(index+1<path.size()) {
+            Pathfinder.Node current=path.get(index),successor=path.get(index+1);
+            float nx=successor.x+ground.offset,nz=successor.z+ground.offset;
+            float rise=successor.feetY-feet;
+            boolean aligned=current.z==successor.z && Math.abs(mob.z-(current.z+ground.offset))<0.25f
+                || current.x==successor.x && Math.abs(mob.x-(current.x+ground.offset))<0.25f;
+            float horizontal=(nx-mob.x)*(nx-mob.x)+(nz-mob.z)*(nz-mob.z);
+            if(aligned && Math.abs(rise)>0.2f && Math.abs(rise)<=1.01f && horizontal<=2.56f
+                    && ground.bodyLineClear(mob.x,Math.max(feet,successor.feetY),mob.z,nx,nz))index++;
+        }
+        Pathfinder.Node next=path.get(index);
+        float x=next.x+ground.offset,z=next.z+ground.offset;
+        // Do not feed movement into a newly blocked corridor while waiting for a replan.
+        float upper=Math.max(feet,next.feetY);
+        if(!ground.bodyLineClear(mob.x,upper,mob.z,x,z)) {replanTicks=0;return Result.idle();}
+        return toward(mob,x,next.feetY,z);
     }
-
-    private boolean walkable(int x, int y, int z) {
-        int feet = level.getTile(x, y, z);
-        int head = level.getTile(x, y+1, z);
-        int ground = level.getTile(x, y-1, z);
-        return !solid(feet) && !solid(head) && solid(ground);
+    private Result toward(Mob mob,float x,float feetY,float z) {
+        float yaw=(float)Math.toDegrees(Math.atan2(z-mob.z,x-mob.x))-90f;
+        float distance=(x-mob.x)*(x-mob.x)+(z-mob.z)*(z-mob.z);
+        boolean jump=feetY>mob.bb.y0+Math.max(0.25f,mob.footSize)+0.01f && distance<2.25f;
+        return new Result(yaw,true,jump,Math.max(0.15f,Math.min(1f,(float)Math.sqrt(distance)*2f)));
     }
-
-    private boolean stepUpAhead(Mob mob) {
-        float yaw = mob.yRot * ((float)Math.PI / 180F);
-        int x = (int)Math.floor(mob.x - MathHelper.sin(yaw) * 0.8F);
-        int z = (int)Math.floor(mob.z + MathHelper.cos(yaw) * 0.8F);
-        int y = (int)Math.floor(mob.y + 0.01F);
-        int feet = level.getTile(x, y, z);
-        int head = level.getTile(x, y+1, z);
-        int upHead = level.getTile(x, y+2, z);
-        int ground = level.getTile(x, y, z);
-        return solid(feet) && !solid(head) && !solid(upHead) && solid(ground);
+    private boolean crowded(Mob mob) {
+        for(Object entity:level.findEntities(mob,mob.bb.grow(1.2f,0.5f,1.2f))) {
+            if(entity instanceof Mob other && !(other instanceof net.classicremastered.minecraft.player.Player)
+                    && !other.removed && other.health>0 && !other.noPhysics)return true;
+        }
+        return false;
     }
-
-    private boolean solid(int id) {
-        if (id <= 0) return false;
-        try { return net.classicremastered.minecraft.level.tile.Block.blocks[id].isSolid(); }
-        catch (Throwable t) { return id != 0; }
-    }
-
-    // result
     public static final class Result {
-        public final float targetYaw; public final boolean forward; public final boolean wantJump;
-        private static final Result IDLE=new Result(0,false,false), ARR=new Result(0,false,false);
-        private Result(float a, boolean b, boolean c){targetYaw=a; forward=b; wantJump=c;}
-        public static Result idle(){return IDLE;} public static Result arrived(){return ARR;}
+        public final float targetYaw;
+        public final boolean forward,wantJump;
+        public final float speedFactor;
+        private Result(float yaw,boolean forward,boolean jump,float speed){targetYaw=yaw;this.forward=forward;wantJump=jump;speedFactor=speed;}
+        public static Result idle(){return new Result(0,false,false,0);}
+        public static Result arrived(){return idle();}
     }
 }

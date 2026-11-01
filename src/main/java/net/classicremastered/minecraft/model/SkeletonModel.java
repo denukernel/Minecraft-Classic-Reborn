@@ -26,24 +26,30 @@ public final class SkeletonModel extends ZombieModel {
         this.leftLeg.setPosition(2.0F, 12.0F, 0.0F);
     }
 
-    @Override
-    public void preAnimate(Object entity) {
+    private Skeleton skeleton;
+    private net.classicremastered.minecraft.render.TextureManager renderTextures;
+    public void setRenderTextures(net.classicremastered.minecraft.render.TextureManager textures) {renderTextures=textures;}
+    @Override public void preAnimate(Object entity) {
         super.preAnimate(entity);
-        if (entity instanceof Skeleton) {
-            Skeleton sk = (Skeleton) entity;
-            if (sk.isDrawingBow()) {
-                // Animate bow-draw arms
-                float f = (float) sk.attackTime / (float) Skeleton.ATTACK_DURATION; // 0..1
-                float swing = MathHelper.sin(f * (float)Math.PI);
+        skeleton=entity instanceof Skeleton s?s:null;
+    }
 
-                // Right arm swings forward as if pulling string
-                this.rightArm.pitch = -1.0F - swing * 0.8F;
-                this.rightArm.yaw   = -0.2F + swing * 0.2F;
-
-                // Left arm holds bow steady
-                this.leftArm.pitch = -0.6F + swing * 0.3F;
-                this.leftArm.yaw   =  0.2F - swing * 0.2F;
-            }
+    @Override public void setRotationAngles(float limb,float amount,float age,float yaw,float pitch,float scale) {
+        super.setRotationAngles(limb,amount,age,yaw,pitch,scale);
+        rightArm.yaw=leftArm.yaw=0;
+        rightArm.roll=leftArm.roll=0;
+        rightArm.pitch=MathHelper.cos(limb*.6662f+(float)Math.PI)*1.4f*amount;
+        leftArm.pitch=MathHelper.cos(limb*.6662f)*1.4f*amount;
+        if(skeleton!=null) {
+            float aimYaw=(skeleton.getBowAimYaw()-skeleton.yBodyRot)/57.295776f;
+            float aimPitch=skeleton.getBowAimPitch()/57.295776f;
+            BowPose.apply(this,aimYaw,aimPitch,skeleton.getBowDrawProgress(1),skeleton.isDrawingBow());
         }
+    }
+    @Override public void render(float limb,float amount,float age,float yaw,float pitch,float scale) {
+        super.render(limb,amount,age,yaw,pitch,scale);
+        if(skeleton==null || renderTextures==null)return;
+        net.classicremastered.minecraft.render.HandItemRenderer.renderBow(this,renderTextures,
+            skeleton.getBowTexture(),scale,skeleton.getBrightness(1),skeleton.getBowDrawProgress(1),skeleton.isDrawingBow());
     }
 }

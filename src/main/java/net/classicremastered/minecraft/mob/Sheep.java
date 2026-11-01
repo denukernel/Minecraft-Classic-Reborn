@@ -110,6 +110,7 @@ public class Sheep extends QuadrupedMob {
          var11.head.pitch = var8.head.pitch;
          var11.head.y = var8.head.y;
          var11.head.x = var8.head.x;
+         var11.head.z = var8.head.z;
          var11.body.yaw = var8.body.yaw;
          var11.body.pitch = var8.body.pitch;
          var11.leg1.pitch = var8.leg1.pitch;

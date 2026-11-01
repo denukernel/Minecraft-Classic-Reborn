@@ -85,19 +85,35 @@ public final class GuiCrafting extends GuiScreen {
         if (p != null && p.inventory != null) {
             for (int i = 0; i < 9; i++) {
                 if (craftMatrix[i] > 0 && craftCount[i] > 0) {
-                     // Try to add back to inventory
-                     if (!p.inventory.addResource(craftMatrix[i])) {
-                         // Inventory full. In a real game, drop to ground.
-                     }
+                    craftCount[i] = returnStack(p, craftMatrix[i], craftCount[i]);
+                    if (craftCount[i] == 0) craftMatrix[i] = -1;
                 }
             }
             
             // Also flush carried item
             if (carriedId > 0 && carriedCnt > 0) {
-                p.inventory.addResource(carriedId); 
+                carriedCnt = returnStack(p, carriedId, carriedCnt);
+                if (carriedCnt == 0) carriedId = -1;
             }
         }
         super.onClose();
+    }
+
+    private int returnStack(Player player, int id, int count) {
+        while (count > 0 && player.inventory.addResource(id)) count--;
+        if (count > 0 && player.level != null) {
+            net.classicremastered.minecraft.Entity dropped;
+            if (id >= 256) {
+                dropped = new net.classicremastered.minecraft.entity.DroppedItem(
+                    player.level, player.x, player.y, player.z, id - 256, count);
+            } else {
+                dropped = new net.classicremastered.minecraft.entity.DroppedBlock(
+                    player.level, player.x, player.y, player.z, id, count);
+            }
+            player.level.addEntity(dropped);
+            count = 0;
+        }
+        return count;
     }
 
     @Override

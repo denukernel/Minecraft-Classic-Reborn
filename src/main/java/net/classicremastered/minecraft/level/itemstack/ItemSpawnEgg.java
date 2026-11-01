@@ -161,4 +161,6 @@ public final class ItemSpawnEgg extends Item {
 
         GL11.glColor3f(1f, 1f, 1f);
     }
+
+    @Override public int getModelTint() { return MobEggColors.get(mobName).spots; }
 }

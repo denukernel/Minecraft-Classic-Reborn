@@ -129,8 +129,7 @@ public final class ShopScreen extends GuiScreen {
         case ID_BUY_PHYSICS_GUN: // added
             if (p.coins >= 50) {
                 p.coins -= 50;
-                // ID 11 is your Physics Gun
-                p.inventory.addResource(Item.items[11].id + 256);
+                p.inventory.addResource(Item.PHYSICS_GUN.id + 256);
                 this.minecraft.hud.addChat("&aPurchased Physics Gun!");
             } else {
                 this.minecraft.hud.addChat("&cNot enough coins!");

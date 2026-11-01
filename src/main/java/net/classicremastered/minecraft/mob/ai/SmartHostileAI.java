@@ -12,6 +12,11 @@ public class SmartHostileAI extends BasicAttackAI {
 
     private int dodgeTicks = 0;
     private int avoidTicks = 0;
+    private boolean evading;
+    private float dodgeStrafe;
+    @Override protected boolean usesPlannedWandering() { return true; }
+
+    @Override protected boolean navigationAllowed() { return !evading && super.navigationAllowed(); }
 
     @Override
     protected void update() {
@@ -21,19 +26,8 @@ public class SmartHostileAI extends BasicAttackAI {
 
     @Override
     protected void doAttack() {
-        // if a big cliff is ahead, don't commit to straight chase
-        if (mob != null && level != null) {
-            int fx = fi(mob.x + MathHelper.cos(mob.yRot * 0.017453292F));
-            int fz = fi(mob.z + MathHelper.sin(mob.yRot * 0.017453292F));
-            int y  = fi(mob.y);
-            if (wouldFallMoreThan1(fx, y, fz)) {
-                // brake & re-orient slightly
-                this.running = false;
-                this.yya = 0.0f;
-                // small yaw nudge
-                mob.yRot += (random.nextFloat() - 0.5f) * 20.0f;
-            }
-        }
+        evading = false;
+        // Ground navigation validates support ahead without random yaw nudges.
 
         // Arrow dodge: if an arrow within 6 blocks approaches, strafe for a short burst
         if (level != null && mob != null) {
@@ -42,8 +36,17 @@ public class SmartHostileAI extends BasicAttackAI {
                 for (Object o : list) {
                     if (!(o instanceof Arrow)) continue;
                     Arrow a = (Arrow) o;
-                    if (a.removed) continue;
+                    if (a.removed || a.isEmbedded() || a.getOwner() == mob) continue;
+                    if (mob instanceof net.classicremastered.minecraft.mob.Skeleton
+                            && a.getOwner() instanceof net.classicremastered.minecraft.mob.Skeleton) continue;
                     float ax = a.x - mob.x, az = a.z - mob.z;
+                    float velocitySquared = a.xd*a.xd + a.zd*a.zd;
+                    float approach = ax*a.xd + az*a.zd;
+                    if (velocitySquared < 0.0001f || approach >= 0) continue;
+                    float impactTicks = -approach / velocitySquared;
+                    if (impactTicks > 12f) continue;
+                    float missX = ax+a.xd*impactTicks, missZ = az+a.zd*impactTicks;
+                    if (missX*missX+missZ*missZ > 1.5f*1.5f) continue;
                     float v  = MathHelper.sqrt(ax*ax + az*az);
                     if (v < 0.001f) continue;
                     // approximate “coming at me” if arrow is within a forward cone
@@ -52,7 +55,7 @@ public class SmartHostileAI extends BasicAttackAI {
                     if (Math.abs(dyaw) < 50.0f) {
                         dodgeTicks = 10 + random.nextInt(8);
                         // pick left/right opposite of dyaw sign
-                        this.xxa = (dyaw >= 0 ? -1.0f : 1.0f);
+                        dodgeStrafe = (dyaw >= 0 ? -1.0f : 1.0f);
                     }
                 }
             }
@@ -78,9 +81,11 @@ public class SmartHostileAI extends BasicAttackAI {
 
         // apply dodge burst if active
         if (dodgeTicks > 0) {
+            evading = true;
             dodgeTicks--;
             this.running = true;
             this.yya = 0.6f;
+            this.xxa = dodgeStrafe;
             // strafe set earlier; small random hop to help break line
             if (mob.onGround && random.nextFloat() < 0.1f) this.jumping = true;
             return;
@@ -88,8 +93,10 @@ public class SmartHostileAI extends BasicAttackAI {
 
         // apply TNT avoidance if active
         if (avoidTicks > 0) {
+            evading = true;
             avoidTicks--;
             this.running = false;
+            this.yya = -0.6f;
             // small yaw wander while backing up
             mob.yRot += (random.nextFloat() - 0.5f) * 10.0f;
             return;
@@ -102,14 +109,6 @@ public class SmartHostileAI extends BasicAttackAI {
     // --- tiny helpers (duplicate of private ones in base) ---
 
     private static int fi(float f) { return (int)Math.floor(f); }
-
-    private boolean wouldFallMoreThan1(int x,int y,int z){
-        if (solid(x,y-1,z)) return false;
-        if (solid(x,y-2,z)) return false;
-        return true;
-    }
-
-    private boolean solid(int x,int y,int z){ return level.getTile(x,y,z) != 0; }
 
     private static float wrap(float a) {
         while (a <= -180f) a += 360f;
