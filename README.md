@@ -1,107 +1,115 @@
-<img width="695" height="193" alt="image" src="https://github.com/user-attachments/assets/f506a0a2-9dad-4458-87b6-bdfdda1595f0" />
+<img width="695" height="193" alt="Minecraft Classic Reborn" src="https://github.com/user-attachments/assets/f506a0a2-9dad-4458-87b6-bdfdda1595f0" />
 
-# [![GitHub Repo stars](https://img.shields.io/github/stars/denukernel/Minecraft-Classic-Reborn?style=flat-square)](https://github.com/denukernel/Minecraft-Classic-Reborn/stargazers)
+# Minecraft Classic Reborn
 
-# Minecraft-Classic-Reborn
+A Java modification of Minecraft Classic 0.30 with infinite terrain, additional mobs and items, commands, an updated inventory, and a day and night cycle.
 
+## Downloads Have Moved
 
-⚠️ Legal Disclaimer
+**New releases are now available at [classicremastered.net](https://classicremastered.net/).**
 
-This project is not affiliated with, endorsed by, or associated with Mojang, Microsoft, or any of their subsidiaries.
-It is an independent re-imagining of Minecraft Classic 0.30, made for educational and community purposes.
-All rights to the original game belong to Mojang AB / Microsoft.
+Download the current runnable game from the website as `minecraft-classic-reborn.jar`. GitHub remains the home for source code, issue reports, and older releases.
 
-> Credit to **mcraft-client** and **ManiaDevelopment** for sources and references.  
-> A modern reimagining of Minecraft Classic 0.30 with commands, launcher, day/night cycle, nonblock items, infinite terrain, and much more made in Java.
-> Feel free to star if you like it.
+- [Download the Game](https://classicremastered.net/downloads/minecraft-classic-reborn.jar)
+- [Visit the Website](https://classicremastered.net/)
+- [Report a Bug](https://github.com/denukernel/Minecraft-Classic-Reborn/issues)
+- [Older GitHub Releases](https://github.com/denukernel/Minecraft-Classic-Reborn/releases)
 
----
-## Important Note for Players & Developers
-This project includes **built-in native downloaders and resource downloaders**.  
+## How to Play
 
-You do **not** need to drag and drop LWJGL, Sound Resources Folder from 2014 manually.  
-Everything required will be downloaded automatically the first time you run the launcher.
+1. Install Java 16 or newer.
+2. Download `minecraft-classic-reborn.jar` from the website.
+3. Double-click the JAR, or open a terminal in the download folder and run:
 
-Give the launcher time to download the resources and you will start hearing audio.
+```sh
+java -jar minecraft-classic-reborn.jar
+```
 
----
+The launcher downloads native libraries and game resources on the first run. Keep an internet connection available and allow the downloads to finish, including the audio resources.
 
-## Features (so far)
-- Main Menu screen
-- Custom Minecraft launcher
-- Commands (`/spawn`, `/gamemode`, more coming)
-- Non-block items
-- Day/night cycle (sun & moon)
-- New mobs
-- MD3 renderer
-- Infinite terrain
-- New inventory
-- NBT data and NBT loader
-- Third Person Mode
-- F5 camera preview (toggle between first/third person)  
----
+## Features
 
-## 🛠️ Planned / Not Yet Implemented
-- Tile entities  
-- Dimensions  
-- More mobs and features  
+### Worlds and Rendering
 
+- Finite worlds, infinite flat worlds, and infinite terrain.
+- Day and night cycle with a sun, moon, stars, and changing lighting.
+- NBT world saving and loading, including player state.
+- First-person and third-person camera modes, toggled with F5.
+- Camera collision handling and updated held-item rendering.
+- MD3 model rendering.
 
+### Items and Gameplay
 
----
+- Updated inventory, crafting interface, and item pickup handling.
+- Commands including `/spawn`, `/gamemode`, and `/time`.
+- Non-block items including tools, swords, bows, and buckets.
+- Physics Gun for picking up, holding, dropping, and throwing entities.
+- Gravity Gun with a separate 3D model.
+- Grappling Hook, Ender Pearl, Health Drink, Damage Bottle, Bag of Salt, and Glass Looker.
+- Spawn eggs for registered mobs.
+- Animated bow drawing and skeleton ranged attacks.
 
-## 📸 Screenshots
-<img width="1280" height="720" alt="2025-08-29_00 17 31" src="https://github.com/user-attachments/assets/4c4fae63-0340-4144-98cd-a314f379f3bb" />
-<img width="1280" height="720" alt="2025-08-28_15 32 51" src="https://github.com/user-attachments/assets/004fd701-6649-4042-9657-f32859d8592a" />
-<img width="854" height="480" alt="2025-08-20_01 26 13" src="https://github.com/user-attachments/assets/e0c9b5c4-da35-4ad3-9175-ac48813c912a" />
+### Mobs
 
----
+- Additional mobs, including the Blue Forest Golem and Long Neck Man.
+- Blue Forest Golem following behavior, animation, and save support.
+- Updated natural spawning, mob hitboxes, and floor contact.
+- Improved pathfinding around obstacles, through doorways, and across slopes and stairs.
+- Updated wandering, crowd movement, and ranged combat behavior.
 
-## Videos
-[![Gameplay](https://img.youtube.com/vi/0FA7ctPQWiE/0.jpg)](https://www.youtube.com/watch?v=0FA7ctPQWiE>)
+### Launcher and Model Editor
 
-## 🎮 Player Guide
-If you just want to **play the game**:
-1. Go to the [Releases](../../releases) page.
-2. Download the latest `Minecraft-Classic-Reborn-x.x.jar`.
-3. Double-click it to run (Java 16+ required).  
+- Custom launcher and main menu.
+- Automatic native-library and resource downloads.
+- A model editor with a 3D viewport, editable parts, textures, and animation support.
+- UV painting, undo and redo, model import and export, and save validation.
 
----
-##  Project Lineage & Status
+## Recent Improvements
 
-- **Minecraft Classic 0.30 (Mojang, 2009–2012)**  
-  → The original foundation of Classic gameplay.
+Recent work includes terrain lighting and rendering changes, smoother camera and held-item behavior, more consistent bow animations, and fixes for inventory handling, world saves, physics interactions, and mob navigation.
 
-- **MCraft-Client / Minecraft Classic Forever**  
-  → A decompiled and cleaned Java version of Classic created by ManiaDevelopment, essential in the Classic modding scene.  
-  Repo remains active on GitHub, creator ceased maintenance in March 2014.  
-  Original website (maníadevelopment.com) is now defunct (offline since ~2014).
+The client and model editor have also been split into smaller components to make maintenance easier.
 
-- **ClassicCube**, **OpenClassic**, and others  
-  → Built upon MCraft-Client, often beyond its original intent (e.g., ClassicCube ported to C# to focus on multiplayer).
+## Still in Development
 
-- **Classic-Reborn (this project)**  
-  → Builds directly on the Java MCraft-Client lineage. Expands Classic 0.30 with infinite terrain, mobs, commands, custom launcher without abandoning the Classic or Java DNA.
+- Tile entities.
+- Dimensions.
+- Additional mobs and gameplay features.
 
+Features may change between builds. Report reproducible problems through [GitHub Issues](https://github.com/denukernel/Minecraft-Classic-Reborn/issues), including the game build, steps to reproduce, and screenshots or logs when available.
 
-## Developer Guide
+## Screenshots
 
-### Requirements
-- **Java 16+ (JDK)**  
-- **Eclipse IDE** (2021+) or **IntelliJ IDEA**  
-- **Maven** (Eclipse has this built-in)
+These screenshots are from earlier builds and may differ from the current version.
 
-### Tutorial (for eclipse and intelij)
-- 1: Use ClassicLauncher main class for launching minecraft.
-- 2: Replace ${project.basedir} with your disk. eclipse asks you to inline
-- 3: Done.
-- 
-### History
-- I planned to make a minecraft classic mod like that since 2019, as my 10-11 year old self planned, and i successfully did that.
-- and I knew i would return to programming on "Unknown year" that you know now.
-### Clone the Repo
-```bash
+<img width="1280" height="720" alt="An earlier Classic Reborn build" src="https://github.com/user-attachments/assets/4c4fae63-0340-4144-98cd-a314f379f3bb" />
+<img width="1280" height="720" alt="Terrain and lighting in Classic Reborn" src="https://github.com/user-attachments/assets/004fd701-6649-4042-9657-f32859d8592a" />
+<img width="854" height="480" alt="Custom characters in an earlier build" src="https://github.com/user-attachments/assets/e0c9b5c4-da35-4ad3-9175-ac48813c912a" />
+
+## Gameplay Video
+
+[![Classic Reborn Gameplay](https://img.youtube.com/vi/0FA7ctPQWiE/0.jpg)](https://www.youtube.com/watch?v=0FA7ctPQWiE)
+
+## Source Code
+
+Clone the repository:
+
+```sh
 git clone https://github.com/denukernel/Minecraft-Classic-Reborn.git
 cd Minecraft-Classic-Reborn
+```
 
+Use a JDK that supports Java 16 and import `pom.xml` into a Java IDE such as IntelliJ IDEA or Eclipse. Keep the bundled `libjar` and `repo` directories with the source tree so the local dependencies can be resolved.
 
+- Game launcher entry point: `net.classicremastered.launcher.ClassicLauncher`.
+- Model editor entry point: `net.classicremastered.toolkit.modeleditor.ModelEditorApp`.
+
+## Credits and Project Background
+
+Classic Reborn builds on the Java MCraft-Client / Minecraft Classic Forever lineage. Credit to MCraft-Client and ManiaDevelopment for the sources and references, and to Mojang for the original Minecraft Classic.
+
+## License and Ownership
+
+See [LICENSE](LICENSE) for the repository license. Original Minecraft content belongs to its respective owners.
+
+This is an independent project and is not affiliated with, endorsed by, or associated with Mojang or Microsoft.
