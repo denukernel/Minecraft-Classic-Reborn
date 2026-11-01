@@ -39,7 +39,7 @@ final class ClientBootstrap {
     private ClientBootstrap() {}
 
     static File prepareGameDirectory() {
-        String folder = "mcraft/client";
+        String folder = "minecraftclassicreborn/client";
         String home = System.getProperty("user.home", ".");
         String osName = System.getProperty("os.name").toLowerCase();
         File minecraftFolder;

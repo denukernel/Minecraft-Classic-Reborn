@@ -22,7 +22,7 @@ final class ModelEditorFiles {
         String appdata = System.getenv("APPDATA");
         if (appdata == null)
             appdata = System.getProperty("user.home");
-        File dir = new File(appdata, ".mcraft/client/modelexport");
+        File dir = new File(appdata, ".minecraftclassicreborn/client/modelexport");
         if (!dir.exists())
             dir.mkdirs();
         return dir;
@@ -113,7 +113,7 @@ final class ModelEditorFiles {
                 String appdata = System.getenv("APPDATA");
                 if (appdata == null)
                     appdata = System.getProperty("user.home");
-                File dir = new File(appdata, ".mcraft/client/modelexport");
+                File dir = new File(appdata, ".minecraftclassicreborn/client/modelexport");
                 if (!dir.exists())
                     dir.mkdirs();
                 String base = editor.model.name == null || editor.model.name.isEmpty() ? "model" : editor.model.name;
@@ -209,7 +209,7 @@ final class ModelEditorFiles {
             String appdata = System.getenv("APPDATA");
             if (appdata == null)
                 appdata = System.getProperty("user.home");
-            File dir = new File(appdata, ".mcraft/client/modelexport");
+            File dir = new File(appdata, ".minecraftclassicreborn/client/modelexport");
             if (!dir.exists())
                 dir.mkdirs();
             String base = editor.model.name == null || editor.model.name.isEmpty() ? "model" : editor.model.name;

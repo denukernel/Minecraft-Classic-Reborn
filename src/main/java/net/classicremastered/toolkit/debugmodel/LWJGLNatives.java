@@ -5,7 +5,7 @@ import java.nio.file.*;
 public final class LWJGLNatives {
     private LWJGLNatives() {}
 
-    /** Use natives from %APPDATA%\.mcraft\client\native\windows on Windows. */
+    /** Use natives from %APPDATA%\.minecraftclassicreborn\client\native\windows on Windows. */
     public static void useMCraftClientNatives() {
         String os = System.getProperty("os.name", "").toLowerCase();
         String arch = System.getProperty("os.arch", "").toLowerCase();
@@ -14,9 +14,9 @@ public final class LWJGLNatives {
         if (os.contains("win")) {
             String appData = System.getenv("APPDATA");
             if (appData == null || appData.isEmpty()) {
-                fail("APPDATA env var is missing; can’t locate .mcraft path.");
+                fail("APPDATA env var is missing; can’t locate .minecraftclassicreborn path.");
             }
-            Path root   = Paths.get(appData, ".mcraft", "client", "native", "windows");
+            Path root   = Paths.get(appData, ".minecraftclassicreborn", "client", "native", "windows");
             Path folder = root; // you said libs live here exactly
 
             // Sanity-check expected files for LWJGL 2.8.4 (pick 32/64 variant)
@@ -37,11 +37,11 @@ public final class LWJGLNatives {
             System.setProperty("org.lwjgl.util.Debug", "true");
             System.out.println("[natives] org.lwjgl.librarypath = " + System.getProperty("org.lwjgl.librarypath"));
         } else if (os.contains("mac")) {
-            // adapt if you also keep mac natives: ~/.mcraft/client/native/macos
-            Path folder = Paths.get(System.getProperty("user.home"), ".mcraft", "client", "native", "macos");
+            // adapt if you also keep mac natives: ~/.minecraftclassicreborn/client/native/macos
+            Path folder = Paths.get(System.getProperty("user.home"), ".minecraftclassicreborn", "client", "native", "macos");
             System.setProperty("org.lwjgl.librarypath", folder.toString());
         } else { // linux
-            Path folder = Paths.get(System.getProperty("user.home"), ".mcraft", "client", "native", "linux");
+            Path folder = Paths.get(System.getProperty("user.home"), ".minecraftclassicreborn", "client", "native", "linux");
             System.setProperty("org.lwjgl.librarypath", folder.toString());
         }
     }

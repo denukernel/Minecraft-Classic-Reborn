@@ -11,7 +11,7 @@ import java.util.zip.ZipInputStream;
 
 /**
  * Ensures LWJGL 2.8.4 Windows natives are present at:
- *   %APPDATA%/.mcraft/client/native/windows
+ *   %APPDATA%/.minecraftclassicreborn/client/native/windows
  * If missing, downloads the official zip and extracts /native/windows/* only.
  * Then sets org.lwjgl.librarypath and net.java.games.input.librarypath to that directory.
  */
@@ -68,7 +68,7 @@ public final class LwjglNativesDownloader {
             // Fallback (very rare on Windows)
             appData = System.getProperty("user.home");
         }
-        return Paths.get(appData, ".mcraft", "client", "native", "windows");
+        return Paths.get(appData, ".minecraftclassicreborn", "client", "native", "windows");
     }
 
     private static boolean isInstalled(Path dir) {

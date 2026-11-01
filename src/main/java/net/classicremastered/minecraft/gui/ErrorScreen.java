@@ -85,22 +85,22 @@ public final class ErrorScreen extends GuiScreen {
     private String getCrashPath() {
         String os = System.getProperty("os.name").toLowerCase();
         if (os.contains("win")) {
-            return "%APPDATA%\\.mcraft\\client\\crash_screenshots";
+            return "%APPDATA%\\.minecraftclassicreborn\\client\\crash_screenshots";
         } else if (os.contains("mac")) {
-            return "~/Library/Application Support/.mcraft/client/crash_screenshots";
+            return "~/Library/Application Support/.minecraftclassicreborn/client/crash_screenshots";
         } else {
-            return "~/.mcraft/client/crash_screenshots";
+            return "~/.minecraftclassicreborn/client/crash_screenshots";
         }
     }
 
     private String getLogPath() {
         String os = System.getProperty("os.name").toLowerCase();
         if (os.contains("win")) {
-            return "%APPDATA%\\.mcraft\\client\\crash_log.txt";
+            return "%APPDATA%\\.minecraftclassicreborn\\client\\crash_log.txt";
         } else if (os.contains("mac")) {
-            return "~/Library/Application Support/.mcraft/client/crash_log.txt";
+            return "~/Library/Application Support/.minecraftclassicreborn/client/crash_log.txt";
         } else {
-            return "~/.mcraft/client/crash_log.txt";
+            return "~/.minecraftclassicreborn/client/crash_log.txt";
         }
     }
 

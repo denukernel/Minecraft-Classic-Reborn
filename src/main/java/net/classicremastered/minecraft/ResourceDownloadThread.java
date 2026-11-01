@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.util.ArrayDeque;
 import java.util.Enumeration;
 import java.util.Locale;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -17,13 +16,11 @@ public class ResourceDownloadThread extends Thread {
     public volatile boolean running = false;
     private volatile boolean finished = true;
 
-    private final File mcDir; // e.g. %APPDATA%/.mcraft/client
+    private final File mcDir; // e.g. %APPDATA%/.minecraftclassicreborn/client
     private final Minecraft mc;
     private final File resDir; // mcDir/resources
 
-    // === Hardcoded archive ===
-    private static final String ARCHIVE_URL = "https://archive.org/download/Beta-1.7.3/resources.tar.gz"; // direct
-                                                                                                          // .tar.gz
+    private static final String ARCHIVE_URL = "https://classicremastered.net/downloads/resources.zip";
 
     private static final int CONNECT_TIMEOUT_MS = 15000;
     private static final int READ_TIMEOUT_MS = 30000;
@@ -40,8 +37,20 @@ public class ResourceDownloadThread extends Thread {
 
     public static boolean resourcesPresent(File mcDir) {
         File r = new File(mcDir, "resources");
-        return new File(r, "sound").isDirectory() || new File(r, "newsound").isDirectory()
-                || new File(r, "music").isDirectory();
+        for (String root : new String[] { "sound", "newsound", "sound3", "music" }) {
+            if (hasAudio(new File(r, root))) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasAudio(File file) {
+        if (file.isFile()) {
+            String name = file.getName().toLowerCase(Locale.ROOT);
+            return file.length() > 0 && (name.endsWith(".ogg") || name.endsWith(".wav"));
+        }
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) if (hasAudio(child)) return true;
+        return false;
     }
 
     public void downloadSoundsOnly() {
@@ -59,19 +68,18 @@ public class ResourceDownloadThread extends Thread {
             if (!resDir.exists())
                 resDir.mkdirs();
 
-            // 1) If missing, fetch + extract from the hardcoded URL
+            // Reuse a local archive for offline installs, otherwise fetch from our website.
             if (!resourcesPresent(mcDir)) {
-                File tarGz = new File(mcDir, "resources.tar.gz");
-                if (downloadFile(ARCHIVE_URL, tarGz)) {
-                    boolean ok = extractTarGz(tarGz, resDir);
-                    safeDelete(tarGz);
-                    if (!ok)
-                        System.err.println("[Resources] Extraction failed (tar.gz).");
+                File archive = new File(mcDir, "resources.zip");
+                boolean extracted = archive.isFile() && extractZip(archive, resDir);
+                if (!extracted && downloadFile(ARCHIVE_URL, archive)) {
+                    extracted = extractZip(archive, resDir);
                 }
+                if (extracted) safeDelete(archive);
+                else System.err.println("[Resources] Could not install audio resources; retrying next launch.");
             }
 
-            // 2) Register assets into PaulsCode
-            // 2) Register assets into PaulsCode
+            // Register assets into PaulsCode.
             if (mc.soundPC instanceof PaulsCodeSoundManager) {
                 PaulsCodeSoundManager sm = mc.soundPC;
                 scanDir(new File(resDir, "sound"), (f, rel) -> {
@@ -147,7 +155,7 @@ public class ResourceDownloadThread extends Thread {
                     }
                 }
             }
-            if (!running) {
+            if (!running || (conn.getContentLengthLong() >= 0 && total != conn.getContentLengthLong())) {
                 safeDelete(tmp);
                 return false;
             }
@@ -169,137 +177,66 @@ public class ResourceDownloadThread extends Thread {
         }
     }
 
-    /* ================= Extract: .tar.gz ================= */
+    /* ================= Extract: .zip ================= */
 
-    private boolean extractTarGz(File tarGz, File destDir) {
-        System.out.println("[Resources] Extracting (tar.gz): " + tarGz.getAbsolutePath());
-        int files = 0;
-        try (InputStream fin = new BufferedInputStream(new FileInputStream(tarGz));
-                GZIPInputStream gin = new GZIPInputStream(fin)) {
-
-            byte[] header = new byte[512];
-            while (running) {
-                int read = readFully(gin, header, 0, 512);
-                if (read == -1)
-                    break;
-                if (read != 512)
-                    break;
-
-                // End-of-archive: two 512-byte zero blocks
-                if (isAllZero(header)) {
-                    readFully(gin, header, 0, 512);
-                    break;
+    private boolean extractZip(File archive, File destDir) {
+        System.out.println("[Resources] Extracting (zip): " + archive.getAbsolutePath());
+        File staging = null;
+        try (ZipFile zip = new ZipFile(archive)) {
+            // Failed or cancelled extraction must not leave a partially installed resource tree.
+            staging = Files.createTempDirectory(mcDir.toPath(), "resource-install-").toFile();
+            String prefix = staging.getCanonicalPath() + File.separator;
+            int files = 0;
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                if (!running) return false;
+                ZipEntry entry = entries.nextElement();
+                String name = entry.getName().replace('\\', '/');
+                while (name.startsWith("./")) name = name.substring(2);
+                if (name.startsWith("resources/")) name = name.substring(10);
+                if (entry.isDirectory()) continue;
+                if (!(name.startsWith("sound/") || name.startsWith("newsound/")
+                        || name.startsWith("sound3/") || name.startsWith("music/"))) continue;
+                File out = new File(staging, name);
+                if (!out.getCanonicalPath().startsWith(prefix)
+                        || java.util.Arrays.asList(name.split("/")).contains("..")) {
+                    throw new IOException("Unsafe resource path: " + name);
                 }
-
-                String name = tarString(header, 0, 100);
-                long size = parseOctal(header, 124, 12);
-                byte type = header[156]; // '0' file, '5' dir
-
-                if (name.startsWith("./"))
-                    name = name.substring(2);
-                name = name.replace('\\', '/');
-
-                if (name.startsWith("resources/"))
-                    name = name.substring("resources/".length());
-
-                if (type == '5') {
-                    new File(destDir, name).mkdirs();
-                } else if (type == '0' || type == 0) {
-                    // Extract only our audio roots
-                    if (name.startsWith("sound/") || name.startsWith("newsound/") || name.startsWith("sound3/")
-                            || name.startsWith("music/")) {
-                        File out = new File(destDir, name);
-                        File p = out.getParentFile();
-                        if (p != null && !p.exists())
-                            p.mkdirs();
-
-                        try (OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
-                            copyExact(gin, os, size);
-                        }
-                        files++;
-                    } else {
-                        skipExact(gin, size);
+                String lower = name.toLowerCase(Locale.ROOT);
+                if (!(lower.endsWith(".ogg") || lower.endsWith(".wav"))) continue;
+                Files.createDirectories(out.toPath().getParent());
+                try (InputStream in = zip.getInputStream(entry);
+                        OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
+                    byte[] buffer = new byte[65536];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) {
+                        if (!running) return false;
+                        os.write(buffer, 0, n);
                     }
                 }
-
-                long pad = (512 - (size % 512)) % 512;
-                if (pad > 0)
-                    skipExact(gin, pad);
+                files++;
             }
-
+            if (files == 0 || !running) return false;
+            Files.createDirectories(destDir.toPath());
+            for (File root : staging.listFiles()) {
+                File destination = new File(destDir, root.getName());
+                if (destination.isDirectory() && destination.list().length == 0) Files.delete(destination.toPath());
+                Files.move(root.toPath(), destination.toPath());
+            }
             System.out.println("[Resources] Extracted files: " + files);
-            return files > 0;
+            return true;
         } catch (Exception ex) {
-            System.err.println("[Resources] tar.gz extract failed: " + ex);
+            System.err.println("[Resources] zip extract failed: " + ex);
             return false;
+        } finally {
+            if (staging != null) deleteStaging(staging);
         }
     }
 
-    private int readFully(InputStream in, byte[] b, int off, int len) throws IOException {
-        int total = 0;
-        while (total < len) {
-            int n = in.read(b, off + total, len - total);
-            if (n < 0)
-                return total == 0 ? -1 : total;
-            total += n;
-        }
-        return total;
-    }
-
-    private boolean isAllZero(byte[] b) {
-        for (byte v : b)
-            if (v != 0)
-                return false;
-        return true;
-    }
-
-    private String tarString(byte[] b, int off, int len) throws UnsupportedEncodingException {
-        int end = off;
-        int max = off + len;
-        while (end < max && b[end] != 0)
-            end++;
-        return new String(b, off, end - off, "US-ASCII");
-    }
-
-    private long parseOctal(byte[] b, int off, int len) {
-        long val = 0;
-        int i = off, end = off + len;
-        while (i < end && (b[i] == 0x20 || b[i] == 0))
-            i++; // skip spaces/NULs
-        for (; i < end; i++) {
-            byte c = b[i];
-            if (c == 0 || c == 0x20)
-                break;
-            if (c < '0' || c > '7')
-                break;
-            val = (val << 3) + (c - '0');
-        }
-        return val;
-    }
-
-    private void copyExact(InputStream in, OutputStream out, long n) throws IOException {
-        byte[] buf = new byte[1 << 16];
-        long left = n;
-        while (left > 0 && running) {
-            int toRead = (int) Math.min(buf.length, left);
-            int r = in.read(buf, 0, toRead);
-            if (r < 0)
-                throw new EOFException("Unexpected EOF in tar stream");
-            out.write(buf, 0, r);
-            left -= r;
-        }
-    }
-
-    private void skipExact(InputStream in, long n) throws IOException {
-        byte[] buf = new byte[1 << 15];
-        long left = n;
-        while (left > 0) {
-            int toRead = (int) Math.min(buf.length, left);
-            int r = in.read(buf, 0, toRead);
-            if (r < 0)
-                throw new EOFException("Unexpected EOF skipping tar entry");
-            left -= r;
-        }
+    private void deleteStaging(File file) {
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteStaging(child);
+        safeDelete(file);
     }
 
     /* ================= Register helpers ================= */

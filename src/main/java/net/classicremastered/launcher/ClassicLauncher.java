@@ -449,12 +449,12 @@ public final class ClassicLauncher {
             String appData = System.getenv("APPDATA");
             if (appData == null || appData.isEmpty())
                 appData = home;
-            return new java.io.File(appData, ".mcraft/client/");
+            return new java.io.File(appData, ".minecraftclassicreborn/client/");
         } else if (os.contains("mac")) {
-            return new java.io.File(home, "Library/Application Support/.mcraft/client/");
+            return new java.io.File(home, "Library/Application Support/.minecraftclassicreborn/client/");
         } else {
             // linux/unix
-            return new java.io.File(home, ".mcraft/client/");
+            return new java.io.File(home, ".minecraftclassicreborn/client/");
         }
     }
 
@@ -861,7 +861,7 @@ public final class ClassicLauncher {
             String appData = System.getenv("APPDATA");
             if (appData == null || appData.isEmpty())
                 appData = System.getProperty("user.home");
-            return Paths.get(appData, ".mcraft", "client", "launcher.properties");
+            return Paths.get(appData, ".minecraftclassicreborn", "client", "launcher.properties");
         }
 
         String resString() {

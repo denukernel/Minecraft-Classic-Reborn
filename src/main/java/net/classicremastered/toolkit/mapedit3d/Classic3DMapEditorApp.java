@@ -39,7 +39,7 @@ public final class Classic3DMapEditorApp {
     private static File appDir() {
         String appdata = System.getenv("APPDATA");
         if (appdata == null || appdata.isEmpty()) appdata = System.getProperty("user.home");
-        File dir = new File(appdata, ".mcraft/client");
+        File dir = new File(appdata, ".minecraftclassicreborn/client");
         if (!dir.exists()) dir.mkdirs();
         return dir;
     }
@@ -94,7 +94,7 @@ public final class Classic3DMapEditorApp {
     private static void configureNativesFromClient() {
         String appdata = System.getenv("APPDATA");
         if (appdata == null || appdata.isEmpty()) appdata = System.getProperty("user.home");
-        File dir = new File(appdata, ".mcraft\\client\\native//windows");
+        File dir = new File(appdata, ".minecraftclassicreborn\\client\\native//windows");
         String path = dir.getAbsolutePath();
         System.setProperty("org.lwjgl.librarypath", path);
         System.setProperty("net.java.games.input.librarypath", path);

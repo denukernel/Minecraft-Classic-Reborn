@@ -11,7 +11,7 @@ public final class JavaExporter {
         if (appdata == null)
             appdata = System.getProperty("user.home");
 
-        File dir = new File(appdata, ".mcraft/client/modelexport");
+        File dir = new File(appdata, ".minecraftclassicreborn/client/modelexport");
         if (!dir.exists())
             dir.mkdirs();
 

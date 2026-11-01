@@ -22,7 +22,7 @@ public final class MobModelDebugger {
 
     // -------- runtime entry --------
     public static void main(String[] args) throws Exception {
-        LWJGLNatives.useMCraftClientNatives();  // %APPDATA%\.mcraft\client\native\windows
+        LWJGLNatives.useMCraftClientNatives();  // %APPDATA%\.minecraftclassicreborn\client\native\windows
         new MobModelDebugger().run();
     }
 

@@ -149,11 +149,11 @@ public final class ClassicLauncherSWT {
         if (os.contains("win")) {
             String appData = System.getenv("APPDATA");
             if (appData == null || appData.isEmpty()) appData = home;
-            return new File(appData, ".mcraft/client/");
+            return new File(appData, ".minecraftclassicreborn/client/");
         } else if (os.contains("mac")) {
-            return new File(home, "Library/Application Support/.mcraft/client/");
+            return new File(home, "Library/Application Support/.minecraftclassicreborn/client/");
         } else {
-            return new File(home, ".mcraft/client/");
+            return new File(home, ".minecraftclassicreborn/client/");
         }
     }
 
@@ -275,7 +275,7 @@ public final class ClassicLauncherSWT {
             String appData = System.getenv("APPDATA");
             if (appData == null || appData.isEmpty())
                 appData = System.getProperty("user.home");
-            return Paths.get(appData, ".mcraft", "client", "launcher.properties");
+            return Paths.get(appData, ".minecraftclassicreborn", "client", "launcher.properties");
         }
 
         String resString() {
