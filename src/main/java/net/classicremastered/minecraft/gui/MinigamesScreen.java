@@ -1,6 +1,6 @@
 package net.classicremastered.minecraft.gui;
 
-/** Empty menu reserved for future minigames. */
+/** Menu of standalone minigames. */
 public final class MinigamesScreen extends GuiScreen {
     private final GuiScreen parent;
 
@@ -11,6 +11,7 @@ public final class MinigamesScreen extends GuiScreen {
     @Override
     public void onOpen() {
         this.buttons.clear();
+        this.buttons.add(new Button(1, (this.width - 200) / 2, 65, 200, 20, "Steve Fighter"));
         this.buttons.add(new Button(0, (this.width - 200) / 2, this.height - 40, 200, 20, "Back"));
     }
 
@@ -18,8 +19,8 @@ public final class MinigamesScreen extends GuiScreen {
     public void render(int mouseX, int mouseY) {
         drawBox(0, 0, this.width, this.height, 0xFF202020);
         drawCenteredString(this.fontRenderer, "Minigames", this.width / 2, 20, 0xFFFFFF);
-        drawCenteredString(this.fontRenderer, "No minigames available yet.", this.width / 2,
-                this.height / 2 - 4, 0xAAAAAA);
+        drawCenteredString(this.fontRenderer, "2D survival combat - fight through waves of mobs", this.width / 2,
+                94, 0xAAAAAA);
         super.render(mouseX, mouseY);
     }
 
@@ -27,6 +28,8 @@ public final class MinigamesScreen extends GuiScreen {
     protected void onButtonClick(Button button) {
         if (button.id == 0) {
             this.minecraft.setCurrentScreen(this.parent);
+        } else if (button.id == 1) {
+            this.minecraft.setCurrentScreen(new SteveFighterScreen(this));
         }
     }
 
