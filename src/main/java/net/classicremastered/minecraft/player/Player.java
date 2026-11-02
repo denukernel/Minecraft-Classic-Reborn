@@ -675,7 +675,7 @@ public class Player extends Mob {
     public transient net.classicremastered.minecraft.Minecraft minecraft;
     public static boolean creativeInvulnerable = false; // set by GameMode
     private static int newTextureId = -1;
-    public static BufferedImage newTexture;
+    public static volatile BufferedImage newTexture;
     // --- Villager trust system ---
     // --- Villager interaction stats ---
     public int villagerReputation = 0; // -100 .. +100

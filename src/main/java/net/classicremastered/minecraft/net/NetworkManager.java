@@ -28,30 +28,39 @@ public class NetworkManager
 
 	public ByteArrayOutputStream levelData;
 
-	public NetworkHandler netHandler;
+	public volatile NetworkHandler netHandler;
 
 	public Minecraft minecraft;
 
-	public boolean successful = false;
+	public volatile boolean successful = false;
+	public volatile String connectionError;
 	public boolean levelLoaded = false;
 
 	public HashMap<Byte, NetworkPlayer> players;
 
 	public void sendBlockChange(int x, int y, int z, int mode, int block)
 	{
-		netHandler.send(PacketType.PLAYER_SET_BLOCK, new Object[] {x, y, z, mode, block});
+		if (isConnected() && levelLoaded) netHandler.send(PacketType.PLAYER_SET_BLOCK, new Object[] {x, y, z, mode, block});
 	}
 
-	public void error(Exception e)
-	{
-		netHandler.close();
+    public void error(Exception e) {
+        if (netHandler != null) netHandler.close();
+        connectionError = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+    }
 
-		ErrorScreen errorScreen = new ErrorScreen("Disconnected!", e.getMessage());
-
-		minecraft.setCurrentScreen(errorScreen);
-
-		e.printStackTrace();
-	}
+    /** Must run on the game thread because screens and level changes use OpenGL. */
+    public void disconnect(String title, String reason) {
+        if (netHandler != null) netHandler.close();
+        successful = false;
+        levelLoaded = false;
+        if (minecraft.networkManager != this) return;
+        minecraft.networkManager = null;
+        minecraft.server = null;
+        minecraft.online = false;
+        minecraft.setLevel(null);
+        minecraft.setCurrentScreen(new ErrorScreen(title, reason,
+                parentScreen != null ? parentScreen : new net.classicremastered.minecraft.gui.MainMenuScreen()));
+    }
 
 	public boolean isConnected()
 	{

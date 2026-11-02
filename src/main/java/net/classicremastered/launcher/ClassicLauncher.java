@@ -649,7 +649,7 @@ public final class ClassicLauncher {
         @Override
         public URL getDocumentBase() {
             try {
-                return new URL("http://minecraft.net:80/play.jsp");
+                return new URL("https://classicremastered.net/");
             } catch (MalformedURLException e) {
                 return null;
             }
@@ -658,7 +658,7 @@ public final class ClassicLauncher {
         @Override
         public URL getCodeBase() {
             try {
-                return new URL("http://minecraft.net:80/");
+                return new URL("https://classicremastered.net/");
             } catch (MalformedURLException e) {
                 return null;
             }

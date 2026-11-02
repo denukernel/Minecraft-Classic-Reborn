@@ -46,10 +46,15 @@ public final class MultiplayerConnectScreen extends GuiScreen {
         updateConnectButtonActive();
     }
 
+    static boolean validAddress(String username, String host, String port) {
+        if (username == null || !username.trim().matches("[A-Za-z0-9_-]{1,16}")
+                || host == null || host.trim().isEmpty()) return false;
+        try { int value = Integer.parseInt(port.trim()); return value >= 1 && value <= 65535; }
+        catch (RuntimeException ex) { return false; }
+    }
+
     private void updateConnectButtonActive() {
-        boolean isValid = this.username.trim().length() > 0 
-                && this.ip.trim().length() > 0 
-                && this.port.trim().length() > 0;
+        boolean isValid = validAddress(username, ip, port);
         if (this.buttons.size() > 0) {
             ((Button) this.buttons.get(0)).active = isValid;
         }
@@ -67,7 +72,7 @@ public final class MultiplayerConnectScreen extends GuiScreen {
 
     @Override
     protected void onButtonClick(Button b) {
-        if (!b.active) return;
+        if (!b.active || (b.id == 0 && !validAddress(username, ip, port))) return;
 
         if (b.id == 0) { // Connect
             // Save settings
@@ -95,13 +100,13 @@ public final class MultiplayerConnectScreen extends GuiScreen {
                 }
             }
 
-            // Close screen and transition
-            this.minecraft.setCurrentScreen(null);
+            // Install the loading world before closing the screen and grabbing input.
 
             // Re-create a minimal network level so the renderer doesn't crash while loading chunks
             Level tinyNetLevel = new Level();
             tinyNetLevel.setData(8, 8, 8, new byte[512]);
             this.minecraft.setLevel(tinyNetLevel);
+            this.minecraft.setCurrentScreen(null);
 
             // Connect
             this.minecraft.networkManager = new NetworkManager(
@@ -132,10 +137,13 @@ public final class MultiplayerConnectScreen extends GuiScreen {
             return;
         }
 
+        if (key == Keyboard.KEY_ESCAPE) { minecraft.setCurrentScreen(parent); return; }
+        if (key == Keyboard.KEY_RETURN) { onButtonClick((Button) buttons.get(0)); return; }
         String activeText = getActiveText();
 
         if (key == Keyboard.KEY_BACK && activeText.length() > 0) {
-            setActiveText(activeText.substring(0, activeText.length() - 1));
+            activeText = activeText.substring(0, activeText.length() - 1);
+            setActiveText(activeText);
         }
 
         // Allowed characters depending on focus
@@ -145,7 +153,7 @@ public final class MultiplayerConnectScreen extends GuiScreen {
             allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
         } else if (focusedField == 1) {
             // IP / Hostname allowed characters
-            allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_";
+            allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_:[]";
         } else {
             // Port allowed characters (numbers only)
             allowed = "0123456789";
@@ -193,14 +201,10 @@ public final class MultiplayerConnectScreen extends GuiScreen {
             float v = this.height / 32.0F;
 
             GL11.glBegin(GL11.GL_QUADS);
-            GL11.glTexCoord2f(0.0F + scroll, 0.0F + scroll);
-            GL11.glVertex2f(0, 0);
-            GL11.glTexCoord2f(u + scroll, 0.0F + scroll);
-            GL11.glVertex2f(this.width, 0);
-            GL11.glTexCoord2f(u + scroll, v + scroll);
-            GL11.glVertex2f(this.width, this.height);
-            GL11.glTexCoord2f(0.0F + scroll, v + scroll);
-            GL11.glVertex2f(0, this.height);
+            GL11.glTexCoord2f(scroll, v + scroll); GL11.glVertex2f(0, height);
+            GL11.glTexCoord2f(u + scroll, v + scroll); GL11.glVertex2f(width, height);
+            GL11.glTexCoord2f(u + scroll, scroll); GL11.glVertex2f(width, 0);
+            GL11.glTexCoord2f(scroll, scroll); GL11.glVertex2f(0, 0);
             GL11.glEnd();
         }
 
@@ -223,7 +227,7 @@ public final class MultiplayerConnectScreen extends GuiScreen {
                 label = "Username:";
                 val = username;
             } else if (i == 1) {
-                label = "Server IP / Host:";
+                label = "Host / IP:";
                 val = ip;
             } else {
                 label = "Port:";
@@ -247,6 +251,7 @@ public final class MultiplayerConnectScreen extends GuiScreen {
             drawBox(boxX, boxY, boxX + boxW, boxY + boxH, bgColor);
 
             String cursor = (isFocused && (this.counter / 6 % 2 == 0) ? "_" : "");
+            while (!val.isEmpty() && fontRenderer.getWidth(val + cursor) > boxW - 8) val = val.substring(1);
             drawString(this.fontRenderer, val + cursor, boxX + 4, boxY + 4, 0xE0E0E0);
         }
 

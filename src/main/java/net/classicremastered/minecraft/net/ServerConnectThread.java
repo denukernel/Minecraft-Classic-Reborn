@@ -8,7 +8,8 @@ import net.classicremastered.net.NetworkHandler;
 public class ServerConnectThread extends Thread
 {
 	public ServerConnectThread(NetworkManager networkManager, String server, int port, String username, String key, Minecraft minecraft) {
-		super();
+		super("Server connection");
+        setDaemon(true);
 
 		netManager = networkManager;
 
@@ -31,14 +32,10 @@ public class ServerConnectThread extends Thread
 			netManager.netHandler.send(PacketType.IDENTIFICATION, new Object[]{Byte.valueOf(Constants.PROTOCOL_VERSION), this.username, this.key, Integer.valueOf(Constants.CLIENT_TYPE)});
 
 			netManager.successful = true;
-		} catch (Exception var3) {
-			minecraft.online = false;
-			minecraft.networkManager = null;
-			minecraft.setLevel(null);
+        } catch (Exception error) {
+            netManager.successful = false;
+            netManager.error(error);
 
-			minecraft.setCurrentScreen(new ErrorScreen("Failed to connect", "You failed to connect to the server. It\'s probably down!", netManager.parentScreen));
-
-			netManager.successful = false;
 		}
 	}
 

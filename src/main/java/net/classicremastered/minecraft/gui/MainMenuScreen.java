@@ -13,6 +13,7 @@ public final class MainMenuScreen extends GuiScreen {
     private static final int ID_QUIT = 3;
     private static final int ID_SELECTLEVEL = 4;
     private static final int ID_MODS = 5; // added
+    private static final int ID_MINIGAMES = 8;
     private int mascotTex = -1; // added
 
     private String title = "Minecraft Classic Improved";
@@ -26,15 +27,16 @@ public final class MainMenuScreen extends GuiScreen {
         int btnW = 200;
         int btnH = 20;
         int x = (this.width - btnW) / 2;
-        int y = this.height / 4 + 24;
+        int y = this.height / 4 + 16;
         String singleplayer = "Singleplayer";
         this.buttons.add(new Button(ID_SELECTLEVEL, x, y, btnW, btnH, singleplayer));
         this.buttons.add(new Button(7, x, y + 24, btnW, btnH, "Multiplayer"));
+        this.buttons.add(new Button(ID_MINIGAMES, x, y + 2 * 24, btnW, btnH, "Minigames"));
         String options = this.minecraft.lang.tr("menu.options");
 
-        this.buttons.add(new Button(ID_OPTIONS, x, y + 2 * 24, btnW, btnH, options));
-        this.buttons.add(new Button(ID_MODS, x, y + 3 * 24, btnW, btnH, "Mods"));
-        this.buttons.add(new Button(6, x, y + 4 * 24, btnW, btnH, "Debug Tools"));
+        this.buttons.add(new Button(ID_OPTIONS, x, y + 3 * 24, btnW, btnH, options));
+        this.buttons.add(new Button(ID_MODS, x, y + 4 * 24, btnW, btnH, "Mods"));
+        this.buttons.add(new Button(6, x, y + 5 * 24, btnW, btnH, "Debug Tools"));
         // Pick a new random splash
         java.util.Random rand = new java.util.Random();
         splash = SPLASHES[rand.nextInt(SPLASHES.length)];
@@ -68,15 +70,16 @@ public final class MainMenuScreen extends GuiScreen {
             float u = this.width / 32.0F;
             float v = this.height / 32.0F;
 
+            // GUI projection flips the Y axis. Match the front-facing winding used by buttons.
             GL11.glBegin(GL11.GL_QUADS);
-            GL11.glTexCoord2f(0.0F + scroll, 0.0F + scroll);
-            GL11.glVertex2f(0, 0);
-            GL11.glTexCoord2f(u + scroll, 0.0F + scroll);
-            GL11.glVertex2f(this.width, 0);
+            GL11.glTexCoord2f(scroll, v + scroll);
+            GL11.glVertex2f(0, this.height);
             GL11.glTexCoord2f(u + scroll, v + scroll);
             GL11.glVertex2f(this.width, this.height);
-            GL11.glTexCoord2f(0.0F + scroll, v + scroll);
-            GL11.glVertex2f(0, this.height);
+            GL11.glTexCoord2f(u + scroll, scroll);
+            GL11.glVertex2f(this.width, 0);
+            GL11.glTexCoord2f(scroll, scroll);
+            GL11.glVertex2f(0, 0);
             GL11.glEnd();
         }
 
@@ -136,6 +139,10 @@ public final class MainMenuScreen extends GuiScreen {
         }
         case ID_MODS: {
             this.minecraft.setCurrentScreen(new ModsScreen(this));
+            break;
+        }
+        case ID_MINIGAMES: {
+            this.minecraft.setCurrentScreen(new MinigamesScreen(this));
             break;
         }
         case 6:

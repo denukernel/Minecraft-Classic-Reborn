@@ -349,15 +349,29 @@ public final class LevelIO {
     // Online stubs (compatibility with old Classic client code)
     // ----------------------------------------------------------------------
     public Level loadOnline(String host, String user, int id) {
+        // The official Classic map service is retired. Custom compatible hosts remain supported.
+        if (host == null || host.isBlank() || user == null) return null;
+        HttpURLConnection conn = null;
         try {
-            HttpURLConnection conn = (HttpURLConnection)
-                    new URL("http://" + host + "/level/load.html?id=" + id + "&user=" + user).openConnection();
-            try (InputStream in = conn.getInputStream()) {
-                return load(in);
+            URL base = new URL("http://" + host + "/");
+            String name = base.getHost().toLowerCase(java.util.Locale.ROOT);
+            if (name.equals("minecraft.net") || name.endsWith(".minecraft.net")
+                    || name.equals("classicremastered.net") || name.endsWith(".classicremastered.net")) {
+                System.err.println("[LevelIO] The Classic online map service is retired; choose a local level file.");
+                return null;
             }
-        } catch (Exception ex) {
-            ex.printStackTrace();
+            String encodedUser = java.net.URLEncoder.encode(user, java.nio.charset.StandardCharsets.UTF_8);
+            URL endpoint = new URL(base, "level/load.html?id=" + id + "&user=" + encodedUser);
+            conn = (HttpURLConnection) endpoint.openConnection();
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
+            try (InputStream in = conn.getInputStream()) { return load(in); }
+        } catch (IOException ex) {
+            System.err.println("[LevelIO] Could not load custom online level: " + ex.getMessage());
             return null;
+        } finally {
+            if (conn != null) conn.disconnect();
         }
     }
 
@@ -372,6 +386,7 @@ public final class LevelIO {
     public static byte[] decompress(InputStream in0) {
         try (DataInputStream in = new DataInputStream(new GZIPInputStream(in0))) {
             int len = in.readInt();
+            if (len <= 0 || len > 64 * 1024 * 1024) throw new IOException("Invalid map size: " + len);
             byte[] arr = new byte[len];
             in.readFully(arr);
             return arr;

@@ -25,7 +25,8 @@ public final class NetworkHandler {
 
    public NetworkHandler(String var1, int var2) throws IOException {
 	   channel = SocketChannel.open();
-	   this.channel.connect(new InetSocketAddress(var1, var2));
+	   try { this.channel.socket().connect(new InetSocketAddress(var1, var2), 5000); }
+       catch (IOException | RuntimeException ex) { this.channel.close(); throw ex; }
 	   this.channel.configureBlocking(false);
 	   System.currentTimeMillis();
 	   this.sock = this.channel.socket();
@@ -90,9 +91,7 @@ public final class NetworkHandler {
                      byte[] var9;
                      if(var5 != String.class) {
                         if(var5 == byte[].class) {
-                           if((var9 = (byte[])((byte[])var4)).length < 1024) {
-                              var9 = Arrays.copyOf(var9, 1024);
-                           }
+                           var9 = Arrays.copyOf((byte[]) var4, 1024);
 
                            var6.out.put(var9);
                         }

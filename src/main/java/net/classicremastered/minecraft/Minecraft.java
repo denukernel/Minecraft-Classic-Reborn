@@ -639,7 +639,7 @@ public final class Minecraft implements Runnable {
                     var2.printStackTrace();
                 }
 
-                if (this.canvas == null) {
+                if (this.canvas != null) {
                     this.canvas.requestFocus();
                 }
             } else {
@@ -1090,18 +1090,22 @@ public final class Minecraft implements Runnable {
         return false;
     }
 
+    private static boolean isSupportedAppletBase(java.net.URL base) {
+        if (base == null) return false;
+        String host = base.getHost();
+        return host.equalsIgnoreCase("minecraft.net") || host.equalsIgnoreCase("www.minecraft.net")
+                || host.equalsIgnoreCase("classicremastered.net")
+                || host.equalsIgnoreCase("www.classicremastered.net");
+    }
+
     public final void setLevel(Level var1) {
         if (isDebugger())
             System.out.println("[setLevel] JDWP detected (debugger).");
 
-        // --- Security sandbox for applet versions ---
-        if (this.applet != null) {
-            boolean badDoc = !(this.applet.getDocumentBase().getHost().equalsIgnoreCase("minecraft.net")
-                    || this.applet.getDocumentBase().getHost().equalsIgnoreCase("www.minecraft.net"));
-            boolean badCode = !(this.applet.getCodeBase().getHost().equalsIgnoreCase("minecraft.net")
-                    || this.applet.getCodeBase().getHost().equalsIgnoreCase("www.minecraft.net"));
-            if (badDoc || badCode)
-                var1 = null;
+        // Both desktop launchers use an applet with the project website as its base.
+        if (this.applet != null && (!isSupportedAppletBase(this.applet.getDocumentBase())
+                || !isSupportedAppletBase(this.applet.getCodeBase()))) {
+            var1 = null;
         }
 
         this.level = var1;

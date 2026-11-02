@@ -1,52 +1,21 @@
 package net.classicremastered.minecraft;
 
-import java.net.HttpURLConnection;
-import java.net.URL;
-import javax.imageio.ImageIO;
-
+import java.awt.image.BufferedImage;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.util.SkinDownloader;
 
-public class SkinDownloadThread extends Thread
-{
-	public SkinDownloadThread(Minecraft minecraft)
-	{
-		super();
+public class SkinDownloadThread extends Thread {
+    private final Minecraft minecraft;
 
-		this.minecraft = minecraft;
-	}
+    public SkinDownloadThread(Minecraft minecraft) {
+        super("Local player skin");
+        setDaemon(true);
+        this.minecraft = minecraft;
+    }
 
-	@Override
-	public void run()
-	{
-		if(minecraft.session != null)
-		{
-			HttpURLConnection connection = null;
-
-			try {
-				connection = (HttpURLConnection)new URL("http://www.minecraft.net/skin/" + minecraft.session.username + ".png").openConnection();
-
-				connection.setDoInput(true);
-				connection.setDoOutput(false);
-
-				connection.connect();
-
-				if(connection.getResponseCode() != 404)
-				{
-					Player.newTexture = ImageIO.read(connection.getInputStream());
-
-					return;
-				}
-			} catch (Exception var4) {
-				var4.printStackTrace();
-			} finally {
-				if(connection != null)
-				{
-					connection.disconnect();
-				}
-			}
-
-		}
-	}
-
-	private Minecraft minecraft;
+    @Override public void run() {
+        if (minecraft.session == null) return;
+        BufferedImage skin = SkinDownloader.download(minecraft.session.username);
+        if (skin != null) Player.newTexture = skin;
+    }
 }

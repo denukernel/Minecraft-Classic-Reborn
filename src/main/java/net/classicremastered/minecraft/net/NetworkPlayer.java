@@ -19,7 +19,7 @@ public class NetworkPlayer extends Player {
    private int yp;
    private int zp;
    private transient int a = -1;
-   public transient BufferedImage newTexture = null;
+   public transient volatile BufferedImage newTexture = null;
    public String name;
    public String displayName;
    int tickCount = 0;

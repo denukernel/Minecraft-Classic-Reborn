@@ -16,8 +16,12 @@ import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.GZIPOutputStream;
 
-public final class ClassicServer {
+public final class ClassicServer implements AutoCloseable {
     private static final int PORT = 25565;
+    private final int port;
+    private final java.nio.file.Path dataDirectory;
+    private volatile ServerSocket listener;
+    private volatile boolean running = true;
     private static final int WIDTH = 256;
     private static final int HEIGHT = 64;
     private static final int DEPTH = 256;
@@ -36,14 +40,14 @@ public final class ClassicServer {
     }
 
     private void loadSetFromFile(String fileName, Set<String> set) {
-        File file = new File(fileName);
+        File file = dataDirectory.resolve(fileName).toFile();
         if (!file.exists()) return;
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = br.readLine()) != null) {
                 line = line.trim();
                 if (!line.isEmpty()) {
-                    set.add(line.toLowerCase());
+                    set.add(line.toLowerCase(java.util.Locale.ROOT));
                 }
             }
         } catch (IOException e) {
@@ -64,7 +68,7 @@ public final class ClassicServer {
     private ClientHandler findClient(String name) {
         synchronized (clients) {
             for (ClientHandler client : clients) {
-                if (client.username.equalsIgnoreCase(name)) {
+                if (client.ready && client.username.equalsIgnoreCase(name)) {
                     return client;
                 }
             }
@@ -80,15 +84,40 @@ public final class ClassicServer {
     private JTextField chatInputField;
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            ClassicServer server = new ClassicServer();
-            server.createAndShowGUI();
-            // Start server socket in a background thread
-            new Thread(server::start, "Server-Socket-Thread").start();
-        });
+        int port = PORT;
+        boolean headless = false;
+        java.nio.file.Path data = java.nio.file.Paths.get(".");
+        try {
+            for (int i = 0; i < args.length; i++) {
+                switch (args[i]) {
+                    case "--headless": headless = true; break;
+                    case "--port": port = Integer.parseInt(args[++i]); break;
+                    case "--data-dir": data = java.nio.file.Paths.get(args[++i]); break;
+                    default: throw new IllegalArgumentException("Unknown option: " + args[i]);
+                }
+            }
+            if (port < 1 || port > 65535) throw new IllegalArgumentException("Port must be 1-65535");
+            ClassicServer server = new ClassicServer(port, data);
+            Runtime.getRuntime().addShutdownHook(new Thread(server::close, "Server-Shutdown"));
+            if (headless) server.start();
+            else SwingUtilities.invokeLater(() -> {
+                server.createAndShowGUI();
+                new Thread(server::start, "Server-Socket-Thread").start();
+            });
+        } catch (RuntimeException ex) {
+            System.err.println("Server startup failed: " + ex.getMessage());
+            System.exit(1);
+        }
     }
 
-    public ClassicServer() {
+    public ClassicServer() { this(PORT, java.nio.file.Paths.get(".")); }
+
+    public ClassicServer(int port, java.nio.file.Path dataDirectory) {
+        if (port < 0 || port > 65535) throw new IllegalArgumentException("Invalid port");
+        this.port = port;
+        this.dataDirectory = dataDirectory.toAbsolutePath();
+        try { java.nio.file.Files.createDirectories(this.dataDirectory); }
+        catch (IOException ex) { throw new java.io.UncheckedIOException(ex); }
         loadConfig();
         // Generate a flat world:
         // Stone up to y = 30
@@ -111,9 +140,12 @@ public final class ClassicServer {
                 }
             }
         }
+        loadWorld();
     }
 
-    private void createAndShowGUI() {
+    private void createAndShowGUI() { createGUI(true); }
+
+    private void createGUI(boolean visible) {
         // Set premium dark look-and-feel if possible, or standard clean layout
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -182,7 +214,7 @@ public final class ClassicServer {
         sendButton.addActionListener(sendAction);
 
         frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
+        frame.setVisible(visible);
         log("Server GUI initialized.");
     }
 
@@ -209,32 +241,62 @@ public final class ClassicServer {
         });
     }
 
+    public int getPort() { ServerSocket socket = listener; return socket == null ? -1 : socket.getLocalPort(); }
+
     public void start() {
-        log("[ClassicServer] Starting Minecraft Classic Server on port " + PORT + "...");
-        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            log("[ClassicServer] Bound to port " + PORT + ". Waiting for players...");
-            while (true) {
+        log("[ClassicServer] Starting on port " + port + "...");
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
+            listener = serverSocket;
+            log("[ClassicServer] Bound to port " + serverSocket.getLocalPort() + ". Waiting for players...");
+            while (running) {
                 Socket socket = serverSocket.accept();
-                log("[ClassicServer] Incoming connection from " + socket.getRemoteSocketAddress());
-                
+                socket.setTcpNoDelay(true);
+                socket.setSoTimeout(10000);
                 synchronized (clients) {
                     int id = getNextPlayerId();
                     if (id == -1) {
-                        log("[ClassicServer] Server is full! Rejecting client.");
-                        sendDisconnect(socket, "Server is full!");
-                        socket.close();
-                        continue;
+                        sendDisconnect(socket, "Server is full!"); socket.close(); continue;
                     }
                     playerIdPool[id] = true;
                     ClientHandler handler = new ClientHandler(socket, (byte) id);
-                    clients.add(handler);
-                    handler.start();
+                    clients.add(handler); handler.start();
                 }
             }
-        } catch (IOException e) {
-            log("[ClassicServer] Server encountered an error: " + e.getMessage());
-            e.printStackTrace();
-        }
+        } catch (IOException ex) {
+            if (running) log("[ClassicServer] Could not start or accept connections: " + ex.getMessage());
+        } finally { close(); }
+    }
+
+    @Override public void close() {
+        running = false;
+        try { if (listener != null) listener.close(); } catch (IOException ignored) {}
+        for (ClientHandler client : clientSnapshot()) client.disconnect();
+        saveWorld();
+    }
+
+    private ClientHandler[] clientSnapshot() {
+        synchronized (clients) { return clients.toArray(new ClientHandler[0]); }
+    }
+
+    private synchronized void loadWorld() {
+        java.nio.file.Path path = dataDirectory.resolve("world.dat");
+        if (!java.nio.file.Files.exists(path)) return;
+        try (DataInputStream in = new DataInputStream(java.nio.file.Files.newInputStream(path))) {
+            if (in.readInt() != 0x43525331 || in.readInt() != blocks.length) throw new IOException("Invalid world file");
+            byte[] saved = new byte[blocks.length]; in.readFully(saved);
+            System.arraycopy(saved, 0, blocks, 0, blocks.length);
+            log("[ClassicServer] Loaded saved world.");
+        } catch (IOException ex) { throw new java.io.UncheckedIOException("Could not load world.dat", ex); }
+    }
+
+    private synchronized void saveWorld() {
+        java.nio.file.Path path = dataDirectory.resolve("world.dat"), temp = dataDirectory.resolve("world.dat.tmp");
+        try {
+            try (DataOutputStream out = new DataOutputStream(java.nio.file.Files.newOutputStream(temp))) {
+                out.writeInt(0x43525331); out.writeInt(blocks.length); out.write(blocks);
+            }
+            java.nio.file.Files.move(temp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) { log("[ClassicServer] Could not save world: " + ex.getMessage()); }
     }
 
     private int getNextPlayerId() {
@@ -253,10 +315,13 @@ public final class ClassicServer {
     private void sendDisconnect(Socket s, String reason) {
         if (s == null) return;
         try {
+            ByteArrayOutputStream packet = new ByteArrayOutputStream();
+            packet.write(14); writeString(packet, reason);
+            for (ClientHandler client : clientSnapshot()) {
+                if (client.socket == s && client.ready) { client.sendPacket(packet.toByteArray()); return; }
+            }
             OutputStream out = s.getOutputStream();
-            out.write(14); // Disconnect opcode
-            writeString(out, reason);
-            out.flush();
+            out.write(packet.toByteArray()); out.flush();
         } catch (IOException ignored) {}
     }
 
@@ -285,6 +350,12 @@ public final class ClassicServer {
         out.write(val & 0xFF);
     }
 
+    private static int readByte(InputStream in) throws IOException {
+        int value = in.read();
+        if (value < 0) throw new EOFException("Truncated client packet");
+        return value;
+    }
+
     private static short readShort(InputStream in) throws IOException {
         int b1 = in.read();
         int b2 = in.read();
@@ -307,21 +378,12 @@ public final class ClassicServer {
     }
 
     private void broadcast(byte[] packet) {
-        synchronized (clients) {
-            for (ClientHandler client : clients) {
-                client.sendPacket(packet);
-            }
-        }
+        for (ClientHandler client : clientSnapshot()) client.sendPacket(packet);
     }
 
     private void broadcastExclude(byte[] packet, byte excludePlayerId) {
-        synchronized (clients) {
-            for (ClientHandler client : clients) {
-                if (client.playerId != excludePlayerId) {
-                    client.sendPacket(packet);
-                }
-            }
-        }
+        for (ClientHandler client : clientSnapshot())
+            if (client.playerId != excludePlayerId) client.sendPacket(packet);
     }
 
     private void broadcastServerChat(String msg) {
@@ -340,7 +402,7 @@ public final class ClassicServer {
         String[] parts = fullCommand.trim().split("\\s+", 3);
         if (parts.length == 0) return;
         
-        String cmd = parts[0].substring(1).toLowerCase();
+        String cmd = parts[0].substring(1).toLowerCase(java.util.Locale.ROOT);
         
         if (cmd.equals("help")) {
             log("[Console] Available commands: /help, /kick, /ban, /mute, /unmute, /admin, /deadmin, /spawnfake, /removefake");
@@ -370,7 +432,7 @@ public final class ClassicServer {
             String targetName = parts[1];
             String reason = parts.length > 2 ? parts[2] : "Banned by console";
             
-            bannedPlayers.add(targetName.toLowerCase());
+            bannedPlayers.add(targetName.toLowerCase(java.util.Locale.ROOT));
             saveSetToFile("bans.txt", bannedPlayers);
             
             ClientHandler target = findClient(targetName);
@@ -385,7 +447,7 @@ public final class ClassicServer {
                 return;
             }
             String targetName = parts[1];
-            mutedPlayers.add(targetName.toLowerCase());
+            mutedPlayers.add(targetName.toLowerCase(java.util.Locale.ROOT));
             log("[Console] Muted " + targetName);
             ClientHandler target = findClient(targetName);
             if (target != null) {
@@ -397,7 +459,7 @@ public final class ClassicServer {
                 return;
             }
             String targetName = parts[1];
-            mutedPlayers.remove(targetName.toLowerCase());
+            mutedPlayers.remove(targetName.toLowerCase(java.util.Locale.ROOT));
             log("[Console] Unmuted " + targetName);
             ClientHandler target = findClient(targetName);
             if (target != null) {
@@ -409,7 +471,7 @@ public final class ClassicServer {
                 return;
             }
             String targetName = parts[1];
-            admins.add(targetName.toLowerCase());
+            admins.add(targetName.toLowerCase(java.util.Locale.ROOT));
             saveSetToFile("admins.txt", admins);
             log("[Console] Promoted " + targetName + " to admin.");
             ClientHandler target = findClient(targetName);
@@ -422,7 +484,7 @@ public final class ClassicServer {
                 return;
             }
             String targetName = parts[1];
-            admins.remove(targetName.toLowerCase());
+            admins.remove(targetName.toLowerCase(java.util.Locale.ROOT));
             saveSetToFile("admins.txt", admins);
             log("[Console] Demoted " + targetName + " from admin.");
             ClientHandler target = findClient(targetName);
@@ -448,23 +510,21 @@ public final class ClassicServer {
         }
     }
 
-    private void spawnFakePlayer(String name) {
+    private synchronized void spawnFakePlayer(String name) {
         if (findClient(name) != null) {
             log("[ClassicServer] Player name already in use: " + name);
             return;
         }
-        int id = getNextPlayerId();
-        if (id == -1) {
-            log("[ClassicServer] Server is full! Cannot spawn fake player.");
-            return;
-        }
-        playerIdPool[id] = true;
-        
-        ClientHandler fake = new ClientHandler(name, (byte) id);
+        int id;
+        ClientHandler fake;
         synchronized (clients) {
+            id = getNextPlayerId();
+            if (id == -1) { log("[ClassicServer] Server is full! Cannot spawn fake player."); return; }
+            playerIdPool[id] = true;
+            fake = new ClientHandler(name, (byte) id);
             clients.add(fake);
         }
-        
+
         log("[ClassicServer] Spawned fake player: " + name + " (ID: " + id + ")");
         syncPlayersList();
         
@@ -500,7 +560,10 @@ public final class ClassicServer {
         private final Socket socket;
         private final byte playerId;
         private String username = "Player";
-        private boolean connected = true;
+        private volatile boolean connected = true;
+        private volatile boolean ready;
+        private volatile boolean identified;
+        private final java.util.ArrayDeque<byte[]> pendingPackets = new java.util.ArrayDeque<>();
         
         private InputStream in;
         private OutputStream out;
@@ -518,6 +581,8 @@ public final class ClassicServer {
             this.playerId = playerId;
             this.username = username;
             this.connected = true;
+            this.ready = true;
+            this.identified = true;
             this.px = (short) (128 * 32);
             this.py = (short) (33.625 * 32);
             this.pz = (short) (128 * 32);
@@ -525,32 +590,45 @@ public final class ClassicServer {
             this.ppitch = 0;
         }
 
-        public synchronized void sendPacket(byte[] packet) {
-            if (!connected || socket == null || out == null) return;
-            try {
-                out.write(packet);
-                out.flush();
-            } catch (IOException e) {
-                log("[ClassicServer] Failed to send packet to " + username + ": " + e.getMessage());
-                disconnect();
+        public void sendPacket(byte[] packet) {
+            boolean failed = false;
+            synchronized (this) {
+                if (!connected || socket == null || !identified) return;
+                if (!ready) {
+                    if (pendingPackets.size() < 4096) { pendingPackets.add(packet); return; }
+                    failed = true;
+                } else {
+                    try { out.write(packet); out.flush(); }
+                    catch (IOException ex) { failed = true; }
+                }
             }
+            if (failed) disconnect();
+        }
+
+        private synchronized void finishLogin() throws IOException {
+            ready = true;
+            while (!pendingPackets.isEmpty()) out.write(pendingPackets.remove());
+            out.flush();
         }
 
         private void disconnect() {
-            if (!connected) return;
-            connected = false;
+            synchronized (this) {
+                if (!connected) return;
+                connected = false;
+            }
             try {
                 if (socket != null) socket.close();
             } catch (IOException ignored) {}
             
             synchronized (clients) {
                 clients.remove(this);
-                releasePlayerId(playerId);
             }
 
             log("[ClassicServer] " + username + " disconnected.");
             syncPlayersList();
             
+            if (!ready) { synchronized (clients) { releasePlayerId(playerId); } return; }
+
             // Broadcast despawn packet
             byte[] despawnPacket = new byte[2];
             despawnPacket[0] = 12; // Despawn opcode
@@ -559,6 +637,7 @@ public final class ClassicServer {
 
             // Broadcast chat message about disconnect
             sendGlobalChat("&e" + username + " left the game.");
+            synchronized (clients) { releasePlayerId(playerId); }
         }
 
         private void sendGlobalChat(String msg) {
@@ -591,19 +670,23 @@ public final class ClassicServer {
 
                 log("[ClassicServer] Client username: " + username + " (Protocol version: " + protocolVer + ")");
                 
-                if (bannedPlayers.contains(username.toLowerCase())) {
+                if (bannedPlayers.contains(username.toLowerCase(java.util.Locale.ROOT))) {
                     log("[ClassicServer] Banned player " + username + " tried to connect. Rejecting.");
                     sendDisconnect(socket, "You are banned!");
                     disconnect();
                     return;
                 }
 
-                synchronized (admins) {
-                    if (admins.isEmpty()) {
-                        admins.add(username.toLowerCase());
-                        saveSetToFile("admins.txt", admins);
-                        log("[ClassicServer] admins.txt was empty. Auto-promoted " + username + " to admin.");
+                if (protocolVer != 7 || clientType < 0 || !username.matches("[A-Za-z0-9_-]{1,16}")) {
+                    sendDisconnect(socket, "Use protocol 7 and a valid 1-16 character name."); return;
+                }
+                synchronized (clients) {
+                    for (ClientHandler other : clients) {
+                        if (other != this && other.identified && other.username.equalsIgnoreCase(username)) {
+                            sendDisconnect(socket, "That player name is already connected."); return;
+                        }
                     }
+                    identified = true;
                 }
 
                 syncPlayersList();
@@ -613,7 +696,7 @@ public final class ClassicServer {
                 out.write(7); // protocol version
                 writeString(out, "Classic Remastered Server");
                 writeString(out, "Direct Multiplayer Connect Host");
-                out.write(0x00); // UserType: normal player
+                out.write(admins.contains(username.toLowerCase(java.util.Locale.ROOT)) ? 100 : 0); // UserType: normal player
                 out.flush();
 
                 // 3) Send Level Initialization
@@ -625,7 +708,7 @@ public final class ClassicServer {
                 try (GZIPOutputStream gzos = new GZIPOutputStream(levelBytes);
                      DataOutputStream dos = new DataOutputStream(gzos)) {
                     dos.writeInt(blocks.length);
-                    dos.write(blocks);
+                    synchronized (ClassicServer.this) { dos.write(blocks); }
                 }
                 byte[] compressedLevel = levelBytes.toByteArray();
 
@@ -685,9 +768,9 @@ public final class ClassicServer {
                 broadcastExclude(newPlayerSpawn.toByteArray(), playerId);
 
                 // Send existing player spawns to the new player
-                synchronized (clients) {
-                    for (ClientHandler other : clients) {
-                        if (other.playerId != this.playerId) {
+                {
+                    for (ClientHandler other : clientSnapshot()) {
+                        if (other.playerId != this.playerId && other.ready) {
                             ByteArrayOutputStream otherSpawn = new ByteArrayOutputStream();
                             otherSpawn.write(7);
                             otherSpawn.write(other.playerId);
@@ -702,6 +785,9 @@ public final class ClassicServer {
                     }
                 }
 
+                finishLogin();
+                socket.setSoTimeout(0);
+
                 // Announcement Chat
                 sendGlobalChat("&e" + username + " joined the game.");
 
@@ -711,13 +797,17 @@ public final class ClassicServer {
                     if (op == -1) break; // EOF
 
                     switch (op) {
+                        case 1: break; // Classic keepalive
                         case 5: { // PLAYER_SET_BLOCK
                             short bx = readShort(in);
                             short by = readShort(in);
                             short bz = readShort(in);
-                            byte mode = (byte) in.read();
-                            byte blockType = (byte) in.read();
+                            byte mode = (byte) readByte(in);
+                            byte blockType = (byte) readByte(in);
                             
+                            if (mode < 0 || mode > 1 || bx < 0 || bx >= WIDTH || by < 0 || by >= HEIGHT
+                                    || bz < 0 || bz >= DEPTH || (mode == 1 && ((blockType & 255) == 0
+                                    || net.classicremastered.minecraft.level.tile.Block.blocks[blockType & 255] == null))) continue;
                             byte finalBlock = (mode == 0) ? (byte) 0 : blockType;
                             updateBlock(bx, by, bz, finalBlock);
 
@@ -732,12 +822,12 @@ public final class ClassicServer {
                             break;
                         }
                         case 8: { // POSITION_ROTATION
-                            byte id = (byte) in.read(); // will be -1
+                            byte id = (byte) readByte(in); // will be -1
                             short cx = readShort(in);
                             short cy = readShort(in);
                             short cz = readShort(in);
-                            byte cyaw = (byte) in.read();
-                            byte cpitch = (byte) in.read();
+                            byte cyaw = (byte) readByte(in);
+                            byte cpitch = (byte) readByte(in);
 
                             px = cx;
                             py = cy;
@@ -758,13 +848,13 @@ public final class ClassicServer {
                             break;
                         }
                         case 13: { // CHAT_MESSAGE
-                            byte id = (byte) in.read(); // will be -1
+                            byte id = (byte) readByte(in); // will be -1
                             String msg = readString(in);
 
                             if (msg.startsWith("/")) {
                                 handleCommand(msg);
                             } else {
-                                if (mutedPlayers.contains(username.toLowerCase())) {
+                                if (mutedPlayers.contains(username.toLowerCase(java.util.Locale.ROOT))) {
                                     sendSystemMessage("&cYou are muted and cannot chat.");
                                 } else {
                                     // Formatted message
@@ -808,12 +898,12 @@ public final class ClassicServer {
             String[] parts = fullCommand.trim().split("\\s+", 3);
             if (parts.length == 0) return;
             
-            String cmd = parts[0].substring(1).toLowerCase();
+            String cmd = parts[0].substring(1).toLowerCase(java.util.Locale.ROOT);
             
             // Common non-admin commands:
             if (cmd.equals("help")) {
                 sendSystemMessage("&eAvailable commands: /help, /msg, /me");
-                if (admins.contains(username.toLowerCase())) {
+                if (admins.contains(username.toLowerCase(java.util.Locale.ROOT))) {
                     sendSystemMessage("&cAdmin commands: /kick, /ban, /mute, /unmute, /admin, /deadmin, /spawnfake, /removefake");
                 }
                 return;
@@ -845,7 +935,7 @@ public final class ClassicServer {
             }
 
             // Check admin permissions for remaining commands:
-            if (!admins.contains(username.toLowerCase())) {
+            if (!admins.contains(username.toLowerCase(java.util.Locale.ROOT))) {
                 sendSystemMessage("&cYou do not have permission to use this command.");
                 return;
             }
@@ -874,7 +964,7 @@ public final class ClassicServer {
                 String targetName = parts[1];
                 String reason = parts.length > 2 ? parts[2] : "Banned by admin";
                 
-                bannedPlayers.add(targetName.toLowerCase());
+                bannedPlayers.add(targetName.toLowerCase(java.util.Locale.ROOT));
                 saveSetToFile("bans.txt", bannedPlayers);
                 
                 ClientHandler target = findClient(targetName);
@@ -889,7 +979,7 @@ public final class ClassicServer {
                     return;
                 }
                 String targetName = parts[1];
-                mutedPlayers.add(targetName.toLowerCase());
+                mutedPlayers.add(targetName.toLowerCase(java.util.Locale.ROOT));
                 sendSystemMessage("&eMuted " + targetName);
                 ClientHandler target = findClient(targetName);
                 if (target != null) {
@@ -901,7 +991,7 @@ public final class ClassicServer {
                     return;
                 }
                 String targetName = parts[1];
-                mutedPlayers.remove(targetName.toLowerCase());
+                mutedPlayers.remove(targetName.toLowerCase(java.util.Locale.ROOT));
                 sendSystemMessage("&eUnmuted " + targetName);
                 ClientHandler target = findClient(targetName);
                 if (target != null) {
@@ -913,7 +1003,7 @@ public final class ClassicServer {
                     return;
                 }
                 String targetName = parts[1];
-                admins.add(targetName.toLowerCase());
+                admins.add(targetName.toLowerCase(java.util.Locale.ROOT));
                 saveSetToFile("admins.txt", admins);
                 sendSystemMessage("&ePromoted " + targetName + " to admin.");
                 ClientHandler target = findClient(targetName);
@@ -926,7 +1016,7 @@ public final class ClassicServer {
                     return;
                 }
                 String targetName = parts[1];
-                admins.remove(targetName.toLowerCase());
+                admins.remove(targetName.toLowerCase(java.util.Locale.ROOT));
                 saveSetToFile("admins.txt", admins);
                 sendSystemMessage("&eDemoted " + targetName + " from admin.");
                 ClientHandler target = findClient(targetName);

@@ -244,8 +244,8 @@ public class LiquidBlock extends Block {
            }
 
            if (level.setTile(x, y, z, this.movingId)) {
-               // 💧 Immediately update neighbor, no waiting
-               Block.blocks[this.movingId].update(level, x, y, z, random);
+               // Spread on the scheduled tick queue, never recursively across an unbounded world.
+               level.addToTickNextTick(x, y, z, this.movingId);
                return true;
            }
        }

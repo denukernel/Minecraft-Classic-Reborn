@@ -236,11 +236,11 @@ public final class ClassicLauncherSWT {
     private static final class MCraftApplet extends MinecraftApplet {
         @Override public String getParameter(String name) { return null; }
         @Override public URL getDocumentBase() {
-            try { return new URL("http://minecraft.net:80/play.jsp"); }
+            try { return new URL("https://classicremastered.net/"); }
             catch (MalformedURLException e) { return null; }
         }
         @Override public URL getCodeBase() {
-            try { return new URL("http://minecraft.net:80/"); }
+            try { return new URL("https://classicremastered.net/"); }
             catch (MalformedURLException e) { return null; }
         }
     }

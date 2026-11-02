@@ -20,6 +20,10 @@ final class ClientNetworkHandler {
 
     static void tick(Minecraft mc) {
         int var4, var8, var40, var46, var45;
+        if (mc.networkManager != null && mc.networkManager.connectionError != null) {
+            mc.networkManager.disconnect("Failed to connect", mc.networkManager.connectionError);
+            return;
+        }
         if (mc.networkManager != null && !(mc.currentScreen instanceof ErrorScreen)) {
             if (!mc.networkManager.isConnected()) {
                 mc.progressBar.setTitle("Connecting..");
@@ -31,14 +35,15 @@ final class ClientNetworkHandler {
                     if (var20.netHandler.connected) {
                         try {
                             NetworkHandler var22 = var20.netHandler;
-                            var20.netHandler.channel.read(var22.in);
+                            if (var20.netHandler.channel.read(var22.in) < 0)
+                                throw new java.io.EOFException("The server closed the connection.");
                             var4 = 0;
 
                             while (var22.in.position() > 0 && var4++ != 100) {
                                 var22.in.flip();
                                 byte var5 = var22.in.get(0);
                                 PacketType var6;
-                                if ((var6 = PacketType.packets[var5]) == null) {
+                                if ((var6 = PacketType.packets[var5 & 255]) == null) {
                                     throw new IOException("Bad command: " + var5);
                                 }
 
@@ -68,6 +73,9 @@ final class ClientNetworkHandler {
                                         byte[] var12 = (byte[]) ((byte[]) var7[1]);
                                         byte var13 = ((Byte) var7[2]).byteValue();
                                         var42.minecraft.progressBar.setProgress(var13);
+                                        if (var42.levelData == null || var11 < 0 || var11 > 1024
+                                                || var42.levelData.size() + var11 > 8 * 1024 * 1024)
+                                            throw new IOException("Invalid map data packet");
                                         var42.levelData.write(var12, 0, var11);
                                     } else if (var6 == PacketType.LEVEL_FINALIZE) {
                                         try {
@@ -82,6 +90,9 @@ final class ClientNetworkHandler {
                                         short var55 = ((Short) var7[0]).shortValue();
                                         short var63 = ((Short) var7[1]).shortValue();
                                         short var21 = ((Short) var7[2]).shortValue();
+                                        if (var55 <= 0 || var63 <= 0 || var21 <= 0
+                                                || (long) var55 * var63 * var21 != var51.length)
+                                            throw new IOException("Invalid map dimensions");
                                         Level var30;
                                         (var30 = new Level()).setNetworkMode(true);
                                         var30.setData(var55, var63, var21, var51);
@@ -149,7 +160,11 @@ final class ClientNetworkHandler {
                                                 var33 = new NetworkPlayer(var42.minecraft, var5, var34, var36, var47,
                                                         var10, (float) (var9 * 360) / 256.0F,
                                                         (float) (var58 * 360) / 256.0F);
-                                                var42.players.put(Byte.valueOf(var5), var33);
+                                                NetworkPlayer previous = var42.players.put(Byte.valueOf(var5), var33);
+                                                if (previous != null) {
+                                                    previous.clear();
+                                                    var42.minecraft.level.removeEntity(previous);
+                                                }
                                                 var42.minecraft.level.addEntity(var33);
                                             } else {
                                                 var42.minecraft.level.setSpawnPos(var36 / 32, var47 / 32, var10 / 32,
@@ -262,9 +277,8 @@ final class ClientNetworkHandler {
                                                         var42.minecraft.hud.addChat(var34);
                                                     }
                                                 } else if (var6 == PacketType.DISCONNECT) {
-                                                    var42.netHandler.close();
-                                                    var42.minecraft.setCurrentScreen(
-                                                            new ErrorScreen("Connection lost", (String) var7[0]));
+                                                    var42.disconnect("Connection lost", (String) var7[0]);
+                                                    return;
                                                 } else if (var6 == PacketType.UPDATE_PLAYER_TYPE) {
                                                     var42.minecraft.player.userType = ((Byte) var7[0]).byteValue();
                                                 }
@@ -285,20 +299,16 @@ final class ClientNetworkHandler {
                                 var22.channel.write(var22.out);
                                 var22.out.compact();
                             }
-                        } catch (Exception var15) {
-                            var20.minecraft.setCurrentScreen(
-                                    new ErrorScreen("Disconnected!", "You\'ve lost connection to the server"));
-                            var20.minecraft.online = false;
-                            var15.printStackTrace();
-                            var20.netHandler.close();
-                            var20.minecraft.networkManager = null;
+                        } catch (Exception error) {
+                            var20.disconnect("Disconnected", error.getMessage());
+                            return;
                         }
                     }
                 }
 
                 Player var28 = mc.player;
                 var20 = mc.networkManager;
-                if (mc.networkManager.levelLoaded) {
+                if (var20 != null && var20.isConnected() && var20.levelLoaded && var28 != null) {
                     int var24 = (int) (var28.x * 32.0F);
                     var4 = (int) (var28.y * 32.0F);
                     var40 = (int) (var28.z * 32.0F);

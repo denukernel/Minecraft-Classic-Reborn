@@ -16,9 +16,6 @@ public final class GameOverScreen extends GuiScreen {
 
         // Load level
         Button loadBtn = new Button(2, this.width / 2 - 100, this.height / 4 + 96, "Load level...");
-        if (this.minecraft.session == null) {
-            loadBtn.active = false;
-        }
         this.buttons.add(loadBtn);
     }
 
@@ -35,7 +32,7 @@ public final class GameOverScreen extends GuiScreen {
             this.minecraft.setCurrentScreen(new GenerateLevelScreen(this));
         }
 
-        if (button.id == 2 && this.minecraft.session != null) {
+        if (button.id == 2) {
             this.minecraft.setCurrentScreen(new LoadLevelScreen(this));
         }
     }
