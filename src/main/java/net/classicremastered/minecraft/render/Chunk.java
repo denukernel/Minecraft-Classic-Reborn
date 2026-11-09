@@ -55,7 +55,10 @@ public final class Chunk {
         for (int ly = 0; ly < 16; ly++) for (int lz = 0; lz < 16; lz++)
             for (int lx = 0; lx < 16; lx++) {
                 int id = level.getTile(x0 + lx, y0 + ly, z0 + lz);
-                if (id <= 0 || Block.blocks[id] == null) continue;
+                        if (id <= 0
+                                || Block.blocks[id] == null
+                                || level.redstone().isMoving(x0 + lx, y0 + ly, z0 + lz, id))
+                            continue;
                 Block block = Block.blocks[id];
                 int pass = block.getLiquidType() == net.classicremastered.minecraft.level.liquid.LiquidType.WATER
                     ? 1 : block.getLiquidType() == net.classicremastered.minecraft.level.liquid.LiquidType.LAVA

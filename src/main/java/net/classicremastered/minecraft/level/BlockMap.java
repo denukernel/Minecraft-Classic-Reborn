@@ -1,17 +1,16 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.entity.HeldBlockEntity;
+import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.render.Frustrum;
+import net.classicremastered.minecraft.render.TextureManager;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-
-import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.model.Vec3D;
-import net.classicremastered.minecraft.phys.AABB;
-import net.classicremastered.minecraft.render.Frustrum;
-import net.classicremastered.minecraft.render.TextureManager;
-import net.classicremastered.minecraft.entity.HeldBlockEntity;
-import net.classicremastered.minecraft.player.Player;
-
 
 public class BlockMap implements Serializable {
 
@@ -32,12 +31,9 @@ public class BlockMap implements Serializable {
         this.width = w / 16;
         this.depth = d / 16;
         this.height = h / 16;
-        if (this.width == 0)
-            this.width = 1;
-        if (this.depth == 0)
-            this.depth = 1;
-        if (this.height == 0)
-            this.height = 1;
+        if (this.width == 0) this.width = 1;
+        if (this.depth == 0) this.depth = 1;
+        if (this.height == 0) this.height = 1;
 
         this.entityGrid = new ArrayList[this.width * this.depth * this.height];
         for (int x = 0; x < this.width; ++x) {
@@ -80,8 +76,7 @@ public class BlockMap implements Serializable {
     }
 
     public void moved(Entity e) {
-        if (infiniteMode)
-            return; // all in one bucket
+        if (infiniteMode) return; // all in one bucket
         BlockMap$Slot a = this.slot.init(e.xOld, e.yOld, e.zOld);
         BlockMap$Slot b = this.slot2.init(e.x, e.y, e.z);
         if (!a.equals(b)) {
@@ -93,12 +88,20 @@ public class BlockMap implements Serializable {
         }
     }
 
-    public List<Entity> getEntities(Entity except, float x0, float y0, float z0, float x1, float y1, float z1) {
+    public List<Entity> getEntities(
+            Entity except, float x0, float y0, float z0, float x1, float y1, float z1) {
         this.tmp.clear();
         return getEntities(except, x0, y0, z0, x1, y1, z1, this.tmp);
     }
 
-    public List<Entity> getEntities(Entity except, float x0, float y0, float z0, float x1, float y1, float z1,
+    public List<Entity> getEntities(
+            Entity except,
+            float x0,
+            float y0,
+            float z0,
+            float x1,
+            float y1,
+            float z1,
             List<Entity> out) {
         if (infiniteMode) {
             Entity[] entities;
@@ -117,10 +120,20 @@ public class BlockMap implements Serializable {
         BlockMap$Slot b = this.slot2.init(x1, y1, z1);
 
         for (int xs = BlockMap$Slot.getXSlot(a) - 1; xs <= BlockMap$Slot.getXSlot(b) + 1; ++xs) {
-            for (int ys = BlockMap$Slot.getYSlot(a) - 1; ys <= BlockMap$Slot.getYSlot(b) + 1; ++ys) {
-                for (int zs = BlockMap$Slot.getZSlot(a) - 1; zs <= BlockMap$Slot.getZSlot(b) + 1; ++zs) {
-                    if (xs >= 0 && ys >= 0 && zs >= 0 && xs < this.width && ys < this.depth && zs < this.height) {
-                        List<Entity> cell = this.entityGrid[(zs * this.depth + ys) * this.width + xs];
+            for (int ys = BlockMap$Slot.getYSlot(a) - 1;
+                    ys <= BlockMap$Slot.getYSlot(b) + 1;
+                    ++ys) {
+                for (int zs = BlockMap$Slot.getZSlot(a) - 1;
+                        zs <= BlockMap$Slot.getZSlot(b) + 1;
+                        ++zs) {
+                    if (xs >= 0
+                            && ys >= 0
+                            && zs >= 0
+                            && xs < this.width
+                            && ys < this.depth
+                            && zs < this.height) {
+                        List<Entity> cell =
+                                this.entityGrid[(zs * this.depth + ys) * this.width + xs];
                         Entity[] entities;
                         synchronized (cell) {
                             entities = cell.toArray(new Entity[0]);
@@ -187,7 +200,8 @@ public class BlockMap implements Serializable {
         for (int i = 0; i < entities.length; ++i) {
             Entity e = entities[i];
             if (e == null) continue;
-            e.tick();
+            if (!e.removed && e.level != null && !e.level.isEntityActive(e)) continue;
+            if (!net.classicremastered.minecraft.level.itemstack.GunEntityDrag.tick(e)) e.tick();
             if (e.removed) {
                 synchronized (this.all) {
                     this.all.remove(e);
@@ -214,7 +228,8 @@ public class BlockMap implements Serializable {
     }
 
     public void render(Vec3D cam, Frustrum fr, TextureManager tex, float partial) {
-        // Render all HeldBlockEntity first, bypassing frustum check and infiniteMode check
+        // Render all HeldBlockEntity first, bypassing frustum check and infiniteMode
+        // check
         Entity[] entities;
         synchronized (this.all) {
             entities = this.all.toArray(new Entity[0]);
@@ -232,19 +247,28 @@ public class BlockMap implements Serializable {
                 net.classicremastered.minecraft.render.HeldItemRenderer.renderWorld(p, partial);
                 int selId = p.inventory.getSelected();
                 if (selId >= 256 && (selId - 256) == 11) {
-                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
+                    Entity grabbed =
+                            net.classicremastered.minecraft.level.itemstack.GravityGunItem
+                                    .getGrabbedEntity(p);
                     if (grabbed != null && !grabbed.removed) {
-                        net.classicremastered.minecraft.level.itemstack.GravityGunItem.renderMobBeam(p, grabbed, tex, partial);
+                        net.classicremastered.minecraft.render.GunBeamRenderer.render(
+                                p, grabbed, partial, true);
                     }
                 }
                 if (selId >= 256 && (selId - 256) == 10) {
-                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.getGrabbed(p);
+                    Entity grabbed =
+                            net.classicremastered.minecraft.level.itemstack.PhysicsGunItem
+                                    .getGrabbedEntity(p);
                     if (grabbed != null && !grabbed.removed) {
-                        net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.renderMobBeam(p, grabbed, tex, partial);
+                        net.classicremastered.minecraft.render.GunBeamRenderer.render(
+                                p, grabbed, partial, false);
                     }
                 }
                 if (selId >= 256 && (selId - 256) == 18) {
-                    net.classicremastered.minecraft.model.Vec3D anchor = net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.get(p);
+                    net.classicremastered.minecraft.model.Vec3D anchor =
+                            net.classicremastered.minecraft.level.itemstack.GrapplingHookItem
+                                    .anchors
+                                    .get(p);
                     if (anchor != null) {
                         float px = p.xo + (p.x - p.xo) * partial;
                         float py = p.yo + (p.y - p.yo) * partial - 0.2f;
@@ -257,7 +281,8 @@ public class BlockMap implements Serializable {
                         org.lwjgl.opengl.GL11.glLineWidth(3.0f);
                         org.lwjgl.opengl.GL11.glBegin(org.lwjgl.opengl.GL11.GL_LINES);
                         org.lwjgl.opengl.GL11.glVertex3f(px, py, pz);
-                        org.lwjgl.opengl.GL11.glVertex3f((float) anchor.x, (float) anchor.y, (float) anchor.z);
+                        org.lwjgl.opengl.GL11.glVertex3f(
+                                (float) anchor.x, (float) anchor.y, (float) anchor.z);
                         org.lwjgl.opengl.GL11.glEnd();
                         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);
                         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_LIGHTING);
@@ -269,9 +294,13 @@ public class BlockMap implements Serializable {
 
         if (infiniteMode) {
             for (Entity e : entities) {
-                if (e != null && !e.removed && !(e instanceof HeldBlockEntity) && e.shouldRender(cam)) {
+                if (e != null
+                        && !e.removed
+                        && !(e instanceof HeldBlockEntity)
+                        && e.shouldRender(cam)) {
                     AABB bb = e.bb;
-                    if (bb != null && fr.isBoxInFrustrum(bb.x0, bb.y0, bb.z0, bb.x1, bb.y1, bb.z1)) {
+                    if (bb != null
+                            && fr.isBoxInFrustrum(bb.x0, bb.y0, bb.z0, bb.x1, bb.y1, bb.z1)) {
                         e.render(tex, partial);
                     }
                 }
@@ -297,7 +326,10 @@ public class BlockMap implements Serializable {
                                 cellEntities = cell.toArray(new Entity[0]);
                             }
                             for (Entity e : cellEntities) {
-                                if (e != null && !(e instanceof HeldBlockEntity) && e.shouldRender(cam)) {
+                                if (e != null
+                                        && !e.removed
+                                        && !(e instanceof HeldBlockEntity)
+                                        && e.shouldRender(cam)) {
                                     e.render(tex, partial);
                                 }
                             }
@@ -321,4 +353,3 @@ public class BlockMap implements Serializable {
         return m.height;
     }
 }
-

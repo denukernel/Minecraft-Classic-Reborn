@@ -1,34 +1,59 @@
 package net.classicremastered.minecraft.level.infinite;
 
-import java.util.*;
-import java.util.concurrent.*;
-
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 
+import java.util.*;
+import java.util.concurrent.*;
+
 public final class SimpleChunkManager {
-    public enum Mode { FLAT, TERRAIN }
+    public enum Mode {
+        FLAT,
+        TERRAIN,
+        BIOMES
+    }
 
     private final Map<Long, SimpleChunk> map = new ConcurrentHashMap<>();
     private final int height;
     private final long seed;
     private final InfiniteTerrainGenerator terrain;
+    private final net.classicremastered.minecraft.level.generator.BiomeLevelGenerator biomes;
     private final Mode mode;
     public Level level;
 
     // Multi-core thread pool for asynchronous background chunk generation
-    private static final int WORKER_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors());
-    private final ExecutorService executor = Executors.newFixedThreadPool(WORKER_THREADS, new ThreadFactory() {
-        private int count = 0;
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "ChunkGen-Worker-" + (++count));
-            t.setDaemon(true);
-            t.setPriority(Thread.NORM_PRIORITY - 1);
-            return t;
+    private static final int WORKER_THREADS =
+            Math.max(2, Runtime.getRuntime().availableProcessors());
+    private final ExecutorService executor =
+            Executors.newFixedThreadPool(
+                    WORKER_THREADS,
+                    new ThreadFactory() {
+                        private int count = 0;
+
+                        @Override
+                        public Thread newThread(Runnable r) {
+                            Thread t = new Thread(r, "ChunkGen-Worker-" + (++count));
+                            t.setDaemon(true);
+                            t.setPriority(Thread.NORM_PRIORITY - 1);
+                            return t;
+                        }
+                    });
+    private final java.util.concurrent.ConcurrentLinkedQueue<SimpleChunk> publications =
+            new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    public void publishResidents() {
+        if (level == null || level.blockMap == null) return;
+        for (SimpleChunk c; (c = publications.poll()) != null; ) {
+            if (map.get(key(c.cx, c.cz)) != c || c.residentsPublished) continue;
+            c.residentsPublished = true;
+            for (var occupant : c.generatedOccupants) occupant.spawn(level);
+            c.generatedOccupants.clear();
+            for (Runnable resident : c.residents) resident.run();
+            c.residents.clear();
         }
-    });
+    }
+
     private final Set<Long> pendingAsync = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private static boolean warnedFarLands = false;
@@ -38,7 +63,12 @@ public final class SimpleChunkManager {
         this.seed = seed;
         this.height = height;
         this.mode = mode;
-        this.terrain = new InfiniteTerrainGenerator(seed, height);
+        this.terrain = mode == Mode.BIOMES ? null : new InfiniteTerrainGenerator(seed, height);
+        this.biomes =
+                mode == Mode.BIOMES
+                        ? new net.classicremastered.minecraft.level.generator.BiomeLevelGenerator(
+                                seed)
+                        : null;
     }
 
     private static long key(int cx, int cz) {
@@ -60,10 +90,19 @@ public final class SimpleChunkManager {
 
         System.arraycopy(blocks, 0, c.blocks, 0, blocks.length);
         c.buildEmissiveList();
+        if (cx == lastCx && cz == lastCz) lastChunk = c;
         c.meshed = false;
         c.loaded = true;
         c.lastAccessTick = 0L;
         map.put(key, c);
+    }
+
+    public void restoreOccupants(long key, net.classicremastered.nbt.CompoundTag tag) {
+        SimpleChunk chunk = map.get(key);
+        if (chunk == null) return;
+        net.classicremastered.minecraft.level.GeneratedOccupant.load(
+                tag, chunk.generatedOccupants, chunk.cx, chunk.cz, height);
+        if (!chunk.generatedOccupants.isEmpty()) publications.offer(chunk);
     }
 
     public boolean isChunkLoaded(int cx, int cz) {
@@ -88,9 +127,7 @@ public final class SimpleChunkManager {
         return c;
     }
 
-    /**
-     * Multithreaded prefetch: schedules background generation tasks for chunks around (cx, cz).
-     */
+    /** Multithreaded prefetch: schedules background generation tasks for chunks around (cx, cz). */
     public void prefetch(int centerCx, int centerCz, int radius) {
         if (executor.isShutdown()) return;
 
@@ -101,21 +138,25 @@ public final class SimpleChunkManager {
                     final int cx = centerCx + dx;
                     final int cz = centerCz + dz;
                     final long k = key(cx, cz);
+                    SimpleChunk existing = map.get(k);
+                    if (existing != null) existing.markActive(level == null ? 0 : level.tickCount);
 
                     if (!map.containsKey(k) && pendingAsync.add(k)) {
-                        executor.submit(() -> {
-                            try {
-                                if (map.containsKey(k)) return;
-                                SimpleChunk c = new SimpleChunk(cx, cz, height);
-                                generateChunk(c);
-                                c.loaded = true;
-                                map.put(k, c);
-                            } catch (Throwable t) {
-                                t.printStackTrace();
-                            } finally {
-                                pendingAsync.remove(k);
-                            }
-                        });
+                        executor.submit(
+                                () -> {
+                                    try {
+                                        if (map.containsKey(k)) return;
+                                        SimpleChunk c = new SimpleChunk(cx, cz, height);
+                                        generateChunk(c);
+                                        c.loaded = true;
+                                        SimpleChunk installed = map.putIfAbsent(k, c);
+                                        if (installed == null) publications.add(c);
+                                    } catch (Throwable t) {
+                                        t.printStackTrace();
+                                    } finally {
+                                        pendingAsync.remove(k);
+                                    }
+                                });
                     }
                 }
             }
@@ -124,6 +165,7 @@ public final class SimpleChunkManager {
 
     public SimpleChunk getOrCreate(int cx, int cz) {
         if (cx == lastCx && cz == lastCz && lastChunk != null) {
+            lastChunk.loaded = true;
             return lastChunk;
         }
         long k = key(cx, cz);
@@ -132,7 +174,9 @@ public final class SimpleChunkManager {
             c = new SimpleChunk(cx, cz, height);
             generateChunk(c);
             c.loaded = true;
-            map.put(k, c);
+            SimpleChunk installed = map.putIfAbsent(k, c);
+            if (installed == null) publications.add(c);
+            else c = installed;
             pendingAsync.remove(k);
         }
         c.loaded = true;
@@ -178,17 +222,28 @@ public final class SimpleChunkManager {
         byte old = c.blocks[idx];
         if (old != id) {
             c.blocks[idx] = id;
-            c.buildEmissiveList();
+            Block previous = Block.blocks[old & 0xFF];
+            Block next = Block.blocks[id & 0xFF];
+            int oldLight = previous == null ? 0 : previous.getLightValue();
+            int newLight = next == null ? 0 : next.getLightValue();
+            if (oldLight != newLight) {
+                c.buildEmissiveList();
+            }
+            if (level != null) {
+                level.onBlockChanged(x, y, z);
+            }
         }
         c.meshed = false;
         c.loaded = true;
     }
 
-    private void generateChunk(SimpleChunk c) {
+    public void generateChunk(SimpleChunk c) {
         int worldX = c.cx * SimpleChunk.SIZE;
         int worldZ = c.cz * SimpleChunk.SIZE;
 
-        if (terrain != null) {
+        if (biomes != null) {
+            biomes.generateChunk(c);
+        } else if (terrain != null) {
             terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT, level);
         }
         c.buildEmissiveList();
@@ -208,7 +263,8 @@ public final class SimpleChunkManager {
         markDirty(cx, cz);
     }
 
-    public static void checkFarLandsWarning(Minecraft mc, net.classicremastered.minecraft.player.Player player) {
+    public static void checkFarLandsWarning(
+            Minecraft mc, net.classicremastered.minecraft.player.Player player) {
         if (mc == null || mc.hud == null || player == null) return;
         long dist = (long) Math.max(Math.abs(player.x), Math.abs(player.z));
         if (dist >= 1_000_000L && dist <= 5_000_000L) {

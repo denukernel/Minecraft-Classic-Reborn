@@ -1,10 +1,6 @@
 package net.classicremastered.minecraft;
 
-import org.lwjgl.input.Keyboard;
-import java.io.File;
-
 import net.classicremastered.minecraft.chat.CommandRegistry;
-import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.gui.*;
 import net.classicremastered.minecraft.lang.LanguageManager;
 import net.classicremastered.minecraft.level.Level;
@@ -24,15 +20,18 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLException;
 import org.lwjgl.input.Controllers;
 import org.lwjgl.input.Cursor;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.DisplayMode;
 import org.lwjgl.opengl.GL11;
 
-import javax.swing.*;
 import java.awt.*;
 import java.io.*;
+import java.io.File;
 import java.nio.IntBuffer;
+
+import javax.swing.*;
 
 /** Initializes the game directory, resources, display, and client services. */
 final class ClientBootstrap {
@@ -43,20 +42,21 @@ final class ClientBootstrap {
         String home = System.getProperty("user.home", ".");
         String osName = System.getProperty("os.name").toLowerCase();
         File minecraftFolder;
-        switch (OperatingSystemLookup.lookup[(osName
-                .contains("win")
-                        ? Minecraft$OS.windows
-                        : (osName
-                                .contains("mac")
+        switch (OperatingSystemLookup.lookup[
+                (osName.contains("win")
+                                ? Minecraft$OS.windows
+                                : (osName.contains("mac")
                                         ? Minecraft$OS.macos
-                                        : (osName
-                                                .contains("solaris")
+                                        : (osName.contains("solaris")
+                                                ? Minecraft$OS.solaris
+                                                : (osName.contains("sunos")
                                                         ? Minecraft$OS.solaris
-                                                        : (osName.contains("sunos") ? Minecraft$OS.solaris
-                                                                : (osName.contains("linux") ? Minecraft$OS.linux
-                                                                        : (osName.contains("unix") ? Minecraft$OS.linux
-                                                                                : Minecraft$OS.unknown))))))
-                .ordinal()]) {
+                                                        : (osName.contains("linux")
+                                                                ? Minecraft$OS.linux
+                                                                : (osName.contains("unix")
+                                                                        ? Minecraft$OS.linux
+                                                                        : Minecraft$OS.unknown))))))
+                        .ordinal()]) {
             case 1:
                 System.out.println("UNKNOWN OS!!!");
                 return null;
@@ -79,7 +79,8 @@ final class ClientBootstrap {
         }
 
         if (!minecraftFolder.exists() && !minecraftFolder.mkdirs()) {
-            throw new RuntimeException("The working directory could not be created: " + minecraftFolder);
+            throw new RuntimeException(
+                    "The working directory could not be created: " + minecraftFolder);
         }
 
         return minecraftFolder;
@@ -88,11 +89,13 @@ final class ClientBootstrap {
     static void initialize(Minecraft mc, File minecraftFolder) throws Exception {
 
         if (!minecraftFolder.exists()) {
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(
+                    null,
                     "Welcome to the MCraft Client Alpha 1!"
                             + "\nPleave give MCraft some time to download required files."
                             + "\nTHIS CAN TAKE A LONG TIME DEPENDING ON YOUR INTERNET SPEED.",
-                    "Welcome to MCraft Client", JOptionPane.INFORMATION_MESSAGE);
+                    "Welcome to MCraft Client",
+                    JOptionPane.INFORMATION_MESSAGE);
         }
 
         // ===== RESOURCES: start downloader and BLOCK until finished =====
@@ -198,8 +201,13 @@ final class ClientBootstrap {
         mc.lang = new LanguageManager(minecraftFolder);
         mc.lang.load("english"); // load default
         // keep any prior value (field default, launcher flag, etc.)
-        mc.developer = mc.developer || Minecraft.isDebugger() || Boolean.getBoolean("mc.dev")
-                || "1".equals(System.getenv("MC_DEV"));
+        mc.developer =
+                System.getProperty("minecraft.developerMode") != null
+                        ? Boolean.getBoolean("minecraft.developerMode")
+                        : mc.developer
+                                || Minecraft.isDebugger()
+                                || Boolean.getBoolean("mc.dev")
+                                || "1".equals(System.getenv("MC_DEV"));
         // System.out.println("[dev] developer=" + mc.developer);
 
         mc.fastDebugMode = Minecraft.isDebugger();
@@ -226,8 +234,10 @@ final class ClientBootstrap {
             mc.resourceThread.start();
         }
 
-        mc.textureManager.load("/terrain.png"); // ensure atlas exists
-        mc.textureManager.applyBlockTilesToTerrainAtlas(); // stitch per-block tiles
+        mc.textureManager.load(
+                net.classicremastered.minecraft.render.BlockTextureAtlas
+                        .RESOURCE); // ensure atlas exists
+        mc.textureManager.applyBlockTextures(); // stitch per-block tiles
 
         mc.textureManager.registerAnimation(new TextureLavaFX());
         mc.textureManager.registerAnimation(new TextureWaterFX());
@@ -236,9 +246,9 @@ final class ClientBootstrap {
         IntBuffer cursorBuffer;
         (cursorBuffer = BufferUtils.createIntBuffer(256)).clear().limit(256);
         mc.levelRenderer = new LevelRenderer(mc, mc.textureManager);
-        DroppedBlock.initModels();
-        net.classicremastered.minecraft.level.itemstack.Item.initItems(); // moved here for startup-only
-                                                                          // registration
+        net.classicremastered.minecraft.level.itemstack.Item
+                .initItems(); // moved here for startup-only
+        // registration
 
         MobRegistry.bootstrapDefaults();
         Mob.modelCache = new ModelManager();
@@ -294,8 +304,9 @@ final class ClientBootstrap {
         (new SkinDownloadThread(mc)).start();
         CommandRegistry.bootstrap(mc);
         if (mc.server != null && mc.session != null) {
-            mc.networkManager = new NetworkManager(mc, mc.server, mc.port, mc.session.username,
-                    mc.session.mppass);
+            mc.networkManager =
+                    new NetworkManager(
+                            mc, mc.server, mc.port, mc.session.username, mc.session.mppass);
         }
     }
 }

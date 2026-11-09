@@ -1,18 +1,22 @@
 package net.classicremastered.toolkit.modeleditor;
 
-import java.io.File;
-
-
 import net.classicremastered.minecraft.model.*;
 
-import javax.swing.*;
 import java.awt.*;
+
+import javax.swing.*;
 
 /** Builds the viewport and properties cards without owning application state. */
 final class ModelEditorPanels {
     private ModelEditorPanels() {}
 
-    static void build(ModelEditorApp editor, Color bgDark, Color cardDark, Color textLight, Color borderDark, Color activeSelection) {
+    static void build(
+            ModelEditorApp editor,
+            Color bgDark,
+            Color cardDark,
+            Color textLight,
+            Color borderDark,
+            Color activeSelection) {
         // ----- CARD 1: VIEW_3D -----
         JPanel view3D = new JPanel(new BorderLayout());
         view3D.setBackground(bgDark);
@@ -21,19 +25,28 @@ final class ModelEditorPanels {
         editor.glCanvas.setPreferredSize(new Dimension(820, 720));
 
         // UV viewer shows current atlas and UV rects
-        editor.uvPanel = new UVViewerPanel(editor, () -> editor.textureImage, () -> editor.model, () -> editor.selected);
+        editor.uvPanel =
+                new UVViewerPanel(
+                        editor,
+                        () -> editor.textureImage,
+                        () -> editor.model,
+                        () -> editor.selected);
         editor.uvPanel.setPreferredSize(new Dimension(820, 260));
 
         JPanel uvContainer = new JPanel(new BorderLayout());
         JPanel uvToolbar = new JPanel(new BorderLayout());
-        uvToolbar.add(new JLabel("  UV: left click selects, right drag pans, wheel zooms"), BorderLayout.CENTER);
+        uvToolbar.add(
+                new JLabel("  UV: left click selects, right drag pans, wheel zooms"),
+                BorderLayout.CENTER);
         JButton fitUv = editor.createButton("Fit UV");
         fitUv.addActionListener(e -> editor.uvPanel.fitToView());
         uvToolbar.add(fitUv, BorderLayout.EAST);
         uvContainer.add(uvToolbar, BorderLayout.NORTH);
         uvContainer.add(editor.uvPanel, BorderLayout.CENTER);
-        JSplitPane centerSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editor.glCanvas, uvContainer);
-        centerSplit.setResizeWeight(1.0);
+        JSplitPane centerSplit =
+                new JSplitPane(JSplitPane.VERTICAL_SPLIT, editor.glCanvas, uvContainer);
+        centerSplit.setResizeWeight(0.72);
+        centerSplit.setDividerLocation(450);
         centerSplit.setDividerSize(6);
         centerSplit.setBackground(bgDark);
         centerSplit.setBorder(BorderFactory.createEmptyBorder());
@@ -47,17 +60,19 @@ final class ModelEditorPanels {
         compactSide.setPreferredSize(new Dimension(240, 720));
 
         JPanel cpPartsBox = editor.titledBox("Parts");
+        cpPartsBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 420));
         editor.partList = new JList<>(editor.partListModel);
         editor.partList.setVisibleRowCount(12);
         editor.partList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        editor.partList.setCellRenderer((lst, value, idx, isSel, hasFocus) -> {
-            JLabel lbl = new JLabel(value == null ? "(null)" : value.name);
-            lbl.setOpaque(true);
-            lbl.setBackground(isSel ? new Color(0x3B, 0x82, 0xF6) : new Color(0x131317));
-            lbl.setForeground(isSel ? Color.WHITE : new Color(0xE4, 0xE4, 0xE7));
-            lbl.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
-            return lbl;
-        });
+        editor.partList.setCellRenderer(
+                (lst, value, idx, isSel, hasFocus) -> {
+                    JLabel lbl = new JLabel(value == null ? "(null)" : value.name);
+                    lbl.setOpaque(true);
+                    lbl.setBackground(isSel ? new Color(0x3B, 0x82, 0xF6) : new Color(0x131317));
+                    lbl.setForeground(isSel ? Color.WHITE : new Color(0xE4, 0xE4, 0xE7));
+                    lbl.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+                    return lbl;
+                });
         JScrollPane cpSp = new JScrollPane(editor.partList);
         cpSp.setBorder(BorderFactory.createLineBorder(new Color(0x2E2E35)));
         cpPartsBox.add(cpSp);
@@ -67,45 +82,45 @@ final class ModelEditorPanels {
         JButton cpBtnDuplicate = editor.createButton("Duplicate");
         JButton cpBtnDelete = editor.createButton("Delete");
 
-        cpBtnAddRoot.addActionListener(e -> {
-            editor.pushHistory();
-            EditablePart np = editor.makeNewPart();
-            editor.model.parts.add(np);
-            editor.selected = np;
-            editor.refreshPartListSelect(np);
-        });
-        cpBtnAddChild.addActionListener(e -> {
-            editor.pushHistory();
-            EditablePart np = editor.makeNewPart();
-            if (editor.selected != null)
-                editor.selected.children.add(np);
-            else
-                editor.model.parts.add(np);
-            editor.selected = np;
-            editor.refreshPartListSelect(np);
-        });
-        cpBtnDelete.addActionListener(e -> {
-            if (editor.selected == null)
-                return;
-            editor.pushHistory();
-            editor.deleteSelected();
-            editor.refreshPartListSelect(editor.selected);
-        });
-        cpBtnDuplicate.addActionListener(e -> {
-            if (editor.selected == null)
-                return;
-            editor.pushHistory();
-            EditablePart cp = editor.copyPart(editor.selected);
-            EditablePart parent = editor.parentOf(editor.selected);
-            if (parent != null)
-                parent.children.add(cp);
-            else
-                editor.model.parts.add(cp);
-            editor.selected = cp;
-            editor.refreshPartListSelect(cp);
-        });
+        cpBtnAddRoot.addActionListener(
+                e -> {
+                    editor.pushHistory();
+                    EditablePart np = editor.makeNewPart();
+                    editor.model.parts.add(np);
+                    editor.selected = np;
+                    editor.refreshPartListSelect(np);
+                });
+        cpBtnAddChild.addActionListener(
+                e -> {
+                    editor.pushHistory();
+                    EditablePart np = editor.makeNewPart();
+                    if (editor.selected != null) editor.selected.children.add(np);
+                    else editor.model.parts.add(np);
+                    editor.selected = np;
+                    editor.refreshPartListSelect(np);
+                });
+        cpBtnDelete.addActionListener(
+                e -> {
+                    if (editor.selected == null) return;
+                    editor.pushHistory();
+                    editor.deleteSelected();
+                    editor.refreshPartListSelect(editor.selected);
+                });
+        cpBtnDuplicate.addActionListener(
+                e -> {
+                    if (editor.selected == null) return;
+                    editor.pushHistory();
+                    EditablePart cp = editor.copyPart(editor.selected);
+                    EditablePart parent = editor.parentOf(editor.selected);
+                    if (parent != null) parent.children.add(cp);
+                    else editor.model.parts.add(cp);
+                    editor.selected = cp;
+                    editor.refreshPartListSelect(cp);
+                });
 
         JPanel cpPartBtns = new JPanel(new GridLayout(2, 2, 6, 6));
+        cpPartBtns.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
+        cpPartBtns.setPreferredSize(new Dimension(220, 70));
         cpPartBtns.add(cpBtnAddRoot);
         cpPartBtns.add(cpBtnAddChild);
         cpPartBtns.add(cpBtnDuplicate);
@@ -116,6 +131,7 @@ final class ModelEditorPanels {
 
         compactSide.add(Box.createVerticalStrut(8));
         JPanel cpPreviewBox = editor.titledBox("Preview Controls");
+        cpPreviewBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
         editor.chkPreviewAnim = new JCheckBox("Preview Walk/Idle");
         editor.chkAggressive = new JCheckBox("Preview Aggressive");
         cpPreviewBox.add(editor.chkPreviewAnim);
@@ -124,7 +140,6 @@ final class ModelEditorPanels {
         compactSide.add(cpPreviewBox);
 
         view3D.add(compactSide, BorderLayout.EAST);
-        editor.mainCardContainer.add(view3D, "3D");
 
         // ----- CARD 2: VIEW_SETTINGS -----
         JPanel viewSettings = new JPanel(new GridLayout(1, 2, 12, 0));
@@ -144,17 +159,19 @@ final class ModelEditorPanels {
         settingsModelBox.add(editor.row("Atlas W:", editor.atlasW));
         settingsModelBox.add(editor.row("Atlas H:", editor.atlasH));
         JButton btnApplyAtlas = editor.createButton("Apply Atlas");
-        btnApplyAtlas.addActionListener(e -> {
-            try {
-                editor.atlasW.commitEdit();
-                editor.atlasH.commitEdit();
-            } catch (java.text.ParseException ignore) {}
-            editor.pushHistory();
-            editor.model.name = editor.modelName.getText().trim();
-            editor.model.atlasW = ((Number) editor.atlasW.getValue()).intValue();
-            editor.model.atlasH = ((Number) editor.atlasH.getValue()).intValue();
-            editor.uvPanel.repaint();
-        });
+        btnApplyAtlas.addActionListener(
+                e -> {
+                    try {
+                        editor.atlasW.commitEdit();
+                        editor.atlasH.commitEdit();
+                    } catch (java.text.ParseException ignore) {
+                    }
+                    editor.pushHistory();
+                    editor.model.name = editor.modelName.getText().trim();
+                    editor.model.atlasW = ((Number) editor.atlasW.getValue()).intValue();
+                    editor.model.atlasH = ((Number) editor.atlasH.getValue()).intValue();
+                    editor.uvPanel.repaint();
+                });
         settingsModelBox.add(Box.createVerticalStrut(6));
         settingsModelBox.add(btnApplyAtlas);
         col1.add(settingsModelBox);
@@ -164,14 +181,15 @@ final class ModelEditorPanels {
         editor.settingsPartList = new JList<>(editor.partListModel);
         editor.settingsPartList.setVisibleRowCount(8);
         editor.settingsPartList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        editor.settingsPartList.setCellRenderer((lst, value, idx, isSel, hasFocus) -> {
-            JLabel lbl = new JLabel(value == null ? "(null)" : value.name);
-            lbl.setOpaque(true);
-            lbl.setBackground(isSel ? new Color(0x3B, 0x82, 0xF6) : new Color(0x131317));
-            lbl.setForeground(isSel ? Color.WHITE : new Color(0xE4, 0xE4, 0xE7));
-            lbl.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
-            return lbl;
-        });
+        editor.settingsPartList.setCellRenderer(
+                (lst, value, idx, isSel, hasFocus) -> {
+                    JLabel lbl = new JLabel(value == null ? "(null)" : value.name);
+                    lbl.setOpaque(true);
+                    lbl.setBackground(isSel ? new Color(0x3B, 0x82, 0xF6) : new Color(0x131317));
+                    lbl.setForeground(isSel ? Color.WHITE : new Color(0xE4, 0xE4, 0xE7));
+                    lbl.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+                    return lbl;
+                });
         JScrollPane settingsPartScroll = new JScrollPane(editor.settingsPartList);
         settingsPartScroll.setBorder(BorderFactory.createLineBorder(new Color(0x2E2E35)));
         settingsPartsBox.add(settingsPartScroll);
@@ -181,43 +199,41 @@ final class ModelEditorPanels {
         JButton settingsBtnDuplicate = editor.createButton("Duplicate");
         JButton settingsBtnDelete = editor.createButton("Delete");
 
-        settingsBtnAddRoot.addActionListener(e -> {
-            editor.pushHistory();
-            EditablePart np = editor.makeNewPart();
-            editor.model.parts.add(np);
-            editor.selected = np;
-            editor.refreshPartListSelect(np);
-        });
-        settingsBtnAddChild.addActionListener(e -> {
-            editor.pushHistory();
-            EditablePart np = editor.makeNewPart();
-            if (editor.selected != null)
-                editor.selected.children.add(np);
-            else
-                editor.model.parts.add(np);
-            editor.selected = np;
-            editor.refreshPartListSelect(np);
-        });
-        settingsBtnDelete.addActionListener(e -> {
-            if (editor.selected == null)
-                return;
-            editor.pushHistory();
-            editor.deleteSelected();
-            editor.refreshPartListSelect(editor.selected);
-        });
-        settingsBtnDuplicate.addActionListener(e -> {
-            if (editor.selected == null)
-                return;
-            editor.pushHistory();
-            EditablePart cp = editor.copyPart(editor.selected);
-            EditablePart parent = editor.parentOf(editor.selected);
-            if (parent != null)
-                parent.children.add(cp);
-            else
-                editor.model.parts.add(cp);
-            editor.selected = cp;
-            editor.refreshPartListSelect(cp);
-        });
+        settingsBtnAddRoot.addActionListener(
+                e -> {
+                    editor.pushHistory();
+                    EditablePart np = editor.makeNewPart();
+                    editor.model.parts.add(np);
+                    editor.selected = np;
+                    editor.refreshPartListSelect(np);
+                });
+        settingsBtnAddChild.addActionListener(
+                e -> {
+                    editor.pushHistory();
+                    EditablePart np = editor.makeNewPart();
+                    if (editor.selected != null) editor.selected.children.add(np);
+                    else editor.model.parts.add(np);
+                    editor.selected = np;
+                    editor.refreshPartListSelect(np);
+                });
+        settingsBtnDelete.addActionListener(
+                e -> {
+                    if (editor.selected == null) return;
+                    editor.pushHistory();
+                    editor.deleteSelected();
+                    editor.refreshPartListSelect(editor.selected);
+                });
+        settingsBtnDuplicate.addActionListener(
+                e -> {
+                    if (editor.selected == null) return;
+                    editor.pushHistory();
+                    EditablePart cp = editor.copyPart(editor.selected);
+                    EditablePart parent = editor.parentOf(editor.selected);
+                    if (parent != null) parent.children.add(cp);
+                    else editor.model.parts.add(cp);
+                    editor.selected = cp;
+                    editor.refreshPartListSelect(cp);
+                });
 
         JPanel settingsPartBtns = new JPanel(new GridLayout(2, 2, 6, 6));
         settingsPartBtns.add(settingsBtnAddRoot);
@@ -329,11 +345,12 @@ final class ModelEditorPanels {
         propBox.add(editor.row("Inflate:", editor.inflate));
 
         JButton apply = editor.createButton("Apply Changes");
-        apply.addActionListener(e -> {
-            editor.pushHistory();
-            editor.applyUIToSelected();
-            editor.uvPanel.repaint();
-        });
+        apply.addActionListener(
+                e -> {
+                    editor.pushHistory();
+                    editor.applyUIToSelected();
+                    editor.uvPanel.repaint();
+                });
         propBox.add(Box.createVerticalStrut(6));
         propBox.add(apply);
         col2.add(propBox);
@@ -343,7 +360,10 @@ final class ModelEditorPanels {
         editor.animText = new JTextArea(8, 20);
         editor.animText.setLineWrap(true);
         editor.animText.setWrapStyleWord(true);
-        editor.animText.setText(editor.model.setRotationAnglesCode == null ? "" : editor.model.setRotationAnglesCode);
+        editor.animText.setText(
+                editor.model.setRotationAnglesCode == null
+                        ? ""
+                        : editor.model.setRotationAnglesCode);
         JScrollPane animScroll = new JScrollPane(editor.animText);
         animScroll.setBorder(BorderFactory.createLineBorder(new Color(0x2E2E35)));
         animBox.add(animScroll);
@@ -357,18 +377,27 @@ final class ModelEditorPanels {
         animBox.add(settingsPreviewPanel);
 
         // Sync preview checkboxes
-        editor.chkPreviewAnim.addActionListener(e -> settingsChkPreviewAnim.setSelected(editor.chkPreviewAnim.isSelected()));
-        settingsChkPreviewAnim.addActionListener(e -> editor.chkPreviewAnim.setSelected(settingsChkPreviewAnim.isSelected()));
-        editor.chkAggressive.addActionListener(e -> settingsChkAggressive.setSelected(editor.chkAggressive.isSelected()));
-        settingsChkAggressive.addActionListener(e -> editor.chkAggressive.setSelected(settingsChkAggressive.isSelected()));
+        editor.chkPreviewAnim.addActionListener(
+                e -> settingsChkPreviewAnim.setSelected(editor.chkPreviewAnim.isSelected()));
+        settingsChkPreviewAnim.addActionListener(
+                e -> editor.chkPreviewAnim.setSelected(settingsChkPreviewAnim.isSelected()));
+        editor.chkAggressive.addActionListener(
+                e -> settingsChkAggressive.setSelected(editor.chkAggressive.isSelected()));
+        settingsChkAggressive.addActionListener(
+                e -> editor.chkAggressive.setSelected(settingsChkAggressive.isSelected()));
 
         JButton applyAnimBtn = editor.createButton("Apply Animations");
-        applyAnimBtn.addActionListener(e -> {
-            editor.pushHistory();
-            editor.model.setRotationAnglesCode = editor.animText.getText();
-            System.out.println("[anim] Updated setRotationAnglesCode ("
-                    + (editor.model.setRotationAnglesCode == null ? 0 : editor.model.setRotationAnglesCode.length()) + " chars)");
-        });
+        applyAnimBtn.addActionListener(
+                e -> {
+                    editor.pushHistory();
+                    editor.model.setRotationAnglesCode = editor.animText.getText();
+                    System.out.println(
+                            "[anim] Updated setRotationAnglesCode ("
+                                    + (editor.model.setRotationAnglesCode == null
+                                            ? 0
+                                            : editor.model.setRotationAnglesCode.length())
+                                    + " chars)");
+                });
         animBox.add(Box.createVerticalStrut(6));
         animBox.add(applyAnimBtn);
         col2.add(animBox);
@@ -378,7 +407,14 @@ final class ModelEditorPanels {
         JScrollPane scrollSettings = new JScrollPane(viewSettings);
         scrollSettings.setBorder(BorderFactory.createEmptyBorder());
         scrollSettings.getVerticalScrollBar().setUnitIncrement(16);
-        editor.mainCardContainer.add(scrollSettings, "Settings");
-
+        view3D.remove(compactSide);
+        JTabbedPane properties = new JTabbedPane();
+        properties.addTab("Parts", new JScrollPane(compactSide));
+        properties.addTab("Model and files", new JScrollPane(col1));
+        properties.addTab("Properties and animation", new JScrollPane(col2));
+        properties.setPreferredSize(new Dimension(360, 700));
+        JSplitPane workspace = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, view3D, properties);
+        workspace.setResizeWeight(1.0);
+        editor.mainCardContainer.add(workspace, "3D");
     }
 }

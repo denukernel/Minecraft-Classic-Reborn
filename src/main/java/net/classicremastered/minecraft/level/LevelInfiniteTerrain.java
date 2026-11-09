@@ -1,29 +1,30 @@
 package net.classicremastered.minecraft.level;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.level.infinite.InfiniteTerrainGenerator;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.phys.AABB;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public final class LevelInfiniteTerrain extends Level {
     final SimpleChunkManager chunks;
     public final long randomSeed;
-
-    // liquid/physics tick list
-    private final java.util.ArrayList<NextTickListEntry> tickList = new java.util.ArrayList<>();
+    public final boolean biomesEnabled;
 
     public LevelInfiniteTerrain(long seed, int depthY) {
+        this(seed, depthY, false);
+    }
+
+    public LevelInfiniteTerrain(long seed, int depthY, boolean biomesEnabled) {
         super();
         this.randomSeed = seed;
+        this.biomesEnabled = biomesEnabled;
+        this.biomeSeed = biomesEnabled ? seed : null;
 
         this.width = 255; // dummy finite values (stub)
         this.height = 2;
@@ -45,19 +46,26 @@ public final class LevelInfiniteTerrain extends Level {
         Arrays.fill(this.blockers, this.depth);
 
         // terrain mode
-        this.chunks = new SimpleChunkManager(seed, depthY, SimpleChunkManager.Mode.TERRAIN);
+        this.chunks =
+                new SimpleChunkManager(
+                        seed,
+                        depthY,
+                        biomesEnabled
+                                ? SimpleChunkManager.Mode.BIOMES
+                                : SimpleChunkManager.Mode.TERRAIN);
         this.chunks.level = this;
-        this.waterLevel = Math.max(1, depthY / 2);
+        this.waterLevel = Math.max(1, depthY / 2 - (biomesEnabled ? 2 : 0));
 
         this.findSpawn();
-        this.ySpawn = Math.min(34, depthY - 1);
+        if (!biomesEnabled) this.ySpawn = Math.min(34, depthY - 1);
     }
 
     // === Core block access ===
     // === Core block access ===
 
     @Override
-    public void explode(Entity src, float fx, float fy, float fz, float power) { // fixed
+    public void explode(
+            Entity src, float fx, float fy, float fz, float power, boolean dropBlocks) { // fixed
         int minX = (int) (fx - power - 1.0F);
         int maxX = (int) (fx + power + 1.0F);
         int minY = (int) (fy - power - 1.0F);
@@ -68,8 +76,7 @@ public final class LevelInfiniteTerrain extends Level {
         // --- Block destruction --- // fixed
         for (int x = minX; x < maxX; ++x) {
             for (int y = maxY - 1; y >= minY; --y) {
-                if (y < 0 || y >= this.depth)
-                    continue; // fixed: Y-only bounds
+                if (y < 0 || y >= this.depth) continue; // fixed: Y-only bounds
                 for (int z = minZ; z < maxZ; ++z) {
                     float dx = (x + 0.5F) - fx;
                     float dy = (y + 0.5F) - fy;
@@ -87,7 +94,7 @@ public final class LevelInfiniteTerrain extends Level {
                                     b.explode(this, x, y, z); // spawn PrimedTnt entity
                                 } else {
                                     // normal explodable blocks
-                                    b.dropItems(this, x, y, z, 0.3F);
+                                    if (dropBlocks) b.dropItems(this, x, y, z, 0.3F);
                                     setTile(x, y, z, 0);
                                     b.explode(this, x, y, z);
                                 }
@@ -99,8 +106,15 @@ public final class LevelInfiniteTerrain extends Level {
         }
 
         // --- Entity damage (unchanged) ---
-        List entities = this.blockMap.getEntities(src, (float) minX, (float) minY, (float) minZ, (float) maxX,
-                (float) maxY, (float) maxZ);
+        List entities =
+                this.blockMap.getEntities(
+                        src,
+                        (float) minX,
+                        (float) minY,
+                        (float) minZ,
+                        (float) maxX,
+                        (float) maxY,
+                        (float) maxZ);
 
         for (int i = 0; i < entities.size(); ++i) {
             Entity e = (Entity) entities.get(i);
@@ -114,11 +128,9 @@ public final class LevelInfiniteTerrain extends Level {
 
     @Override
     public boolean setTileNoUpdate(int x, int y, int z, int id) {
-        if (y < 0 || y >= this.depth)
-            return false;
+        if (y < 0 || y >= this.depth) return false;
         int old = getTile(x, y, z);
-        if (old == id)
-            return false;
+        if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
         updateFlowLevelMap(x, y, z, id);
@@ -148,8 +160,7 @@ public final class LevelInfiniteTerrain extends Level {
         int yStart = Math.min(this.depth - 2, Math.max(2, this.waterLevel + 64));
         for (int y = yStart; y > 0; --y) {
             int id = getTile(x, y, z);
-            if (id == 0)
-                continue;
+            if (id == 0) continue;
             Block b = Block.blocks[id];
             if (b != null && b.getLiquidType() == LiquidType.NOT_LIQUID) {
                 return y + 1; // air above solid
@@ -161,18 +172,15 @@ public final class LevelInfiniteTerrain extends Level {
     // Sky exposure with bounded upward scan so caves are actually dark.
     @Override
     public boolean isLit(int x, int y, int z) {
-        if (y < 0)
-            return false;
-        if (y >= this.depth)
-            return true;
+        if (y < 0) return false;
+        if (y >= this.depth) return true;
         final int MAX_SCAN = 64;
         int yMax = Math.min(this.depth - 1, y + MAX_SCAN);
         for (int yy = y + 1; yy <= yMax; yy++) {
             int id = getTile(x, yy, z);
             if (id > 0) {
                 Block b = Block.blocks[id];
-                if (b != null && b.isOpaque())
-                    return false;
+                if (b != null && b.isOpaque()) return false;
             }
         }
         return true;
@@ -190,14 +198,11 @@ public final class LevelInfiniteTerrain extends Level {
 
     // Chunk-aware neighbor notifier
     private void updateTileInf(int x, int y, int z, int changedId) {
-        if (!isInBounds(x, y, z))
-            return;
+        if (!isInBounds(x, y, z)) return;
         int nid = getTile(x, y, z);
-        if (nid <= 0)
-            return;
+        if (nid <= 0) return;
         Block b = Block.blocks[nid];
-        if (b != null)
-            b.onNeighborChange(this, x, y, z, changedId);
+        if (b != null) b.onNeighborChange(this, x, y, z, changedId);
     }
 
     // put these at the top of LevelInfiniteTerrain
@@ -210,29 +215,7 @@ public final class LevelInfiniteTerrain extends Level {
         tickCount++;
         tickDayNightCycle();
 
-        // --- Scheduled block ticks ---
-        int processed = 0;
-        int maxPerTick = 2050; // high cap for infinite terrain
-        for (int i = 0; i < tickList.size() && processed < maxPerTick; i++) {
-            NextTickListEntry e = tickList.remove(0);
-
-            if (e.ticks > 0) {
-                e.ticks--;
-                tickList.add(e);
-                continue;
-            }
-
-            int id = getTile(e.x, e.y, e.z);
-            if (id == e.block && id > 0 && Block.blocks[id] != null) {
-                Block.blocks[id].update(this, e.x, e.y, e.z, random);
-
-                // liquids must always keep flowing → requeue next tick
-                if (Block.blocks[id].getLiquidType() != LiquidType.NOT_LIQUID) {
-                    addToTickNextTick(e.x, e.y, e.z, id);
-                }
-            }
-            processed++;
-        }
+        tickScheduledBlocks(128);
 
         // --- Random block updates near player ---
         if (player != null) {
@@ -244,50 +227,21 @@ public final class LevelInfiniteTerrain extends Level {
                 int y = random.nextInt(this.depth);
 
                 int id = getTile(x, y, z);
-                if (id > 0 && Block.physics[id]) {
-                    if (Block.blocks[id].getLiquidType() == LiquidType.NOT_LIQUID) {
-                        Block.blocks[id].update(this, x, y, z, random);
-                    }
+                if (id != Block.WATER.id && id != Block.LAVA.id && shouldRandomTick(id, x, y, z)) {
+                    Block.blocks[id].update(this, x, y, z, random);
                 }
             }
         }
 
-        // --- Mob despawn ---
-        if (this.blockMap != null && this.blockMap.all != null) {
-            final float DESPAWN_RANGE = MobSpawner.DESPAWN_RADIUS;
-            final float DESPAWN_D2 = DESPAWN_RANGE * DESPAWN_RANGE;
-            for (int i = blockMap.all.size() - 1; i >= 0; --i) {
-                Object o = blockMap.all.get(i);
-                if (!(o instanceof Mob))
-                    continue;
-                Mob m = (Mob) o;
-                if (m.removed || m.health <= 0)
-                    continue;
-
-                if (m instanceof Villager) {
-                    int cx = (int) Math.floor(m.x) >> 4;
-                    int cz = (int) Math.floor(m.z) >> 4;
-                    if (!chunks.isChunkLoaded(cx, cz)) {
-                        m.remove();
-                    }
-                    continue;
-                }
-
-                if (player == null)
-                    continue;
-                float dx = m.x - player.x, dy = m.y - player.y, dz = m.z - player.z;
-                if (dx * dx + dy * dy + dz * dz > DESPAWN_D2) {
-                    m.remove();
-                }
-            }
-        }
+        // Shared persistence, rider protection, and monster lifetime rules.
+        despawnDistantMobs();
 
         // --- Mob spawn pass ---
         // Spawn mobs when this level is authoritative (not network mode). Don't rely on
         // `minecraft` being present.
         if (!this.isNetworkMode() && this.tickCount % 20 == 0) {
             MobSpawner spawner = new MobSpawner(this);
-            spawner.spawn(4, this.player, null, true);
+            spawner.spawn(6, this.player, null, true);
         }
 
         // --- Cleanup old chunks ---
@@ -301,8 +255,7 @@ public final class LevelInfiniteTerrain extends Level {
             // --- 26M+ corruption spread ---
             if (dist >= 26_000_000L) {
                 for (SimpleChunk c : loaded) {
-                    if (!c.loaded)
-                        continue;
+                    if (!c.loaded) continue;
                     if (!c.corrupted26M) { // corrupt once
                         for (int i = 0; i < 4; i++) {
                             int lx = random.nextInt(SimpleChunk.SIZE);
@@ -313,8 +266,11 @@ public final class LevelInfiniteTerrain extends Level {
                                 if (random.nextInt(10) < 2) {
                                     c.blocks[idx] = 0;
                                 } else {
-                                    c.blocks[idx] = (byte) (random.nextBoolean() ? Block.GRAVEL.id
-                                            : Block.COBBLESTONE.id);
+                                    c.blocks[idx] =
+                                            (byte)
+                                                    (random.nextBoolean()
+                                                            ? Block.GRAVEL.id
+                                                            : Block.COBBLESTONE.id);
                                 }
                             }
                         }
@@ -324,10 +280,9 @@ public final class LevelInfiniteTerrain extends Level {
                 }
             } else {
                 // under 26M → restore corrupted chunks
-                InfiniteTerrainGenerator gen = new InfiniteTerrainGenerator(randomSeed, depth);
                 for (SimpleChunk c : loaded) {
                     if (c.corrupted26M) {
-                        gen.generateChunk(c, c.cx * SimpleChunk.SIZE, c.cz * SimpleChunk.SIZE, false, this);
+                        chunks.generateChunk(c);
                         c.meshed = false;
                         c.corrupted26M = false;
                     }
@@ -337,23 +292,23 @@ public final class LevelInfiniteTerrain extends Level {
             // --- 30M+ rainbow corruption ---
             if (dist >= 30_000_000L) {
                 for (SimpleChunk c : loaded) {
-                    if (!c.loaded)
-                        continue;
+                    if (!c.loaded) continue;
                     if (!c.corrupted30M) { // corrupt once
                         for (int i = 0; i < 16; i++) {
                             int lx = random.nextInt(SimpleChunk.SIZE);
                             int lz = random.nextInt(SimpleChunk.SIZE);
                             int y = random.nextInt(depth - 1);
                             int idx = SimpleChunk.idx(lx, y, lz, depth);
-                            c.blocks[idx] = switch (random.nextInt(6)) {
-                            case 0 -> (byte) Block.RED_WOOL.id;
-                            case 1 -> (byte) Block.YELLOW_WOOL.id;
-                            case 2 -> (byte) Block.GREEN_WOOL.id;
-                            case 3 -> (byte) Block.CYAN_WOOL.id;
-                            case 4 -> (byte) Block.BLUE_WOOL.id;
-                            case 5 -> (byte) Block.PURPLE_WOOL.id;
-                            default -> (byte) Block.GRASS.id;
-                            };
+                            c.blocks[idx] =
+                                    switch (random.nextInt(6)) {
+                                        case 0 -> (byte) Block.RED_WOOL.id;
+                                        case 1 -> (byte) Block.YELLOW_WOOL.id;
+                                        case 2 -> (byte) Block.GREEN_WOOL.id;
+                                        case 3 -> (byte) Block.CYAN_WOOL.id;
+                                        case 4 -> (byte) Block.BLUE_WOOL.id;
+                                        case 5 -> (byte) Block.PURPLE_WOOL.id;
+                                        default -> (byte) Block.GRASS.id;
+                                    };
                         }
                         c.meshed = false;
                         c.corrupted30M = true;
@@ -361,10 +316,9 @@ public final class LevelInfiniteTerrain extends Level {
                 }
             } else {
                 // under 30M → restore rainbow chunks
-                InfiniteTerrainGenerator gen = new InfiniteTerrainGenerator(randomSeed, depth);
                 for (SimpleChunk c : loaded) {
                     if (c.corrupted30M) {
-                        gen.generateChunk(c, c.cx * SimpleChunk.SIZE, c.cz * SimpleChunk.SIZE, false, this);
+                        chunks.generateChunk(c);
                         c.meshed = false;
                         c.corrupted30M = false;
                     }
@@ -382,49 +336,35 @@ public final class LevelInfiniteTerrain extends Level {
                 this.doDayNightCycle = true;
             }
 
-            // --- 30M+ Boss soundtrack ---
+            // --- 30M+ boss soundtrack messages ---
             if (dist >= 30_000_000L && this.minecraft != null && this.minecraft.soundPC != null) {
                 bossBattleCounter++;
 
                 // First-time warning
                 if (!bossBattleWarned && this.minecraft.hud != null) {
-                    this.minecraft.hud.addChat("&4⚠ You are now fighting the world. A boss battle begins!");
+                    this.minecraft.hud.addChat(
+                            "&4⚠ You are now fighting the world. A boss battle begins!");
                     bossBattleWarned = true;
                 }
 
                 // After ~1 cycle, second message
-                if (bossBattleCounter == 8 * 6 && this.minecraft != null && this.minecraft.hud != null
+                if (bossBattleCounter == 8 * 6
+                        && this.minecraft != null
+                        && this.minecraft.hud != null
                         && !bossBattleMessage2) {
                     this.minecraft.hud.addChat(
-                            "&cYou will suffer the trip until you fall into the void, no one told you to get there.");
+                            "&cYou will suffer the trip until you fall into the void, no one told"
+                                    + " you to get there.");
                     bossBattleMessage2 = true;
-                }
-
-                // Every 6 ticks (~0.3s at 20 TPS)
-                if (bossBattleCounter % 6 == 0) {
-                    int step = (bossBattleCounter / 6) % 16; // 0..15 pattern length
-
-                    // === Base pitches pattern ===
-                    float basePitch;
-                    if (step < 8) {
-                        basePitch = (step % 2 == 0) ? 0.6f : 0.6f * (float) Math.pow(2.0, 3.0 / 12.0);
-                    } else {
-                        basePitch = (step % 2 == 0) ? 0.6f * (float) Math.pow(2.0, 3.0 / 12.0)
-                                : 0.6f * (float) Math.pow(2.0, 6.0 / 12.0);
-                    }
-
-                    this.minecraft.soundPC.playSoundClean("note/pling", 0.9f, basePitch);
-
-                    // Harmony layer (+3)
-                    float harmonyPitch = basePitch * (float) Math.pow(2.0, 3.0 / 12.0);
-                    this.minecraft.soundPC.playSoundClean("note/pling", 0.7f, harmonyPitch);
                 }
             }
 
             // --- 34M+ rainbow sky ---
             if (dist >= 34_000_000L) {
                 this.forceRainbowSky = true;
-                if (this.tickCount % 600 == 0 && this.minecraft != null && this.minecraft.hud != null) {
+                if (this.tickCount % 600 == 0
+                        && this.minecraft != null
+                        && this.minecraft.hud != null) {
                     this.minecraft.hud.addChat("&5The sky is no longer tied to time...");
                 }
             } else {
@@ -446,28 +386,13 @@ public final class LevelInfiniteTerrain extends Level {
         while (it.hasNext() && removed < maxPerTick) {
             var e = it.next();
             SimpleChunk c = e.getValue();
-            if (!c.isActive(this.tickCount, timeout)) {
-                c.dispose(); // clear arrays before removal
-                it.remove();
+            if (c.loaded && !c.isActive(this.tickCount, timeout)) {
+                c.loaded = false;
+                c.meshed = false; // retain saved terrain and dormant entities
+
                 removed++;
             }
         }
-    }
-
-
-    @Override
-    public void addToTickNextTick(int x, int y, int z, int blockId) {
-        if (blockId <= 0)
-            return;
-        NextTickListEntry e = new NextTickListEntry(x, y, z, blockId);
-
-        // Liquids tick every frame (fast like Classic finite worlds)
-        if (Block.blocks[blockId].getLiquidType() != LiquidType.NOT_LIQUID) {
-            e.ticks = 1;
-        } else {
-            e.ticks = Block.blocks[blockId].getTickDelay();
-        }
-        tickList.add(e);
     }
 
     // === Bounds ===
@@ -478,6 +403,25 @@ public final class LevelInfiniteTerrain extends Level {
 
     @Override
     public void findSpawn() {
+        if (biomesEnabled) {
+            for (int z = -32; z <= 32; z += 4) {
+                for (int x = -32; x <= 32; x += 4) {
+                    int y = getHighestTile(x, z);
+                    int ground = getTile(x, y - 1, z);
+                    if (y > waterLevel
+                            && y + 2 < depth
+                            && (ground == Block.GRASS.id || ground == Block.SAND.id)
+                            && getTile(x, y, z) == 0
+                            && getTile(x, y + 1, z) == 0) {
+                        xSpawn = x;
+                        ySpawn = y + 1;
+                        zSpawn = z;
+                        rotSpawn = 0;
+                        return;
+                    }
+                }
+            }
+        }
         this.xSpawn = 0;
         this.zSpawn = 0;
         this.ySpawn = Math.min(this.depth - 1, getHighestTile(0, 0));
@@ -503,8 +447,7 @@ public final class LevelInfiniteTerrain extends Level {
     // === Core block access ===
     @Override
     public int getTile(int x, int y, int z) {
-        if (y < 0 || y >= this.depth)
-            return 0;
+        if (y < 0 || y >= this.depth) return 0;
         SimpleChunk c = chunks.getOrCreate(x >> 4, z >> 4);
         c.markActive(this.tickCount);
         return c.blocks[SimpleChunk.idx(x & 15, y, z & 15, this.depth)] & 0xFF;
@@ -512,16 +455,14 @@ public final class LevelInfiniteTerrain extends Level {
 
     // --- NEW light accessor ---
     public int getLight(int x, int y, int z) {
-        if (y < 0 || y >= this.depth)
-            return 0;
+        if (y < 0 || y >= this.depth) return 0;
         SimpleChunk c = chunks.getOrCreate(x >> 4, z >> 4);
         return c.getLight(x & 15, y, z & 15);
     }
 
     // --- NEW light setter ---
     public void setLight(int x, int y, int z, int value) {
-        if (y < 0 || y >= this.depth)
-            return;
+        if (y < 0 || y >= this.depth) return;
         SimpleChunk c = chunks.getOrCreate(x >> 4, z >> 4);
         c.setLight(x & 15, y, z & 15, value);
         markSliceAndNeighbors(x, y, z); // force rebuild for renderer
@@ -530,11 +471,9 @@ public final class LevelInfiniteTerrain extends Level {
     // === Tile setters ===
     @Override
     public boolean setTile(int x, int y, int z, int id) {
-        if (y < 0 || y >= this.depth)
-            return false;
+        if (y < 0 || y >= this.depth) return false;
         int old = getTile(x, y, z);
-        if (old == id)
-            return false;
+        if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
         updateFlowLevelMap(x, y, z, id);
@@ -567,13 +506,13 @@ public final class LevelInfiniteTerrain extends Level {
         markSliceAndNeighbors(x, y, z);
         return true;
     }
+
     @Override
     public void initTransient() {
         // skip finite Level logic
         this.listeners = new ArrayList<>();
         this.random = new java.util.Random();
-        this.tickCount = 0;
-        this.flowLevels = new java.util.HashMap<>();
+        if (this.flowLevels == null) this.flowLevels = new java.util.HashMap<>();
 
         // keep the existing infinite-aware blockMap
         if (this.blockMap == null) {
@@ -600,11 +539,9 @@ public final class LevelInfiniteTerrain extends Level {
 
     @Override
     public boolean setTileNoNeighborChange(int x, int y, int z, int id) {
-        if (y < 0 || y >= this.depth)
-            return false;
+        if (y < 0 || y >= this.depth) return false;
         int old = getTile(x, y, z);
-        if (old == id)
-            return false;
+        if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
         updateFlowLevelMap(x, y, z, id);
@@ -631,17 +568,20 @@ public final class LevelInfiniteTerrain extends Level {
         return lightEngine.getBrightness(x, y, z);
     }
 
-
     // --- Liquid helpers (copied/adapted from finite Level) ---
 
     public boolean isWater(int x, int y, int z) {
         int id = getTile(x, y, z);
-        return id > 0 && Block.blocks[id] != null && Block.blocks[id].getLiquidType() == LiquidType.WATER;
+        return id > 0
+                && Block.blocks[id] != null
+                && Block.blocks[id].getLiquidType() == LiquidType.WATER;
     }
 
     public LiquidType getLiquid(int x, int y, int z) {
         int id = getTile(x, y, z);
-        return (id > 0 && Block.blocks[id] != null) ? Block.blocks[id].getLiquidType() : LiquidType.NOT_LIQUID;
+        return (id > 0 && Block.blocks[id] != null)
+                ? Block.blocks[id].getLiquidType()
+                : LiquidType.NOT_LIQUID;
     }
 
     public boolean containsAnyLiquid(AABB box) {
@@ -699,18 +639,13 @@ public final class LevelInfiniteTerrain extends Level {
 
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
-                if (y < 0 || y >= this.depth)
-                    continue;
+                if (y < 0 || y >= this.depth) continue;
                 for (int z = z0; z <= z1; z++) {
                     int id = getTile(x, y, z);
-                    if (id == 0)
-                        continue;
+                    if (id == 0) continue;
                     Block b = Block.blocks[id];
-                    if (b == null)
-                        continue;
-                    AABB bb = b.getCollisionBox(x, y, z);
-                    if (bb != null && box.intersectsInner(bb))
-                        out.add(bb);
+                    if (b == null) continue;
+                    b.addCollisionBoxes(this, x, y, z, box, out);
                 }
             }
         }
@@ -719,23 +654,16 @@ public final class LevelInfiniteTerrain extends Level {
 
     // helper
     private void markSliceAndNeighbors(int x, int y, int z) {
-        if (this.minecraft == null || this.minecraft.levelRenderer == null)
-            return;
+        if (this.minecraft == null || this.minecraft.levelRenderer == null) return;
         final int cx = x >> 4, sy = y >> 4, cz = z >> 4;
         final var lr = this.minecraft.levelRenderer;
         lr.markDirty(cx, sy, cz);
         int lx = x & 15, ly = y & 15, lz = z & 15;
-        if (lx == 0)
-            lr.markDirty(cx - 1, sy, cz);
-        if (lx == 15)
-            lr.markDirty(cx + 1, sy, cz);
-        if (lz == 0)
-            lr.markDirty(cx, sy, cz - 1);
-        if (lz == 15)
-            lr.markDirty(cx, sy, cz + 1);
-        if (ly == 0)
-            lr.markDirty(cx, sy - 1, cz);
-        if (ly == 15)
-            lr.markDirty(cx, sy + 1, cz);
+        if (lx == 0) lr.markDirty(cx - 1, sy, cz);
+        if (lx == 15) lr.markDirty(cx + 1, sy, cz);
+        if (lz == 0) lr.markDirty(cx, sy, cz - 1);
+        if (lz == 15) lr.markDirty(cx, sy, cz + 1);
+        if (ly == 0) lr.markDirty(cx, sy - 1, cz);
+        if (ly == 15) lr.markDirty(cx, sy + 1, cz);
     }
 }

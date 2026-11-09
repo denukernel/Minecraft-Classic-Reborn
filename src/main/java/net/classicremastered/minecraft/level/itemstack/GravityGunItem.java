@@ -1,251 +1,230 @@
 package net.classicremastered.minecraft.level.itemstack;
- 
-import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.MovingObjectPosition;
+
+import java.util.*;
+import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.entity.HeldBlockEntity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
-import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
-import org.lwjgl.opengl.GL11;
- 
+import net.classicremastered.util.MathHelper;
+import org.lwjgl.input.Keyboard;
+
 public final class GravityGunItem extends ToolItem {
- 
-    public static final java.util.Map<Player, net.classicremastered.minecraft.mob.Mob> grabbedMobs = new java.util.WeakHashMap<>();
-    public static final java.util.Map<Player, Float> holdDists = new java.util.WeakHashMap<>();
-    public static final java.util.Map<net.classicremastered.minecraft.mob.Mob, Player> thrownBy = new java.util.WeakHashMap<>();
-    public static final java.util.Map<net.classicremastered.minecraft.mob.Mob, Integer> armedMobs = new java.util.WeakHashMap<>();
- 
+    public static final Map<Player, Mob> grabbedMobs = new WeakHashMap<>();
+    public static final Map<Player, Float> holdDists = new WeakHashMap<>();
+    public static final Map<Mob, Player> thrownBy = new WeakHashMap<>();
+    public static final Map<Mob, Integer> armedMobs = new WeakHashMap<>();
+    private static final Map<Player, HeldBlockEntity> grabbedBlocks = new WeakHashMap<>();
     public GravityGunItem(int id) {
         super(id, "Gravity Gun", "/items/gravity_gun.png");
     }
- 
-    public static boolean isHoldingAnything(Player p) {
-        if (p == null) return false;
-        return grabbedMobs.containsKey(p);
+
+    public static Vec3D look(Player p) {
+        float yaw = -p.yRot * .017453292f - (float) Math.PI, pitch = -p.xRot * .017453292f, cp = MathHelper.cos(pitch);
+        return new Vec3D(MathHelper.sin(yaw) * cp, MathHelper.sin(pitch), MathHelper.cos(yaw) * cp);
     }
- 
-    public static void dropGently(Player p) {
-        if (p == null) return;
-        if (grabbedMobs.containsKey(p)) {
-            net.classicremastered.minecraft.mob.Mob mob = grabbedMobs.remove(p);
-            holdDists.remove(p);
-            if (mob != null && mob.level != null) {
-                mob.level.playSound("random/click", mob, 0.6f, 0.9f);
-                mob.xd = 0f; mob.yd = 0f; mob.zd = 0f;
-            }
-            hud(p, "&7Mob released gently!");
-        }
+
+    public static Vec3D eye(Player p) {
+        return new Vec3D(p.x, p.y + .12f, p.z);
     }
- 
-    public static net.classicremastered.minecraft.mob.Mob getGrabbedMob(Player p) {
+
+    public static HeldBlockEntity getGrabbedBlock(Player p) {
+        return grabbedBlocks.get(p);
+    }
+
+    public static Mob getGrabbedMob(Player p) {
         return grabbedMobs.get(p);
     }
- 
-    @Override
-    public void use(Player player, Level level) {
-        if (player == null || level == null) return;
- 
-        // If holding a mob, throw it
-        net.classicremastered.minecraft.mob.Mob grabbed = grabbedMobs.get(player);
-        if (grabbed != null) {
-            throwMob(player, grabbed);
-            grabbedMobs.remove(player);
-            holdDists.remove(player);
-            hud(player, "&7Mob launched!");
-            return;
-        }
- 
-        // Pick mob
-        net.classicremastered.minecraft.mob.Mob targetMob = pickMob(player, level, 12.0f);
-        if (targetMob != null) {
-            grabbedMobs.put(player, targetMob);
-            holdDists.put(player, 3.5f);
-            level.playSound("random/pop", targetMob, 0.8f, 1.1f);
-            hud(player, "&7Mob grabbed!");
-            return;
-        }
- 
-        level.playSound("random/click", player, 0.5f, 0.9f);
+
+    public static Entity getGrabbedEntity(Player p) {
+        Mob mob = getGrabbedMob(p);
+        return mob != null ? mob : GunEntityDrag.get(p, 267);
     }
- 
+
+    public static boolean isHoldingAnything(Player p) {
+        return grabbedMobs.containsKey(p) || grabbedBlocks.containsKey(p) || GunEntityDrag.get(p, 267) != null;
+    }
+
+    public static void dropGently(Player p) {
+        GunEntityDrag.release(p, 267, 0);
+        Mob mob = grabbedMobs.remove(p);
+        HeldBlockEntity block = grabbedBlocks.remove(p);
+        holdDists.remove(p);
+        if (mob != null) {
+            mob.xd = mob.yd = mob.zd = 0;
+            mob.fallDistance = 0;
+        }
+        if (block != null && !block.removed)
+            block.dropGently();
+    }
+
+    public static void forgetBlock(Player p, HeldBlockEntity block) {
+        if (grabbedBlocks.get(p) == block) {
+            grabbedBlocks.remove(p);
+            holdDists.remove(p);
+        }
+    }
+
+    /**
+     * Deliberately excludes containers, machines, attached blocks, bedrock and
+     * special tiles.
+     */
+    public static boolean canGrabBlock(int id) {
+        return id == 1 || id == 2 || id == 3 || id == 4 || id == 5 || id == 12 || id == 13 || id == 14 || id == 15
+                || id == 16 || id == 17 || id == 20 || (id >= 21 && id <= 36) || id == 41 || id == 42 || id == 45
+                || id == 46 || id == 47 || id == 48 || id == 49 || id == 220 || id == 221;
+    }
+
     @Override
-    public void tick(Player player, Level level) {
-        if (player == null || level == null) return;
- 
-        // Update hold distance for J/K control
-        float dist = holdDists.containsKey(player) ? holdDists.get(player) : 3.5f;
-        if (org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_J)) dist += 0.2f;
-        if (org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_K)) dist -= 0.2f;
-        if (dist < 2.5f) dist = 2.5f;
-        if (dist > 12.0f) dist = 12.0f;
-        holdDists.put(player, dist);
- 
-        net.classicremastered.minecraft.mob.Mob m = grabbedMobs.get(player);
-        if (m != null) {
-            if (m.removed || m.health <= 0 || tooFar(player, m, 18.0f)) {
-                grabbedMobs.remove(player);
-                holdDists.remove(player);
-                return;
-            }
- 
-            float yaw = player.yRot, pitch = player.xRot;
-            float cy = net.classicremastered.util.MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
-            float sy = net.classicremastered.util.MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
-            float cp = net.classicremastered.util.MathHelper.cos(-pitch * 0.017453292F);
-            float sp = net.classicremastered.util.MathHelper.sin(-pitch * 0.017453292F);
- 
-            float lx = sy * cp;
-            float ly = sp;
-            float lz = cy * cp;
- 
-            float eyeY = player.y + 0.12f;
-            float tx = player.x + lx * dist;
-            float ty = eyeY + ly * dist;
-            float tz = player.z + lz * dist;
- 
-            float dx = tx - m.x;
-            float dy = ty - m.y;
-            float dz = tz - m.z;
- 
-            float strength = 0.18f;
-            m.xd += dx * strength;
-            m.yd += dy * strength;
-            m.zd += dz * strength;
- 
-            m.xd *= 0.78f;
-            m.yd *= 0.78f;
-            m.zd *= 0.78f;
- 
-            m.move(m.xd, m.yd, m.zd);
-            m.fallDistance = 0f;
- 
-            float v2 = m.xd * m.xd + m.yd * m.yd + m.zd * m.zd;
-            if (v2 > 0.64f) {
-                if (m.horizontalCollision || m.onGround || hitCeiling(level, m)) {
-                    m.hurt(player, 4);
-                    level.playSound("random/anvil_land", m, 0.8f, 1.6f + level.random.nextFloat() * 0.3f);
+    public void use(Player p, Level level) {
+        if (p == null || level == null || level.isNetworkMode() || p.health <= 0 || p.level != level)
+            return;
+        if (GunEntityDrag.get(p, 267) != null) {
+            GunEntityDrag.release(p, 267, 3.2f);
+            return;
+        }
+        HeldBlockEntity block = grabbedBlocks.remove(p);
+        if (block != null && !block.removed) {
+            block.throwNow(1.5f);
+            holdDists.remove(p);
+            return;
+        }
+        Mob held = grabbedMobs.remove(p);
+        if (held != null) {
+            Vec3D d = look(p);
+            held.xd = d.x * 3.2f;
+            held.yd = d.y * 3.2f;
+            held.zd = d.z * 3.2f;
+            held.fallDistance = 0;
+            thrownBy.put(held, p);
+            armedMobs.put(held, 20);
+            holdDists.remove(p);
+            return;
+        }
+        Vec3D start = eye(p), d = look(p), end = start.add(d.x * 12, d.y * 12, d.z * 12);
+        // clip mutates its start vector, so always give it a copy.
+        MovingObjectPosition wall = level.clip(new Vec3D(start.x, start.y, start.z), end, true);
+        float nearest = wall == null ? 12 : start.distance(wall.vec);
+        Mob target = null;
+        if (level.blockMap != null)
+            for (Object o : level.blockMap.getEntities(p,
+                    p.bb.expand(d.x * 12, d.y * 12, d.z * 12).grow(.2f, .2f, .2f))) {
+                if (!(o instanceof Mob m) || m instanceof Player || m.removed || m.health <= 0 || !m.isPickable()
+                        || m.riding != null || m.rider != null || grabbedMobs.containsValue(m)
+                        || PhysicsGunItem.isHeld(m))
+                    continue;
+                MovingObjectPosition hit = m.bb.grow(.15f, .15f, .15f).clip(start, end);
+                if (hit != null && start.distance(hit.vec) < nearest) {
+                    nearest = start.distance(hit.vec);
+                    target = m;
                 }
             }
+        Entity loose = GunEntityDrag.pick(p, level, nearest);
+        if (loose != null) {
+            GunEntityDrag.grab(p, loose, 267);
+            return;
         }
-    }
- 
-    private static void throwMob(Player player, net.classicremastered.minecraft.mob.Mob m) {
-        float yaw = player.yRot, pitch = player.xRot;
-        float cy = net.classicremastered.util.MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
-        float sy = net.classicremastered.util.MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
-        float cp = net.classicremastered.util.MathHelper.cos(-pitch * 0.017453292F);
-        float sp = net.classicremastered.util.MathHelper.sin(-pitch * 0.017453292F);
-        float lx = sy * cp, ly = sp, lz = cy * cp;
- 
-        float force = 3.20f;
-        m.xd += lx * force;
-        m.yd += ly * force;
-        m.zd += lz * force;
-        m.fallDistance = 0f;
- 
-        thrownBy.put(m, player);
-        armedMobs.put(m, 20);
-        if (m.level != null) {
-            m.level.playSound("random/explode", player, 0.8f, 1.6f + m.level.random.nextFloat() * 0.2f);
+        if (target != null) {
+            grabbedMobs.put(p, target);
+            target.xd = target.yd = target.zd = 0;
+            holdDists.put(p, Math.max(2.5f, nearest));
+            return;
         }
-    }
- 
-    private static net.classicremastered.minecraft.mob.Mob pickMob(Player player, Level level, float range) {
-        if (player == null || player.minecraft == null) return null;
-        MovingObjectPosition sel = player.minecraft.selected;
-        if (sel != null && sel.entityPos == 1 && sel.entity instanceof net.classicremastered.minecraft.mob.Mob) {
-            net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) sel.entity;
-            if (!tooFar(player, m, range)) return m;
-        }
- 
-        if (level == null || level.blockMap == null) return null;
-        float yaw = player.yRot, pitch = player.xRot;
-        float cy = net.classicremastered.util.MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
-        float sy = net.classicremastered.util.MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
-        float cp = net.classicremastered.util.MathHelper.cos(-pitch * 0.017453292F);
-        float sp = net.classicremastered.util.MathHelper.sin(-pitch * 0.017453292F);
-        float lx = sy * cp, ly = sp, lz = cy * cp;
- 
-        Vec3D start = new Vec3D(player.x, player.y + 0.12f, player.z);
-        Vec3D end = start.add(lx * range, ly * range, lz * range);
- 
-        java.util.List list = level.blockMap.getEntities(player, player.bb.expand(lx * range, ly * range, lz * range));
-        float best = 0f;
-        net.classicremastered.minecraft.mob.Mob bestMob = null;
- 
-        for (int i = 0; i < list.size(); i++) {
-            Object o = list.get(i);
-            if (!(o instanceof net.classicremastered.minecraft.mob.Mob)) continue;
-            net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) o;
-            if (!m.isPickable()) continue;
-            AABB grown = m.bb.grow(0.15f, 0.15f, 0.15f);
-            MovingObjectPosition hit = grown.clip(start, end);
-            if (hit == null) continue;
- 
-            float dist = start.distance(hit.vec);
-            if (dist < best || best == 0f) {
-                best = dist;
-                bestMob = m;
+        if (wall != null && canGrabBlock(level.getTile(wall.x, wall.y, wall.z))) {
+            int id = level.getTile(wall.x, wall.y, wall.z);
+            // Finite ocean borders replace air with water instead of allowing removal.
+            boolean infinite = level instanceof net.classicremastered.minecraft.level.LevelInfiniteFlat
+                    || level instanceof net.classicremastered.minecraft.level.LevelInfiniteTerrain;
+            if (!infinite && (wall.x == 0 || wall.z == 0 || wall.x == level.width - 1 || wall.z == level.height - 1)
+                    && wall.y >= level.getGroundLevel() && wall.y < level.getWaterLevel())
+                return;
+            // Neighbor updates can immediately refill the cell with falling sand or liquid.
+            if (level.setTile(wall.x, wall.y, wall.z, 0)) {
+                block = new HeldBlockEntity(level, p, id, wall.x, wall.y, wall.z);
+                block.startAt(wall.vec.x - d.x * .55f, wall.vec.y - d.y * .55f, wall.vec.z - d.z * .55f);
+                holdDists.put(p, Math.max(2.5f, Math.min(12, nearest)));
+                grabbedBlocks.put(p, block);
+                level.addEntity(block);
             }
         }
-        return bestMob;
     }
- 
-    private static HeldBlockEntity findHeld(Level lvl, Player p) {
-        if (lvl == null || p == null) return null;
-        var list = lvl.findEntities(p, p.bb.grow(16, 16, 16));
-        for (int i = 0; i < list.size(); i++) {
-            Object o = list.get(i);
-            if (o instanceof HeldBlockEntity) {
-                HeldBlockEntity hb = (HeldBlockEntity) o;
-                if (hb.isHeld() && hb.getOwner() == p) return hb;
+
+    @Override
+    public void tick(Player p, Level level) {
+        boolean keys = Keyboard.isCreated();
+        updateControls(p, level, keys && Keyboard.isKeyDown(Keyboard.KEY_J),
+                keys && Keyboard.isKeyDown(Keyboard.KEY_K));
+    }
+
+    public void updateControls(Player p, Level level, boolean farther, boolean closer) {
+        GunEntityDrag.controls(p, 267, farther, closer);
+        if (p == null || !isHoldingAnything(p))
+            return;
+        if (p.removed || p.health <= 0 || p.level != level || p.inventory.getSelected() != 267) {
+            dropGently(p);
+            return;
+        }
+        float distance = holdDists.getOrDefault(p, 3.5f) + (farther ? .2f : 0) - (closer ? .2f : 0);
+        holdDists.put(p, Math.max(2.5f, Math.min(12, distance)));
+    }
+
+    public static boolean moveHeld(Mob mob) {
+        Player p = null;
+        for (var entry : grabbedMobs.entrySet())
+            if (entry.getValue() == mob) {
+                p = entry.getKey();
+                break;
             }
+        if (p == null)
+            return false;
+        if (p.removed || p.health <= 0 || p.level != mob.level || p.inventory.getSelected() != 267 || mob.removed
+                || mob.health <= 0 || p.distanceTo(mob) > 18) {
+            dropGently(p);
+            return false;
         }
-        return null;
+        Vec3D start = eye(p), d = look(p);
+        float distance = holdDists.getOrDefault(p, 3.5f);
+        Vec3D target = start.add(d.x * distance, d.y * distance, d.z * distance);
+        MovingObjectPosition wall = mob.level.clip(new Vec3D(start.x, start.y, start.z), target, true);
+        if (wall != null) {
+            distance = Math.max(0, start.distance(wall.vec) - Math.max(mob.bbWidth, mob.bbHeight) * .5f - .15f);
+            target = start.add(d.x * distance, d.y * distance, d.z * distance);
+        }
+        mob.xd = mob.xd * .45f + (target.x - mob.x) * .22f;
+        mob.yd = mob.yd * .45f + (target.y - (mob.bb.y0 + mob.bb.y1) * .5f) * .22f;
+        mob.zd = mob.zd * .45f + (target.z - mob.z) * .22f;
+        mob.move(mob.xd, mob.yd, mob.zd);
+        mob.fallDistance = 0;
+        return true;
     }
- 
-    private static int[] pickBlock(Level lvl, Player p, float maxDist) {
-        float ex = p.x, ey = p.y + p.heightOffset, ez = p.z;
-        float yaw = p.yRot * (float) Math.PI / 180f;
-        float pitch = p.xRot * (float) Math.PI / 180f;
- 
-        float fx = -net.classicremastered.util.MathHelper.sin(yaw) * net.classicremastered.util.MathHelper.cos(pitch);
-        float fy = -net.classicremastered.util.MathHelper.sin(pitch);
-        float fz = net.classicremastered.util.MathHelper.cos(yaw) * net.classicremastered.util.MathHelper.cos(pitch);
- 
-        var mop = lvl.clip(new Vec3D(ex, ey, ez), new Vec3D(ex + fx * maxDist, ey + fy * maxDist, ez + fz * maxDist));
-        if (mop == null) return null;
-        int x = mop.x, y = mop.y, z = mop.z;
-        return new int[]{x, y, z, lvl.getTile(x, y, z)};
-    }
- 
-    private static void hud(Player p, String msg) {
-        if (p != null && p.level != null && p.level.minecraft != null) {
-            p.level.minecraft.hud.addChat(msg);
+
+    public static void cleanup(Level level) {
+        GunEntityDrag.cleanup(level);
+        Set<Player> owners = new HashSet<>(grabbedMobs.keySet());
+        owners.addAll(grabbedBlocks.keySet());
+        for (Player p : owners)
+            if (p == null || p.removed || p.health <= 0 || p.level != level || p.inventory.getSelected() != 267)
+                dropGently(p);
+        for (Mob m : new ArrayList<>(armedMobs.keySet())) {
+            int ticks = armedMobs.get(m);
+            if (!m.removed && m.health > 0 && m.level == level && ticks > 0) {
+                if (m.horizontalCollision || m.onGround) {
+                    m.hurt(thrownBy.get(m), 4);
+                    ticks = 0;
+                } else {
+                    armedMobs.put(m, ticks - 1);
+                    continue;
+                }
+            }
+            armedMobs.remove(m);
+            thrownBy.remove(m);
         }
     }
- 
-    private static boolean tooFar(Player p, Entity e, float max) {
-        float dx = e.x - p.x, dy = e.y - p.y, dz = e.z - p.z;
-        return dx * dx + dy * dy + dz * dz > max * max;
-    }
- 
-    private static boolean hitCeiling(Level level, net.classicremastered.minecraft.mob.Mob m) {
-        if (level == null || m == null || m.bb == null) return false;
-        final float eps = 0.02f;
-        final int yAbove = (int) Math.floor(m.bb.y1 + eps);
-        float x0 = m.bb.x0 + 0.01f, x1 = m.bb.x1 - 0.01f;
-        float z0 = m.bb.z0 + 0.01f, z1 = m.bb.z1 - 0.01f;
-        int ix0 = (int) Math.floor(x0), ix1 = (int) Math.floor(x1);
-        int iz0 = (int) Math.floor(z0), iz1 = (int) Math.floor(z1);
-        return level.isSolidTile(ix0, yAbove, iz0) || level.isSolidTile(ix0, yAbove, iz1)
-                || level.isSolidTile(ix1, yAbove, iz0) || level.isSolidTile(ix1, yAbove, iz1);
-    }
- 
-    public static void renderMobBeam(Player owner, net.classicremastered.minecraft.mob.Mob mob, TextureManager tm, float partial) {
-        net.classicremastered.minecraft.render.GunBeamRenderer.render(owner, mob, partial, true);
+
+    public static void renderMobBeam(Player p, Mob mob, TextureManager tm, float partial) {
+        net.classicremastered.minecraft.render.GunBeamRenderer.render(p, mob, partial, true);
     }
 }

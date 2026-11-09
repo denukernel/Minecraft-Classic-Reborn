@@ -66,10 +66,12 @@ public class Inventory implements Serializable {
         return id >= 256 && id < 512;
     }
 
-    /** True if there is at least one of this block id anywhere in the hotbar. */
+    /** True if the hotbar or inventory grid contains a stack of this item. */
     public boolean hasResource(int id) {
-        int s = getSlot(id);
-        return s >= 0 && this.count[s] > 0;
+        for (int slot = 0; slot < totalSize(); slot++) {
+            if (getId(slot) == id && getCount(slot) > 0) return true;
+        }
+        return false;
     }
 
     /** Remove from the currently selected slot (used for block placement). */
@@ -164,7 +166,7 @@ public class Inventory implements Serializable {
             }
         }
 
-        final int CAP = 99;
+        final int CAP = id>=256 && id-256<net.classicremastered.minecraft.level.itemstack.Item.items.length && net.classicremastered.minecraft.level.itemstack.Item.items[id-256]!=null ? net.classicremastered.minecraft.level.itemstack.Item.items[id-256].maxStackSize : 99;
 
         // --- pass 1: merge into existing stacks (hotbar first, then grid) ---
         for (int s = 0; s < HOTBAR_SIZE; s++) {

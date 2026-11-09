@@ -1,10 +1,11 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.mob.ai.ForestGolemFollowAI;
+import net.classicremastered.minecraft.mob.ai.golem.ForestGolemFollowAI;
 
 /** A small passive forest companion, manually spawned by its registry name. */
 public final class BlueForestGolem extends Mob {
+
     public static final short REGISTRY_ID = 61;
     public boolean persistent = true;
 

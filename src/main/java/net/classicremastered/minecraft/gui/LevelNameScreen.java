@@ -20,18 +20,20 @@ public final class LevelNameScreen extends GuiScreen {
     private Receiver receiver;
 
     public LevelNameScreen(GuiScreen parent, String currentName, int id) {
+        super(parent);
         this.parent = parent;
         this.id = id;
-        this.name = currentName;
+        this.name = currentName == null ? "" : currentName;
         if (this.name.equals("-")) {
             this.name = "";
         }
     }
 
     public LevelNameScreen(GuiScreen parent, String currentName, Receiver receiver) {
+        super(parent);
         this.parent = parent;
         this.id = -1;
-        this.name = currentName;
+        this.name = currentName == null ? "" : currentName;
         this.receiver = receiver;
         if (this.name.equals("-")) {
             this.name = "";
@@ -69,6 +71,10 @@ public final class LevelNameScreen extends GuiScreen {
             }
 
             // --- Save locally ---
+            if (this.minecraft.level == null) {
+                this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save", "No level is loaded.", this));
+                return;
+            }
             this.minecraft.level.name = safeName;
 
             try {
@@ -78,10 +84,12 @@ public final class LevelNameScreen extends GuiScreen {
                 File saveFile = new File(savesDir, "level" + id + ".lvl");
                 boolean ok = this.minecraft.levelIo.save(this.minecraft.level, saveFile);
                 if (!ok) {
-                    System.err.println("Failed to save level " + safeName);
+                    this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save", "Could not save the level file.", this));
+                    return;
                 }
             } catch (Exception ex) {
-                ex.printStackTrace();
+                this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save", ex.toString(), this));
+                return;
             }
 
             // return to game
@@ -96,6 +104,14 @@ public final class LevelNameScreen extends GuiScreen {
 
     @Override
     protected void onKeyPress(char c, int key) {
+        if (key == Keyboard.KEY_ESCAPE) {
+            this.minecraft.setCurrentScreen(this.parent);
+            return;
+        }
+        if (key == Keyboard.KEY_RETURN || key == Keyboard.KEY_NUMPADENTER) {
+            onButtonClick((Button)this.buttons.get(0));
+            return;
+        }
         if (key == Keyboard.KEY_BACK && this.name.length() > 0) {
             this.name = this.name.substring(0, this.name.length() - 1);
         }
@@ -110,6 +126,7 @@ public final class LevelNameScreen extends GuiScreen {
 
     @Override
     public void render(int mx, int my) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA0000000);
 
         drawCenteredString(this.fontRenderer, this.title, this.width / 2, 40, 0xFFFFFF);

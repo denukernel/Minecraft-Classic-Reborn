@@ -27,16 +27,19 @@ public class BabyZombie extends Zombie {
         // Hitbox that matches the scaled render
         this.setSize(BABY_W, BABY_H);
         this.heightOffset = 1.69F;
-        this.idlePitchMin = 1.5F; this.idlePitchMax = 1.5F;
+        this.idlePitchMin = 1.5F;
+        this.idlePitchMax = 1.5F;
 
-        this.hurtPitchMin = 1.5F; this.hurtPitchMax = 1.5F;
-        this.deathPitchMin= 1.5F; this.deathPitchMax= 1.5F;
+        this.hurtPitchMin = 1.5F;
+        this.hurtPitchMax = 1.5F;
+        this.deathPitchMin = 1.5F;
+        this.deathPitchMax = 1.5F;
         // Optional: tiny upward nudge on spawn to avoid uneven-ground clipping
         this.setPos(x, y + 0.03F, z);
 
         // Speed boost if AI is BasicAttackAI
-        if (this.ai instanceof net.classicremastered.minecraft.mob.ai.BasicAttackAI) {
-            net.classicremastered.minecraft.mob.ai.BasicAttackAI a = (net.classicremastered.minecraft.mob.ai.BasicAttackAI) this.ai;
+        if (this.ai instanceof net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) {
+            net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI a = (net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) this.ai;
             a.runSpeed *= 1.35F; // ~35% faster
         }
 

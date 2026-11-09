@@ -36,6 +36,7 @@ public final class SelectLevelScreen extends GuiScreen {
     private int selected = -1; // global index in levelFiles
 
     public SelectLevelScreen(GuiScreen parent) {
+        super(parent);
         this.parent = parent;
     }
 
@@ -114,6 +115,7 @@ public final class SelectLevelScreen extends GuiScreen {
 
     @Override
     public void render(int mx, int my) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, width, height, 0x80202020, 0xFF000000);
         drawCenteredString(fontRenderer, "Select Level (Page " + (page + 1) + ")", width / 2, 28, 0xFFFFFF);
 
@@ -156,6 +158,18 @@ public final class SelectLevelScreen extends GuiScreen {
             drawCenteredString(fontRenderer, warn2, width / 2, height - 44, 0xFFFF5555);
         }
     }
+
+    @Override
+    protected void onKeyPress(char ch, int key) {
+        if (key == 1 && this.confirmDelete) {
+            this.confirmDelete = false;
+            return;
+        }
+        super.onKeyPress(ch, key);
+    }
+
+    @Override
+    public void onClose() { this.confirmDelete = false; }
 
     @Override
     protected void onButtonClick(Button b) {

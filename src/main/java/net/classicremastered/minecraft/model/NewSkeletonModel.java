@@ -3,14 +3,15 @@ package net.classicremastered.minecraft.model;
 public final class NewSkeletonModel extends HumanoidModel {
 
     // authored base pose for arms (so we can restore each frame)
-    private static final float BASE_R_ARM_PITCH = -1.570796F;   // -90°
-    private static final float BASE_L_ARM_PITCH = -1.6580625F;  // ~-95°
-    private static final float BASE_L_ARM_YAW   =  0.52359873F; // ~+30°
+    private static final float BASE_R_ARM_PITCH = -1.570796F; // -90°
+    private static final float BASE_L_ARM_PITCH = -1.6580625F; // ~-95°
+    private static final float BASE_L_ARM_YAW = 0.52359873F; // ~+30°
 
     public NewSkeletonModel() {
         // Temporarily set classic atlas to build UVs, then restore
         final int prevW = TexturedQuad.ATLAS_W, prevH = TexturedQuad.ATLAS_H;
-        TexturedQuad.ATLAS_W = 64; TexturedQuad.ATLAS_H = 32;
+        TexturedQuad.ATLAS_W = 64;
+        TexturedQuad.ATLAS_H = 32;
 
         head = new ModelPart(0, 0);
         head.setBounds(-4F, -8F, -4F, 8, 8, 8, 0F);
@@ -44,43 +45,47 @@ public final class NewSkeletonModel extends HumanoidModel {
 
         // base authored pose
         rightArm.pitch = BASE_R_ARM_PITCH;
-        leftArm.pitch  = BASE_L_ARM_PITCH;
-        leftArm.yaw    = BASE_L_ARM_YAW;
+        leftArm.pitch = BASE_L_ARM_PITCH;
+        leftArm.yaw = BASE_L_ARM_YAW;
 
         // restore atlas
-        TexturedQuad.ATLAS_W = prevW; TexturedQuad.ATLAS_H = prevH;
+        TexturedQuad.ATLAS_W = prevW;
+        TexturedQuad.ATLAS_H = prevH;
     }
 
     @Override
-    public void setRotationAngles(float limbSwing, float limbSwingAmount,
-                                  float ageInTicks, float netHeadYaw,
-                                  float headPitch, float scale) {
+    public void setRotationAngles(float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw,
+            float headPitch, float scale) {
         // Head: ModelPart angles are radians; caller gives degrees
-        final float deg2rad = (float)Math.PI / 180F;
+        final float deg2rad = (float) Math.PI / 180F;
         head.yaw = netHeadYaw * deg2rad;
         head.pitch = headPitch * deg2rad;
         headwear.yaw = head.yaw;
         headwear.pitch = head.pitch;
 
         // Reset arms to base each frame
-        rightArm.pitch = BASE_R_ARM_PITCH; rightArm.yaw = 0F; rightArm.roll = 0F;
-        leftArm.pitch  = BASE_L_ARM_PITCH; leftArm.yaw  = BASE_L_ARM_YAW; leftArm.roll = 0F;
+        rightArm.pitch = BASE_R_ARM_PITCH;
+        rightArm.yaw = 0F;
+        rightArm.roll = 0F;
+        leftArm.pitch = BASE_L_ARM_PITCH;
+        leftArm.yaw = BASE_L_ARM_YAW;
+        leftArm.roll = 0F;
 
         // Walk cycle: legs out of phase; small arm counter-swing
         final float f = 0.6662F;
         final float legAmp = 1.4F * limbSwingAmount;
         final float armAmp = 0.6F * limbSwingAmount;
 
-        rightLeg.pitch = (float)Math.cos(limbSwing * f) * legAmp;
-        leftLeg .pitch = (float)Math.cos(limbSwing * f + Math.PI) * legAmp;
+        rightLeg.pitch = (float) Math.cos(limbSwing * f) * legAmp;
+        leftLeg.pitch = (float) Math.cos(limbSwing * f + Math.PI) * legAmp;
 
-        rightArm.pitch += (float)Math.cos(limbSwing * f + Math.PI) * armAmp;
-        leftArm .pitch += (float)Math.cos(limbSwing * f) * armAmp;
+        rightArm.pitch += (float) Math.cos(limbSwing * f + Math.PI) * armAmp;
+        leftArm.pitch += (float) Math.cos(limbSwing * f) * armAmp;
     }
 
     @Override
-    public void render(float limbSwing, float limbSwingAmount, float ageInTicks,
-                       float netHeadYaw, float headPitch, float scale) {
+    public void render(float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch,
+            float scale) {
         // ensure angles are set for this frame
         setRotationAngles(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, scale);
 

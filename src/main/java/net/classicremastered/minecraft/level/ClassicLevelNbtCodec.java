@@ -1,17 +1,16 @@
 package net.classicremastered.minecraft.level;
 
-import java.io.*;
-import java.util.Map;
-
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.nbt.*;
+
+import java.io.*;
 
 /** Reads and writes finite world NBT data. */
 final class ClassicLevelNbtCodec {
     private ClassicLevelNbtCodec() {}
 
     static void save(Level level, DataOutputStream out) throws IOException {
+        validateMap(level);
         CompoundTag root = new CompoundTag("ClassicLevel");
         root.putByte("FormatVersion", (byte) 1);
         root.putString("Name", level.name);
@@ -81,9 +80,9 @@ final class ClassicLevelNbtCodec {
 
             try {
                 java.lang.reflect.Field f = m.getClass().getField("persistent");
-                if (f.getType() == boolean.class && !f.getBoolean(m))
-                    continue;
-            } catch (Throwable ignored) {}
+                if (f.getType() == boolean.class && !f.getBoolean(m)) continue;
+            } catch (Throwable ignored) {
+            }
 
             short id = net.classicremastered.minecraft.mob.MobRegistry.idOf(m);
             if (id < 0) continue;
@@ -104,9 +103,14 @@ final class ClassicLevelNbtCodec {
             mobTag.put(mRot);
 
             mobTag.putInt("Health", m.health);
+            m.savePersistence(mobTag);
+            net.classicremastered.minecraft.level.itemstack.Equipment.save(m, mobTag);
+            VillagerDoorManager.saveHome(m, mobTag);
             entities.add(mobTag);
         }
         root.put(entities);
+        level.villagerDoors().save(root);
+        WorldStateNbtCodec.save(level, root);
 
         net.classicremastered.nbt.NBTIO.write(root, out);
     }
@@ -119,10 +123,11 @@ final class ClassicLevelNbtCodec {
         level.createTime = root.getLong("CreateTime");
 
         CompoundTag map = root.getCompound("Map");
-        level.width = map.getShort("Width");
-        level.depth = map.getShort("Height");
-        level.height = map.getShort("Length");
+        level.width = Short.toUnsignedInt(map.getShort("Width"));
+        level.depth = Short.toUnsignedInt(map.getShort("Height"));
+        level.height = Short.toUnsignedInt(map.getShort("Length"));
         level.blocks = map.getByteArray("Blocks");
+        validateMap(level);
         level.waterLevel = map.getShort("WaterLevel");
         level.creativeMode = map.getBoolean("Creative");
         level.skyColor = map.getInt("SkyColor");
@@ -167,9 +172,12 @@ final class ClassicLevelNbtCodec {
                 mxRot = ((FloatTag) mRot.get(1)).value;
             }
 
-            level.pendingEntities.add(new Level.SavedMob(id, mx, my, mz, myRot, mxRot, health));
+            Level.SavedMob saved = new Level.SavedMob(id, mx, my, mz, myRot, mxRot, health);
+            saved.extraData = mobTag;
+            level.pendingEntities.add(saved);
         }
 
+        level.villagerDoors().load(root);
         level.initTransient();
 
         CompoundTag player = root.getCompound("Player");
@@ -189,7 +197,8 @@ final class ClassicLevelNbtCodec {
             }
 
             if (level.player == null) {
-                net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(null);
+                net.classicremastered.minecraft.player.Player loadedPlayer =
+                        new net.classicremastered.minecraft.player.Player(null);
                 loadedPlayer.level = level;
                 level.player = loadedPlayer;
                 loadedPlayer.moveTo(px, py, pz, yaw, pitch);
@@ -199,8 +208,22 @@ final class ClassicLevelNbtCodec {
             }
         }
         PlayerNbtCodec.load(player, level.player);
+        WorldStateNbtCodec.load(level, root);
         level.updateDayNightColorsSmooth();
 
         return level;
+    }
+
+    private static void validateMap(Level level) throws IOException {
+        if (level.width <= 0
+                || level.width > 65535
+                || level.depth <= 0
+                || level.depth > 65535
+                || level.height <= 0
+                || level.height > 65535
+                || level.blocks == null
+                || (long) level.width * level.depth * level.height != level.blocks.length) {
+            throw new IOException("Invalid finite world dimensions or block count");
+        }
     }
 }

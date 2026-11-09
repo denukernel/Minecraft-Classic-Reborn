@@ -1,18 +1,18 @@
 // File: src/net/classicremastered/minecraft/item/SignEntity.java
 package net.classicremastered.minecraft.entity;
 
-import org.lwjgl.opengl.GL11;
-
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.gui.FontRenderer;
-import net.classicremastered.minecraft.render.TextureManager;
-import net.classicremastered.minecraft.model.ModelPart;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.model.ModelPart;
+import net.classicremastered.minecraft.render.TextureManager;
+
+import org.lwjgl.opengl.GL11;
 
 /**
- * Port of Survival Test 0.24 Sign (entity form, not a block).
- * Renders a wooden board + stick, with hardcoded 4 lines of text.
+ * Port of Survival Test 0.24 Sign (entity form, not a block). Renders a wooden board + stick, with
+ * hardcoded 4 lines of text.
  */
 public final class SignEntity extends Entity {
 
@@ -30,10 +30,7 @@ public final class SignEntity extends Entity {
 
     private float rot;
     private final String[] messages = {
-        "This is a test",
-        "of the signs.",
-        "Each line can",
-        "be 15 chars!"
+        "This is a test", "of the signs.", "Each line can", "be 15 chars!"
     };
 
     private final FontRenderer font;
@@ -99,12 +96,8 @@ public final class SignEntity extends Entity {
         if (!this.removed && this.level != null) {
             // Drop a wooden plank block when sign is destroyed
             this.level.addEntity(
-                new net.classicremastered.minecraft.entity.DroppedBlock(
-                    this.level,
-                    this.x, this.y, this.z,
-                    Block.WOOD.id
-                )
-            );
+                    new net.classicremastered.minecraft.entity.DroppedBlock(
+                            this.level, this.x, this.y, this.z, Block.WOOD.id));
         }
         super.remove();
     }
@@ -155,7 +148,10 @@ public final class SignEntity extends Entity {
 
         // restore texture state for the rest of the engine
         GL11.glEnable(GL11.GL_TEXTURE_2D);
-        int terrainTex = texMgr.load("/terrain.png"); // fetch texture ID
+        int terrainTex =
+                texMgr.load(
+                        net.classicremastered.minecraft.render.BlockTextureAtlas
+                                .RESOURCE); // fetch texture ID
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, terrainTex);
     }
 }

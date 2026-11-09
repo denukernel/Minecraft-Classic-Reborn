@@ -57,7 +57,7 @@ public abstract class Entity implements Serializable {
     public float pushthrough = 0.0F;
     public boolean hovered = false;
 
-// --- Riding Support ---
+    // --- Riding Support ---
     public Entity riding; // entity this one is riding
     public Entity rider; // entity riding this one
 
@@ -66,6 +66,18 @@ public abstract class Entity implements Serializable {
         this.setPos(0.0F, 0.0F, 0.0F);
     }
     public int remainingFireTicks = 0;
+    private transient int cactusDamageCooldown;
+    private transient int suffocationCooldown;
+    private int cactusStackHits;
+    private int fireDamageCooldown;
+
+    public boolean ignite(int ticks) {
+        if (ticks <= 0 || level == null || !isAliveEntity(this) || isInWater() || isUnderWater()
+                || this instanceof net.classicremastered.minecraft.player.Player && level.creativeMode)
+            return false;
+        remainingFireTicks = Math.max(remainingFireTicks, ticks);
+        return true;
+    }
 
     // --- sound throttling (per tick) ---
     private static int STEP_SOUND_FRAME = -1;
@@ -325,60 +337,37 @@ public abstract class Entity implements Serializable {
             this.yo = this.y;
             this.zo = this.z;
         }
-        if (isAliveEntity(this)) {
-            // Catch fire if inside a fire block
-            if (this.level != null && this.isInFire()) {
-                if (!(this instanceof net.classicremastered.minecraft.player.Player
-                        && net.classicremastered.minecraft.player.Player.creativeInvulnerable)) {
-                    this.remainingFireTicks = 100; // 5 seconds of burning
-                }
+        if (this.level != null && this instanceof net.classicremastered.minecraft.mob.Mob && isAliveEntity(this)) {
+            if (suffocationCooldown > 0) suffocationCooldown--;
+            if (!level.isNetworkMode() && !noPhysics && suffocationCooldown == 0 && eyesInWall()) {
+                hurt(null, 1, "in_wall");
+                suffocationCooldown = 10;
             }
-
-            // Catch fire if inside lava
-            if (this.level != null && this.isInLava()) {
-                if (!(this instanceof net.classicremastered.minecraft.player.Player
-                        && net.classicremastered.minecraft.player.Player.creativeInvulnerable)) {
-                    this.remainingFireTicks = 300; // 15 seconds of burning
-                }
+            if (cactusDamageCooldown > 0) cactusDamageCooldown--;
+            if (!level.isNetworkMode() && cactusDamageCooldown == 0 && touchesCactus()) {
+                hurt(null, 1, "cactus");
+                cactusDamageCooldown = 10;
             }
+            if (isInWater() || isUnderWater()) {
+                remainingFireTicks = 0;
+                fireDamageCooldown = 0;
+            } else {
+                boolean lava = isInLava();
+                boolean contact = lava || isInFire();
+                if (contact)
+                    ignite(lava ? 300 : 100);
 
-            // Water extinguishes fire
-            if (this.isInWater() || this.isUnderWater()) {
-                this.remainingFireTicks = 0;
-            }
-
-            // Fire damage tick
-            if (this.remainingFireTicks > 0) {
-                // Hurt entity every 20 ticks (1 second)
-                if (this.remainingFireTicks % 20 == 0) {
-                    this.hurt(null, 1);
-                }
-
-                // Keep short invulnerability window so damage is taken normally
-                if (this instanceof net.classicremastered.minecraft.mob.Mob) {
-                    net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) this;
-                    if (m.invulnerableTime > 8) {
-                        m.invulnerableTime = 8;
+                if (remainingFireTicks > 0) {
+                    if (fireDamageCooldown > 0)
+                        fireDamageCooldown--;
+                    if (fireDamageCooldown == 0) {
+                        hurt(null, lava ? 4 : 1, lava ? "lava" : contact ? "fire" : "burn");
+                        fireDamageCooldown = contact ? 10 : 20;
                     }
+                    remainingFireTicks--;
+                } else {
+                    fireDamageCooldown = 0;
                 }
-
-                // Spawn nice fire & smoke particles
-                if (this.level != null && this.level.particleEngine != null) {
-                    if (this.level.random.nextInt(4) == 0) {
-                        float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                        float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
-                        float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                        this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.SmokeParticle(this.level, px, py, pz));
-                    }
-                    if (this.level.random.nextInt(3) == 0) {
-                        float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                        float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
-                        float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                        this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.TerrainParticle(this.level, px, py, pz, 0f, 0f, 0f, Block.FIRE));
-                    }
-                }
-
-                this.remainingFireTicks--;
             }
         }
 
@@ -593,6 +582,71 @@ public abstract class Entity implements Serializable {
     protected void causeFallDamage(float var1) {
     }
 
+    private boolean eyesInWall() {
+        float eye =
+                this instanceof net.classicremastered.minecraft.player.Player
+                        ? bb.y0 + heightOffset
+                        : bb.y0 + (bb.y1 - bb.y0) * .85f;
+        float radius = bbWidth * .4f;
+        AABB eyes =
+                new AABB(
+                        x - radius, eye - .0001f, z - radius, x + radius, eye + .0001f, z + radius);
+        int y = MathHelper.floor(eye);
+        for (int bx = MathHelper.floor(eyes.x0); bx <= MathHelper.floor(eyes.x1); bx++) {
+            for (int bz = MathHelper.floor(eyes.z0); bz <= MathHelper.floor(eyes.z1); bz++) {
+                Block block = Block.blocks[level.getTile(bx, y, bz)];
+                if (block == null || !block.isSolid() || !block.isOpaque() || !block.isCube())
+                    continue;
+                AABB collisionBox = block.getCollisionBox(bx, y, bz);
+                if (collisionBox != null && eyes.intersectsInner(collisionBox)) return true;
+            }
+        }
+        return false;
+    }
+
+    protected final boolean cactusDamagesStack() {
+        if (removed || level.isNetworkMode() || !touchesCactus() || ++cactusStackHits < 5)
+            return false;
+        remove();
+        if (level.particleEngine != null) {
+            for (int i = 0; i < 8; i++) {
+                level.particleEngine.spawnParticle(
+                        new net.classicremastered.minecraft.particle.TerrainParticle(
+                                level,
+                                x,
+                                y,
+                                z,
+                                (level.random.nextFloat() - .5f) * .2f,
+                                level.random.nextFloat() * .15f,
+                                (level.random.nextFloat() - .5f) * .2f,
+                                Block.CACTUS));
+            }
+        }
+        return true;
+    }
+
+    public final int getCactusStackHits() {
+        return cactusStackHits;
+    }
+
+    public final void setCactusStackHits(int hits) {
+        cactusStackHits = Math.max(0, Math.min(4, hits));
+    }
+
+    private boolean touchesCactus() {
+        AABB contact = bb.grow(.001f, .001f, .001f);
+        for (int x = MathHelper.floor(contact.x0); x <= MathHelper.floor(contact.x1); x++) {
+            for (int y = MathHelper.floor(contact.y0); y <= MathHelper.floor(contact.y1); y++) {
+                for (int z = MathHelper.floor(contact.z0); z <= MathHelper.floor(contact.z1); z++) {
+                    if (level.getTile(x, y, z) == Block.CACTUS.id
+                            && contact.intersectsInner(Block.CACTUS.getSelectionBox(x, y, z)))
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean isInWater() {
         return this.level.containsLiquid(this.bb.grow(0.0F, -0.4F, 0.0F), LiquidType.WATER);
     }
@@ -608,18 +662,21 @@ public abstract class Entity implements Serializable {
         return this.level.containsLiquid(this.bb.grow(0.0F, -0.4F, 0.0F), LiquidType.LAVA);
     }
 
-    /** True if any tile overlapped by my feet/legs is Fire. */
+    /** True if fire overlaps the body, including flames beside the legs. */
     private boolean isInFire() {
-        // sample from feet to a little above ankles
-        final float y0 = this.bb.y0; // bottom of BB
-        final float y1 = this.bb.y0 + 0.4f; // ~knees; adjust as needed
+        return overlapsFire(this.bb);
+    }
 
-        int minX = (int) Math.floor(this.bb.x0);
-        int maxX = (int) Math.floor(this.bb.x1 - 1e-6f);
+    public boolean overlapsFire(AABB bounds) {
+        final float y0 = bounds.y0;
+        final float y1 = bounds.y1 - 1e-6f;
+
+        int minX = (int) Math.floor(bounds.x0);
+        int maxX = (int) Math.floor(bounds.x1 - 1e-6f);
         int minY = (int) Math.floor(y0);
         int maxY = (int) Math.floor(y1);
-        int minZ = (int) Math.floor(this.bb.z0);
-        int maxZ = (int) Math.floor(this.bb.z1 - 1e-6f);
+        int minZ = (int) Math.floor(bounds.z0);
+        int maxZ = (int) Math.floor(bounds.z1 - 1e-6f);
 
         for (int y = minY; y <= maxY; y++) {
             for (int z = minZ; z <= maxZ; z++) {
@@ -637,20 +694,22 @@ public abstract class Entity implements Serializable {
     public void moveRelative(float var1, float var2, float var3) {
         if (this instanceof net.classicremastered.minecraft.player.Player) {
             net.classicremastered.minecraft.player.Player p = (net.classicremastered.minecraft.player.Player) this;
-            if (p.sneaking && !p.isFlying) var3 *= 0.30F;
+            if (p.sneaking && !p.isFlying)
+                var3 *= 0.30F;
         }
         float var4;
         if ((var4 = MathHelper.sqrt(var1 * var1 + var2 * var2)) >= 0.01F) {
-            if (var4 < 1.0F) var4 = 1.0F;
+            if (var4 < 1.0F)
+                var4 = 1.0F;
             var4 = var3 / var4;
-            var1 *= var4; var2 *= var4;
+            var1 *= var4;
+            var2 *= var4;
             var3 = MathHelper.sin(this.yRot * 3.1415927F / 180.0F);
             var4 = MathHelper.cos(this.yRot * 3.1415927F / 180.0F);
             this.xd += var1 * var4 - var2 * var3;
             this.zd += var2 * var4 + var1 * var3;
         }
     }
-
 
     public boolean isLit() {
         int var1 = (int) this.x;
@@ -666,6 +725,11 @@ public abstract class Entity implements Serializable {
         return this.level.getBrightness(var4, var2, var3);
     }
 
+    public float getRenderBrightness(float partial) {
+        return level.getRenderBrightness((int) Math.floor(x), (int) Math.floor(y + heightOffset / 2f - .5f),
+                (int) Math.floor(z));
+    }
+
     public void render(TextureManager var1, float var2) {
     }
 
@@ -674,7 +738,8 @@ public abstract class Entity implements Serializable {
     }
 
     public void playPositionalSound(String key, float baseVolume, float pitch) {
-        if (this.level == null || key == null) return;
+        if (this.level == null || key == null)
+            return;
 
         // Step sound throttling only
         int frame = this.level.tickCount;
@@ -683,7 +748,8 @@ public abstract class Entity implements Serializable {
             STEP_SOUND_COUNT = 0;
         }
         if (isStepPool(key) && !(this instanceof net.classicremastered.minecraft.player.Player)) {
-            if (STEP_SOUND_COUNT >= 10) return;
+            if (STEP_SOUND_COUNT >= 10)
+                return;
             STEP_SOUND_COUNT++;
         }
 
@@ -692,11 +758,10 @@ public abstract class Entity implements Serializable {
     }
 
     public void playSound(String key, float volume, float pitch) {
-        if (this.level == null) return;
+        if (this.level == null)
+            return;
         this.level.playSound(key, this, volume, pitch);
     }
-
-
 
     private static int stepSoundsThisTick = 0;
 
@@ -757,6 +822,18 @@ public abstract class Entity implements Serializable {
         this.xd += var1;
         this.yd += var2;
         this.zd += var3;
+    }
+
+    protected transient String damageCause;
+
+    public final void hurt(Entity attacker, int damage, String cause) {
+        String previous = damageCause;
+        damageCause = cause;
+        try {
+            hurt(attacker, damage);
+        } finally {
+            damageCause = previous;
+        }
     }
 
     public void hurt(Entity var1, int var2) {

@@ -1,51 +1,32 @@
 package net.classicremastered.minecraft.gui;
 
+import java.io.File;
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-final class LevelDialog extends Thread {
+/** Runs on the Swing event thread; stale results are discarded by the screen. */
+final class LevelDialog implements Runnable {
+    private final LoadLevelScreen screen;
+    private final Object request;
 
-   // $FF: synthetic field
-   private LoadLevelScreen screen;
+    LevelDialog(LoadLevelScreen screen, Object request) {
+        this.screen = screen;
+        this.request = request;
+    }
 
-
-   LevelDialog(LoadLevelScreen var1) {
-	   super();
-      this.screen = var1;
-   }
-
-   public final void run() {
-      JFileChooser var1;
-      LoadLevelScreen var2;
-      try {
-         LoadLevelScreen var10000 = this.screen;
-         var1 = new JFileChooser();
-         var10000.chooser = var1;
-         FileNameExtensionFilter var3 = new FileNameExtensionFilter("Minecraft levels", new String[]{"mine"});
-         var2 = this.screen;
-         this.screen.chooser.setFileFilter(var3);
-         var2 = this.screen;
-         this.screen.chooser.setMultiSelectionEnabled(false);
-         int var7;
-         if(this.screen.saving) {
-            var2 = this.screen;
-            var7 = this.screen.chooser.showSaveDialog(this.screen.minecraft.canvas);
-         } else {
-            var2 = this.screen;
-            var7 = this.screen.chooser.showOpenDialog(this.screen.minecraft.canvas);
-         }
-
-         if(var7 == 0) {
-            (var2 = this.screen).selectedFile = this.screen.chooser.getSelectedFile();
-         }
-      } finally {
-         boolean var6 = false;
-         var2 = this.screen;
-         this.screen.frozen = false;
-         var1 = null;
-         var2 = this.screen;
-         this.screen.chooser = var1;
-      }
-
-   }
+    @Override
+    public void run() {
+        File selected = null;
+        try {
+            JFileChooser dialog = new JFileChooser();
+            if (!screen.attachDialog(request, dialog)) return;
+            dialog.setFileFilter(new FileNameExtensionFilter("Minecraft levels", "mine", "lvl", "gz"));
+            dialog.setMultiSelectionEnabled(false);
+            int result = screen.saving ? dialog.showSaveDialog(screen.minecraft.canvas)
+                    : dialog.showOpenDialog(screen.minecraft.canvas);
+            if (result == JFileChooser.APPROVE_OPTION) selected = dialog.getSelectedFile();
+        } finally {
+            screen.finishDialog(request, selected);
+        }
+    }
 }

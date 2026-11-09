@@ -1,9 +1,5 @@
 package net.classicremastered.minecraft.level.tile;
 
-import java.util.Random;
-
-import org.lwjgl.opengl.GL11;
-
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.level.Level;
@@ -15,6 +11,10 @@ import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
+
+import org.lwjgl.opengl.GL11;
+
+import java.util.Random;
 
 public class Block {
     public final String name; // readable name
@@ -32,7 +32,9 @@ public class Block {
     }
 
     // Block.java
-    public String textureFile = "/terrain.png"; // default atlas unless overridden
+    public String textureFile =
+            net.classicremastered.minecraft.render.BlockTextureAtlas
+                    .RESOURCE; // default atlas unless overridden
 
     protected Block(int id, int textureID, String name) {
         this(id, name);
@@ -53,10 +55,28 @@ public class Block {
     public static final Block DIAMOND_ORE_NEW;
     public static final Block DIAMOND_BLOCK_NEW;
     public static final Block BEACON;
-    public static final Block FURNACE;
+    public static final Block FURNACE, TORCH;
     public static final Block PUMPKIN;
     public static final Block CACTUS;
     public static final Block PISTON;
+    public static final Block REDSTONE_WIRE,
+            REDSTONE_TORCH,
+            LEVER,
+            STONE_BUTTON,
+            STONE_PRESSURE_PLATE;
+    public static final Block REPEATER,
+            COMPARATOR,
+            REDSTONE_BLOCK,
+            REDSTONE_LAMP,
+            LIT_REDSTONE_LAMP;
+    public static final Block STICKY_PISTON, PISTON_HEAD;
+    public static final Block SANDSTONE, CUT_SANDSTONE, CHISELED_SANDSTONE, SMOOTH_SANDSTONE;
+    public static final Block SANDSTONE_SLAB,
+            SANDSTONE_STAIRS,
+            ORANGE_TERRACOTTA,
+            BLUE_TERRACOTTA,
+            CHEST,
+            REDSTONE_ORE;
     public static final Block WORKBENCH;
     public static final Block DIRT;
     public static final Block COBBLESTONE;
@@ -125,7 +145,8 @@ public class Block {
         return true;
     }
 
-    protected Block setData(Tile$SoundType soundType, float var2, float particleGravity, float hardness) {
+    protected Block setData(
+            Tile$SoundType soundType, float var2, float particleGravity, float hardness) {
         this.particleGravity = particleGravity;
         this.stepsound = soundType;
         this.hardness = (int) (hardness * 20.0F);
@@ -157,11 +178,15 @@ public class Block {
     public void setTickDelay(int tickDelay) {
         this.tickDelay[id] = tickDelay;
     }
- // Block.java
+
+    // Block.java
     public void bindTexture(TextureManager texMgr) {
-        if ("/terrain.png".equals(this.textureFile)) {
+        if (net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE.equals(
+                this.textureFile)) {
             // vanilla atlas
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texMgr.load("/terrain.png"));
+            GL11.glBindTexture(
+                    GL11.GL_TEXTURE_2D,
+                    texMgr.load(net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE));
         } else {
             // standalone custom texture (already loaded as GL texture handle)
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureId);
@@ -185,11 +210,33 @@ public class Block {
     }
 
     protected float getBrightness(Level level, int x, int y, int z) {
-        return level.getBrightness(x, y, z);
+        return level.getRenderBrightness(x, y, z);
     }
 
     public boolean canRenderSide(Level level, int x, int y, int z, int side) {
-        return !level.isSolidTile(x, y, z);
+        Block neighbor = blocks[level.getTile(x, y, z)];
+        return neighbor == null || !neighbor.occludesFace(level, x, y, z, side ^ 1);
+    }
+
+    public boolean occludesFace(Level level, int x, int y, int z, int face) {
+        return isSolid();
+    }
+
+    protected void renderInside(
+            Level level, ShapeRenderer renderer, int x, int y, int z, int face) {
+        renderInside(renderer, x, y, z, face);
+    }
+
+    public boolean canPlaceOnFace(Level level, int x, int y, int z, int face) {
+        return true;
+    }
+
+    public MovingObjectPosition clip(Level level, int x, int y, int z, Vec3D start, Vec3D end) {
+        return clip(x, y, z, start, end);
+    }
+
+    public AABB getSelectionBox(Level level, int x, int y, int z) {
+        return getSelectionBox(x, y, z);
     }
 
     protected int getTextureId(int side) {
@@ -218,7 +265,8 @@ public class Block {
     public void renderSide(ShapeRenderer sr, int x, int y, int z, int side, int textureID) {
         float u1, u2, v1, v2;
 
-        if ("/terrain.png".equals(this.textureFile)) {
+        if (net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE.equals(
+                this.textureFile)) {
             // Classic atlas math
             int u0 = (textureID % 16) << 4;
             int v0 = (textureID / 16) << 4;
@@ -286,49 +334,30 @@ public class Block {
         Vec3D iz1 = s.getZIntersection(e, this.z1);
         Vec3D iz2 = s.getZIntersection(e, this.z2);
 
-        if (!xIntersects(ix1))
-            ix1 = null;
-        if (!xIntersects(ix2))
-            ix2 = null;
-        if (!yIntersects(iy1))
-            iy1 = null;
-        if (!yIntersects(iy2))
-            iy2 = null;
-        if (!zIntersects(iz1))
-            iz1 = null;
-        if (!zIntersects(iz2))
-            iz2 = null;
+        if (!xIntersects(ix1)) ix1 = null;
+        if (!xIntersects(ix2)) ix2 = null;
+        if (!yIntersects(iy1)) iy1 = null;
+        if (!yIntersects(iy2)) iy2 = null;
+        if (!zIntersects(iz1)) iz1 = null;
+        if (!zIntersects(iz2)) iz2 = null;
 
         Vec3D hit = null;
-        if (ix1 != null)
-            hit = ix1;
-        if (ix2 != null && (hit == null || s.distance(ix2) < s.distance(hit)))
-            hit = ix2;
-        if (iy1 != null && (hit == null || s.distance(iy1) < s.distance(hit)))
-            hit = iy1;
-        if (iy2 != null && (hit == null || s.distance(iy2) < s.distance(hit)))
-            hit = iy2;
-        if (iz1 != null && (hit == null || s.distance(iz1) < s.distance(hit)))
-            hit = iz1;
-        if (iz2 != null && (hit == null || s.distance(iz2) < s.distance(hit)))
-            hit = iz2;
+        if (ix1 != null) hit = ix1;
+        if (ix2 != null && (hit == null || s.distance(ix2) < s.distance(hit))) hit = ix2;
+        if (iy1 != null && (hit == null || s.distance(iy1) < s.distance(hit))) hit = iy1;
+        if (iy2 != null && (hit == null || s.distance(iy2) < s.distance(hit))) hit = iy2;
+        if (iz1 != null && (hit == null || s.distance(iz1) < s.distance(hit))) hit = iz1;
+        if (iz2 != null && (hit == null || s.distance(iz2) < s.distance(hit))) hit = iz2;
 
-        if (hit == null)
-            return null;
+        if (hit == null) return null;
 
         byte side = -1;
-        if (hit == ix1)
-            side = 4; // west (min X)
-        if (hit == ix2)
-            side = 5; // east (max X)
-        if (hit == iy1)
-            side = 0; // bottom(min Y)
-        if (hit == iy2)
-            side = 1; // top (max Y)
-        if (hit == iz1)
-            side = 2; // north (min Z)
-        if (hit == iz2)
-            side = 3; // south (max Z)
+        if (hit == ix1) side = 4; // west (min X)
+        if (hit == ix2) side = 5; // east (max X)
+        if (hit == iy1) side = 0; // bottom(min Y)
+        if (hit == iy2) side = 1; // top (max Y)
+        if (hit == iz1) side = 2; // north (min Z)
+        if (hit == iz2) side = 3; // south (max Z)
 
         // translate back to world coords
         Vec3D wh = hit.add(x, y, z);
@@ -351,11 +380,33 @@ public class Block {
     // (render methods unchanged)...
 
     public AABB getSelectionBox(int x, int y, int z) {
-        return new AABB((float) x + x1, (float) y + y1, (float) z + z1, (float) x + x2, (float) y + y2, (float) z + z2);
+        return new AABB(
+                (float) x + x1,
+                (float) y + y1,
+                (float) z + z1,
+                (float) x + x2,
+                (float) y + y2,
+                (float) z + z2);
     }
 
     public AABB getCollisionBox(int x, int y, int z) {
-        return new AABB((float) x + x1, (float) y + y1, (float) z + z1, (float) x + x2, (float) y + y2, (float) z + z2);
+        return new AABB(
+                (float) x + x1,
+                (float) y + y1,
+                (float) z + z1,
+                (float) x + x2,
+                (float) y + y2,
+                (float) z + z2);
+    }
+
+    public void addCollisionBoxes(
+            Level level, int x, int y, int z, AABB query, java.util.List<AABB> boxes) {
+        AABB box = getCollisionBox(x, y, z);
+        if (box != null && query.intersectsInner(box)) boxes.add(box);
+    }
+
+    public void onPlacedBy(Level level, int x, int y, int z, Player player, int face) {
+        onPlace(level, x, y, z);
     }
 
     public boolean isOpaque() {
@@ -366,60 +417,62 @@ public class Block {
         return true;
     }
 
-    public void update(Level level, int x, int y, int z, Random rand) {
-    }
+    public void update(Level level, int x, int y, int z, Random rand) {}
 
-    public void spawnBreakParticles(Level level, int x, int y, int z, ParticleManager particleManager) {
+    public void spawnBreakParticles(
+            Level level, int x, int y, int z, ParticleManager particleManager) {
         for (int a = 0; a < 4; ++a)
             for (int b = 0; b < 4; ++b)
                 for (int c = 0; c < 4; ++c) {
                     float px = (float) x + ((float) a + 0.5F) / 4F;
                     float py = (float) y + ((float) b + 0.5F) / 4F;
                     float pz = (float) z + ((float) c + 0.5F) / 4F;
-                    particleManager.spawnParticle(new TerrainParticle(level, px, py, pz, px - (float) x - 0.5F,
-                            py - (float) y - 0.5F, pz - (float) z - 0.5F, this));
+                    particleManager.spawnParticle(
+                            new TerrainParticle(
+                                    level,
+                                    px,
+                                    py,
+                                    pz,
+                                    px - (float) x - 0.5F,
+                                    py - (float) y - 0.5F,
+                                    pz - (float) z - 0.5F,
+                                    this));
                 }
     }
 
-    public final void spawnBlockParticles(Level level, int x, int y, int z, int side, ParticleManager pm) {
+    public final void spawnBlockParticles(
+            Level level, int x, int y, int z, int side, ParticleManager pm) {
         float s = 0.1F;
         float px = (float) x + random.nextFloat() * (this.x2 - this.x1 - s * 2.0F) + s + this.x1;
         float py = (float) y + random.nextFloat() * (this.y2 - this.y1 - s * 2.0F) + s + this.y1;
         float pz = (float) z + random.nextFloat() * (this.z2 - this.z1 - s * 2.0F) + s + this.z1;
-        if (side == 0)
-            py = (float) y + this.y1 - s;
-        if (side == 1)
-            py = (float) y + this.y2 + s;
-        if (side == 2)
-            pz = (float) z + this.z1 - s;
-        if (side == 3)
-            pz = (float) z + this.z2 + s;
-        if (side == 4)
-            px = (float) x + this.x1 - s;
-        if (side == 5)
-            px = (float) x + this.x2 + s;
-        pm.spawnParticle((new TerrainParticle(level, px, py, pz, 0.0F, 0.0F, 0.0F, this)).setPower(0.2F).scale(0.6F));
+        if (side == 0) py = (float) y + this.y1 - s;
+        if (side == 1) py = (float) y + this.y2 + s;
+        if (side == 2) pz = (float) z + this.z1 - s;
+        if (side == 3) pz = (float) z + this.z2 + s;
+        if (side == 4) px = (float) x + this.x1 - s;
+        if (side == 5) px = (float) x + this.x2 + s;
+        pm.spawnParticle(
+                (new TerrainParticle(level, px, py, pz, 0.0F, 0.0F, 0.0F, this))
+                        .setPower(0.2F)
+                        .scale(0.6F));
     }
 
     public LiquidType getLiquidType() {
         return LiquidType.NOT_LIQUID;
     }
 
-    public void onNeighborChange(Level v1, int v2, int v3, int v4, int v5) {
-    }
+    public void onNeighborChange(Level v1, int v2, int v3, int v4, int v5) {}
 
-    public void onPlace(Level level, int x, int y, int z) {
-    }
+    public void onPlace(Level level, int x, int y, int z) {}
 
     public int getTickDelay() {
         return tickDelay[this.id];
     }
 
-    public void onAdded(Level level, int x, int y, int z) {
-    }
+    public void onAdded(Level level, int x, int y, int z) {}
 
-    public void onRemoved(Level v1, int v2, int v3, int v4) {
-    }
+    public void onRemoved(Level v1, int v2, int v3, int v4) {}
 
     public int getDropCount() {
         return 1;
@@ -446,7 +499,14 @@ public class Block {
                     float ox = random.nextFloat() * off + (1.0F - off) * 0.5F;
                     float oy = random.nextFloat() * off + (1.0F - off) * 0.5F;
                     float oz = random.nextFloat() * off + (1.0F - off) * 0.5F;
-                    level.addEntity(new DroppedBlock(level, (float) x + ox, (float) y + oy, (float) z + oz, this.getDrop()));
+                    int drop = getDrop();
+                    if (drop >= 256) {
+                        level.addEntity(
+                                new net.classicremastered.minecraft.entity.DroppedItem(
+                                        level, x + ox, y + oy, z + oz, drop - 256, 1));
+                    } else {
+                        level.addEntity(new DroppedBlock(level, x + ox, y + oy, z + oz, drop));
+                    }
                 }
             }
         }
@@ -455,18 +515,12 @@ public class Block {
     public void renderPreview(ShapeRenderer sr) {
         sr.begin();
         for (int s = 0; s < 6; ++s) {
-            if (s == 0)
-                sr.normal(0.0F, 1.0F, 0.0F);
-            if (s == 1)
-                sr.normal(0.0F, -1.0F, 0.0F);
-            if (s == 2)
-                sr.normal(0.0F, 0.0F, 1.0F);
-            if (s == 3)
-                sr.normal(0.0F, 0.0F, -1.0F);
-            if (s == 4)
-                sr.normal(1.0F, 0.0F, 0.0F);
-            if (s == 5)
-                sr.normal(-1.0F, 0.0F, 0.0F);
+            if (s == 0) sr.normal(0.0F, 1.0F, 0.0F);
+            if (s == 1) sr.normal(0.0F, -1.0F, 0.0F);
+            if (s == 2) sr.normal(0.0F, 0.0F, 1.0F);
+            if (s == 3) sr.normal(0.0F, 0.0F, -1.0F);
+            if (s == 4) sr.normal(1.0F, 0.0F, 0.0F);
+            if (s == 5) sr.normal(-1.0F, 0.0F, 0.0F);
             this.renderInside(sr, 0, 0, 0, s);
         }
         sr.end();
@@ -478,8 +532,7 @@ public class Block {
 
     // (clip and renderSide methods unchanged for brevity)
 
-    public void explode(Level v1, int v2, int v3, int v4) {
-    }
+    public void explode(Level v1, int v2, int v3, int v4) {}
 
     public boolean render(Level v1, int v2, int v3, int v4, ShapeRenderer v5) {
         boolean any = false;
@@ -487,37 +540,37 @@ public class Block {
         if (this.canRenderSide(v1, v2, v3 - 1, v4, 0)) {
             br = this.getBrightness(v1, v2, v3 - 1, v4);
             v5.color(a * br, a * br, a * br);
-            this.renderInside(v5, v2, v3, v4, 0);
+            this.renderInside(v1, v5, v2, v3, v4, 0);
             any = true;
         }
         if (this.canRenderSide(v1, v2, v3 + 1, v4, 1)) {
             br = this.getBrightness(v1, v2, v3 + 1, v4);
             v5.color(br, br, br);
-            this.renderInside(v5, v2, v3, v4, 1);
+            this.renderInside(v1, v5, v2, v3, v4, 1);
             any = true;
         }
         if (this.canRenderSide(v1, v2, v3, v4 - 1, 2)) {
             br = this.getBrightness(v1, v2, v3, v4 - 1);
             v5.color(b * br, b * br, b * br);
-            this.renderInside(v5, v2, v3, v4, 2);
+            this.renderInside(v1, v5, v2, v3, v4, 2);
             any = true;
         }
         if (this.canRenderSide(v1, v2, v3, v4 + 1, 3)) {
             br = this.getBrightness(v1, v2, v3, v4 + 1);
             v5.color(b * br, b * br, b * br);
-            this.renderInside(v5, v2, v3, v4, 3);
+            this.renderInside(v1, v5, v2, v3, v4, 3);
             any = true;
         }
         if (this.canRenderSide(v1, v2 - 1, v3, v4, 4)) {
             br = this.getBrightness(v1, v2 - 1, v3, v4);
             v5.color(c * br, c * br, c * br);
-            this.renderInside(v5, v2, v3, v4, 4);
+            this.renderInside(v1, v5, v2, v3, v4, 4);
             any = true;
         }
         if (this.canRenderSide(v1, v2 + 1, v3, v4, 5)) {
             br = this.getBrightness(v1, v2 + 1, v3, v4);
             v5.color(c * br, c * br, c * br);
-            this.renderInside(v5, v2, v3, v4, 5);
+            this.renderInside(v1, v5, v2, v3, v4, 5);
             any = true;
         }
         return any;
@@ -531,14 +584,25 @@ public class Block {
 
     /** Pickaxe is best for these. */
     public boolean prefersPickaxe() {
-        return (this instanceof StoneBlock) || (this instanceof OreBlock) || this == COBBLESTONE
-                || this == MOSSY_COBBLESTONE || this == BRICK || this == SLAB || this == DOUBLE_SLAB || this == OBSIDIAN
-                || this == GOLD_BLOCK || this == IRON_BLOCK;
+        return (this instanceof StoneBlock)
+                || (this instanceof OreBlock)
+                || this == COBBLESTONE
+                || this == MOSSY_COBBLESTONE
+                || this == BRICK
+                || this == SLAB
+                || this == DOUBLE_SLAB
+                || this == OBSIDIAN
+                || this == GOLD_BLOCK
+                || this == IRON_BLOCK;
     }
 
     /** Shovel is best for these. */
     public boolean prefersShovel() {
-        return (this instanceof DirtBlock) || this == DIRT || this == GRASS || this == SAND || this == GRAVEL;
+        return (this instanceof DirtBlock)
+                || this == DIRT
+                || this == GRASS
+                || this == SAND
+                || this == GRAVEL;
     }
 
     /** Axe is best for these. */
@@ -562,15 +626,24 @@ public class Block {
         COBBLESTONE = var1;
         WOOD = (new Block(5, 4, "Wood")).setData(Tile$SoundType.wood, 1.0F, 1.0F, 1.5F);
         SAPLING = (new SaplingBlock(6, 15)).setData(Tile$SoundType.none, 0.7F, 1.0F, 0.0F);
-        var10000 = (new Block(7, 17, "CobbleStone")).setData(Tile$SoundType.stone, 1.0F, 1.0F, 999.0F);
+        var10000 =
+                (new Block(7, 17, "CobbleStone")).setData(Tile$SoundType.stone, 1.0F, 1.0F, 999.0F);
         var0 = false;
         var1 = var10000;
         var10000.explodes = false;
         BEDROCK = var1;
-        WATER = (new LiquidBlock(8, LiquidType.WATER)).setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
-        STATIONARY_WATER = (new StillLiquidBlock(9, LiquidType.WATER)).setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
-        LAVA = (new LiquidBlock(10, LiquidType.LAVA)).setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
-        STATIONARY_LAVA = (new StillLiquidBlock(11, LiquidType.LAVA)).setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
+        WATER =
+                (new LiquidBlock(8, LiquidType.WATER))
+                        .setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
+        STATIONARY_WATER =
+                (new StillLiquidBlock(9, LiquidType.WATER))
+                        .setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
+        LAVA =
+                (new LiquidBlock(10, LiquidType.LAVA))
+                        .setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
+        STATIONARY_LAVA =
+                (new StillLiquidBlock(11, LiquidType.LAVA))
+                        .setData(Tile$SoundType.none, 1.0F, 1.0F, 100.0F);
         SAND = (new SandBlock(12, 18)).setData(Tile$SoundType.gravel, 0.8F, 1.0F, 0.5F);
         GRAVEL = (new SandBlock(13, 19)).setData(Tile$SoundType.gravel, 0.8F, 1.0F, 0.6F);
         var10000 = (new OreBlock(14, 32)).setData(Tile$SoundType.stone, 1.0F, 1.0F, 3.0F);
@@ -598,19 +671,45 @@ public class Block {
         YELLOW_WOOL = (new Block(23, 66, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         LIME_WOOL = (new Block(24, 67, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         GREEN_WOOL = (new Block(25, 68, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
-        AQUA_GREEN_WOOL = (new Block(26, 69, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
+        AQUA_GREEN_WOOL =
+                (new Block(26, 69, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         CYAN_WOOL = (new Block(27, 70, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         // --- New block registrations ---
-        DIAMOND_ORE_NEW   = new DiamondOreBlock(220);      // uses OreBlock subclass
+        DIAMOND_ORE_NEW = new DiamondOreBlock(220); // uses OreBlock subclass
         DIAMOND_BLOCK_NEW = new DiamondBlock(221);
-        BEACON            = new BeaconBlock(222);
-        FURNACE           = new FurnaceBlock(223);
-        PUMPKIN           = new PumpkinBlock(224);
-        CACTUS            = new CactusBlock(225);
-        PISTON            = new PistonBlock(226);
+        BEACON = new BeaconBlock(222);
+        FURNACE = new FurnaceBlock(223);
+        PUMPKIN = new PumpkinBlock(224);
+        CACTUS = new CactusBlock(225);
+        PISTON = new PistonBlock(226);
+        REDSTONE_WIRE = new CircuitBlock(64, "Redstone Dust", CircuitBlock.Kind.WIRE, 138);
+        REDSTONE_TORCH = new CircuitBlock(65, "Redstone Torch", CircuitBlock.Kind.TORCH, 140);
+        LEVER = new CircuitBlock(66, "Lever", CircuitBlock.Kind.LEVER, 139);
+        STONE_BUTTON = new CircuitBlock(67, "Stone Button", CircuitBlock.Kind.BUTTON, 1);
+        STONE_PRESSURE_PLATE =
+                new CircuitBlock(68, "Stone Pressure Plate", CircuitBlock.Kind.PLATE, 1);
+        REPEATER = new CircuitBlock(69, "Redstone Repeater", CircuitBlock.Kind.REPEATER, 143);
+        COMPARATOR = new CircuitBlock(70, "Redstone Comparator", CircuitBlock.Kind.COMPARATOR, 145);
+        REDSTONE_BLOCK = new CircuitBlock(71, "Block of Redstone", CircuitBlock.Kind.SOURCE, 135);
+        REDSTONE_LAMP = new CircuitBlock(72, "Redstone Lamp", CircuitBlock.Kind.LAMP, 136);
+        LIT_REDSTONE_LAMP = new CircuitBlock(73, "Redstone Lamp", CircuitBlock.Kind.LIT_LAMP, 137);
+        STICKY_PISTON = new CircuitBlock(74, "Sticky Piston", CircuitBlock.Kind.STICKY_PISTON, 150);
+        PISTON_HEAD = new CircuitBlock(75, "Piston Head", CircuitBlock.Kind.HEAD, 148);
+        TORCH = new CircuitBlock(76, "Torch", CircuitBlock.Kind.NORMAL_TORCH, 200);
+        SANDSTONE = new PyramidBlock(80, "Sandstone", 128, PyramidBlock.Shape.CUBE);
+        CUT_SANDSTONE = new PyramidBlock(81, "Cut Sandstone", 131, PyramidBlock.Shape.CUBE);
+        CHISELED_SANDSTONE =
+                new PyramidBlock(82, "Chiseled Sandstone", 132, PyramidBlock.Shape.CUBE);
+        SMOOTH_SANDSTONE = new PyramidBlock(83, "Smooth Sandstone", 129, PyramidBlock.Shape.CUBE);
+        SANDSTONE_SLAB = new PyramidBlock(84, "Sandstone Slab", 129, PyramidBlock.Shape.SLAB);
+        SANDSTONE_STAIRS = new PyramidBlock(85, "Sandstone Stairs", 128, PyramidBlock.Shape.STAIRS);
+        ORANGE_TERRACOTTA = new PyramidBlock(86, "Orange Terracotta", 133, PyramidBlock.Shape.CUBE);
+        BLUE_TERRACOTTA = new PyramidBlock(87, "Blue Terracotta", 134, PyramidBlock.Shape.CUBE);
+        CHEST = new PyramidBlock(88, "Chest", 152, PyramidBlock.Shape.CHEST);
+        REDSTONE_ORE = new PyramidBlock(89, "Redstone Ore", 155, PyramidBlock.Shape.ORE);
         PORTAL = new BlockPortal(227); // pick free ID
-        LUCKY_BLOCK       = new LuckyBlock(229);
-        
+        LUCKY_BLOCK = new LuckyBlock(229);
+
         BLUE_WOOL = (new Block(28, 71, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         PURPLE_WOOL = (new Block(29, 72, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         INDIGO_WOOL = (new Block(30, 73, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
@@ -631,8 +730,7 @@ public class Block {
         STRUCTURE_BETA = new StructureBlock(61, 209, "Structure Beta", StructureBlock.Type.BETA);
         STRUCTURE_GAMMA = new StructureBlock(62, 210, "Structure Gamma", StructureBlock.Type.GAMMA);
         STRUCTURE_DELTA = new StructureBlock(63, 211, "Structure Delta", StructureBlock.Type.DELTA);
-        JUKEBOX = (new Block(212, 212, "Jukebox"))
-                .setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.0F);
+        JUKEBOX = (new Block(212, 212, "Jukebox")).setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.0F);
         WORKBENCH = new WorkbenchBlock(228, 35);
         var1 = var10000;
         var10000.explodes = false;

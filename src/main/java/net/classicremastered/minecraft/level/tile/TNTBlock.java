@@ -2,7 +2,7 @@ package net.classicremastered.minecraft.level.tile;
 
 import net.classicremastered.minecraft.entity.PrimedTnt;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.particle.ParticleManager;
+import net.classicremastered.minecraft.Entity;
 
 //com/mojang/minecraft/level/tile/TNTBlock.java
 public final class TNTBlock extends Block {
@@ -48,14 +48,18 @@ public final class TNTBlock extends Block {
 
     // --- IGNITE: remove block, spawn PrimedTnt ---
     public static void ignite(Level level, int x, int y, int z) {
-        if (level == null)
+        ignite(level, x, y, z, null);
+    }
+
+    public static void ignite(Level level, int x, int y, int z, Entity owner) {
+        if (level == null || level.isNetworkMode() || level.getTile(x, y, z) != Block.TNT.id
+                || !level.setTile(x, y, z, 0)) {
             return;
-        // clear the TNT block first
-        level.setTile(x, y, z, 0);
+        }
 
         // spawn a primed entity centered (uses your PrimedTnt class)
-        net.classicremastered.minecraft.entity.PrimedTnt primed = new net.classicremastered.minecraft.entity.PrimedTnt(
-                level, x + 0.5f, y + 0.5f, z + 0.5f);
+        PrimedTnt primed =
+                new PrimedTnt(level, x + .5f, y + .5f, z + .5f, owner, PrimedTnt.DEFAULT_FUSE);
         level.addEntity(primed);
 
         // optional: fuse sound (you already wired Level.playSound)

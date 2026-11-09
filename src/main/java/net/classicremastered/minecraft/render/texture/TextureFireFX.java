@@ -1,6 +1,8 @@
 package net.classicremastered.minecraft.render.texture;
 
 public final class TextureFireFX extends TextureFX {
+    private static final int[] TONGUES = {5,8,12,15,10,6,8,12,16,12,8,5,9,14,10,6};
+    private int frame;
     private float[] current = new float[320]; // 16×20
     private float[] last    = new float[320];
 
@@ -40,6 +42,7 @@ public final class TextureFireFX extends TextureFX {
         this.last = this.current;
         this.current = tmp;
 
+        frame++;
         // Convert to RGBA bytes
         for (int i = 0; i < 256; i++) {
             float val = this.current[i] * 1.8F;
@@ -49,7 +52,12 @@ public final class TextureFireFX extends TextureFX {
             int r = (int)(val * 155.0F + 100.0F);
             int g = (int)(val * val * 255.0F);
             int b = (int)(Math.pow(val, 10) * 255.0F);
-            int a = (val < 0.5F) ? 0 : 255;
+            int x = i % 16, y = 15 - i / 16;
+            int drift = (int) Math.round(1.4 * Math.sin(frame * .16 + y * .2));
+            int tip = TONGUES[Math.floorMod(x + drift, 16)];
+            tip += (int) Math.round(1.5 * Math.sin(frame * .21 + x * .8));
+            int a = y < tip && (y < 3 || val > .25f || y < tip - 1) ? 255 : 0;
+            if (y > 3) b /= 3;
 
             if (this.anaglyph) {
                 int rr = (r * 30 + g * 59 + b * 11) / 100;

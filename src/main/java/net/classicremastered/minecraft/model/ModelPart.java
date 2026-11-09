@@ -102,6 +102,10 @@ public final class ModelPart {
         this.x = x; this.y = y; this.z = z;
     }
 
+    public final void applyTransform(float scale) {
+        GL11.glTranslatef(x*scale,y*scale,z*scale);
+        GL11.glRotatef(roll*57.295776F,0,0,1);GL11.glRotatef(yaw*57.295776F,0,1,0);GL11.glRotatef(pitch*57.295776F,1,0,0);
+    }
     public final void render(float scale) {
         if (!this.render) return;
         if (!this.hasList) generateList(scale);

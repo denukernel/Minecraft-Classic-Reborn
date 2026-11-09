@@ -15,6 +15,7 @@ public abstract class BossZombieBase extends Zombie {
     public BossZombieBase(Level level, float x, float y, float z) {
         super(level, x, y, z);
         this.deathScore = 1000; // bosses worth more
+        this.coinDrop = 10;
     }
 
     @Override

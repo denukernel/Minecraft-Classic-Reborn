@@ -68,12 +68,22 @@ public final class FontRenderer {
     /* ------------ public API ------------ */
 
     public void render(String s, int x, int y, int rgb) {
-        renderInternal(s, x + 1, y + 1, rgb, true);
-        renderInternal(s, x, y, rgb, false);
+        drawText(s, x, y, rgb, true);
     }
 
     public void renderNoShadow(String s, int x, int y, int rgb) {
-        renderInternal(s, x, y, rgb, false);
+        drawText(s, x, y, rgb, false);
+    }
+
+    private void drawText(String text, int x, int y, int rgb, boolean shadow) {
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT | GL11.GL_TEXTURE_BIT);
+        try {
+            GL11.glDisable(GL11.GL_LIGHTING);
+            if (shadow) renderInternal(text, x + 1, y + 1, rgb, true);
+            renderInternal(text, x, y, rgb, false);
+        } finally {
+            GL11.glPopAttrib();
+        }
     }
 
     public int getWidth(String s) {

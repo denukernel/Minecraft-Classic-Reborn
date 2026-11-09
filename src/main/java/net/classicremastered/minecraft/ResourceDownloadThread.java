@@ -94,6 +94,8 @@ public class ResourceDownloadThread extends Thread {
                     sm.registerSound(f, rel);
                     sfxCount++;
                 }); // <--- added
+                registerBundledSound(sm, "mob/cow/classic_idle.ogg");
+                registerBundledSound(sm, "mob/cow/classic_hurt.ogg");
                 scanDir(new File(resDir, "music"), (f, rel) -> {
                     registerMusic(sm, f, rel);
                     musicCount++;
@@ -240,6 +242,17 @@ public class ResourceDownloadThread extends Thread {
     }
 
     /* ================= Register helpers ================= */
+
+    private void registerBundledSound(PaulsCodeSoundManager sm, String path) {
+        String resourcePath = "sound/" + path;
+        if (!new File(resDir, resourcePath).isFile()) {
+            URL bundled = ResourceDownloadThread.class.getResource("/" + resourcePath);
+            if (bundled != null) {
+                sm.registerSound(bundled, path);
+                sfxCount++;
+            }
+        }
+    }
 
     private interface Sink {
         void accept(File file, String relPath) throws Exception;

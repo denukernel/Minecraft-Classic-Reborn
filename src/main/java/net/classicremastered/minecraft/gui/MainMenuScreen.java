@@ -1,9 +1,6 @@
 package net.classicremastered.minecraft.gui;
 
 import org.lwjgl.opengl.GL11;
-import net.classicremastered.minecraft.Minecraft;
-
-import java.util.Random;
 
 public final class MainMenuScreen extends GuiScreen {
 
@@ -50,41 +47,7 @@ public final class MainMenuScreen extends GuiScreen {
 
     @Override
     public void render(int mouseX, int mouseY) {
-        // Always start with a clean screen
-        GL11.glClearColor(0f, 0f, 0f, 1f);
-        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
-        // --- Dirt background ---
-        int tex = this.minecraft.textureManager.load("/dirt.png");
-        if (tex != 0) {
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
-            GL11.glEnable(GL11.GL_TEXTURE_2D);
-            GL11.glDisable(GL11.GL_BLEND);
-
-            float mult = (this.minecraft.settings != null ? this.minecraft.settings.menuLighting : 0.6f);
-            GL11.glColor4f(mult, mult, mult, 1f);
-
-            long sysTime = System.currentTimeMillis();
-            float scroll = (sysTime % 20000L) / 5000.0F;
-
-            float u = this.width / 32.0F;
-            float v = this.height / 32.0F;
-
-            // GUI projection flips the Y axis. Match the front-facing winding used by buttons.
-            GL11.glBegin(GL11.GL_QUADS);
-            GL11.glTexCoord2f(scroll, v + scroll);
-            GL11.glVertex2f(0, this.height);
-            GL11.glTexCoord2f(u + scroll, v + scroll);
-            GL11.glVertex2f(this.width, this.height);
-            GL11.glTexCoord2f(u + scroll, scroll);
-            GL11.glVertex2f(this.width, 0);
-            GL11.glTexCoord2f(scroll, scroll);
-            GL11.glVertex2f(0, 0);
-            GL11.glEnd();
-        }
-
-        // Reset color for text
-        GL11.glColor4f(1f, 1f, 1f, 1f);
+        drawMenuBackground();
 
         // Title + version
         drawCenteredString(this.fontRenderer, asciiOnly(title), this.width / 2, this.height / 8, 0xFFFFFF);
@@ -146,7 +109,7 @@ public final class MainMenuScreen extends GuiScreen {
             break;
         }
         case 6:
-            this.minecraft.setCurrentScreen(new DebugScreen());
+            this.minecraft.setCurrentScreen(new DebugScreen(this));
             break;
         case 7:
             this.minecraft.setCurrentScreen(new MultiplayerConnectScreen(this));

@@ -1,23 +1,22 @@
 package net.classicremastered.minecraft;
 
+import net.classicremastered.minecraft.level.tile.Block;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import net.classicremastered.minecraft.level.tile.Block;
-
 public final class CreativeInventoryBlocks {
 
-	public static List allowedBlocks;
-	public String username;
-	public String sessionId;
-	public String mppass;
-	public boolean haspaid;
+    public static List allowedBlocks;
+    public String username;
+    public String sessionId;
+    public String mppass;
+    public boolean haspaid;
 
-
-	public CreativeInventoryBlocks(String var1, String var2) {
-		this.username = var1;
-		this.sessionId = var2;
-	}
+    public CreativeInventoryBlocks(String var1, String var2) {
+        this.username = var1;
+        this.sessionId = var2;
+    }
 
     static {
         (allowedBlocks = new ArrayList()).add(Block.STONE);
@@ -69,10 +68,15 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.DIAMOND_BLOCK_NEW);
         allowedBlocks.add(Block.BEACON);
         allowedBlocks.add(Block.FURNACE);
+        allowedBlocks.add(Block.TORCH);
         allowedBlocks.add(Block.PUMPKIN);
         allowedBlocks.add(Block.CACTUS);
         allowedBlocks.add(Block.PISTON);
         allowedBlocks.add(Block.LUCKY_BLOCK);
+        allowedBlocks.add(Block.GRASS);
+        allowedBlocks.add(Block.WORKBENCH);
+        for (int id = 64; id <= 89; id++)
+            if (Block.blocks[id] != null && id != 73 && id != 75)
+                allowedBlocks.add(Block.blocks[id]);
     }
-
 }

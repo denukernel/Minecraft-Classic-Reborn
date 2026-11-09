@@ -9,8 +9,6 @@ import net.classicremastered.minecraft.particle.TerrainParticle;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.util.MathHelper;
 
-import java.util.Random;
-
 public class ZombieBomb extends Entity {
     private float gravity = 0.04F;
     private float airDrag = 0.98F;
@@ -19,8 +17,16 @@ public class ZombieBomb extends Entity {
     private int life; // fuse
     private Entity owner;
 
-    public ZombieBomb(Level level, Entity owner, float x, float y, float z,
-                      float yaw, float pitch, float power, int fuse) {
+    public ZombieBomb(
+            Level level,
+            Entity owner,
+            float x,
+            float y,
+            float z,
+            float yaw,
+            float pitch,
+            float power,
+            int fuse) {
         super(level);
         setSize(0.25F, 0.25F);
         heightOffset = bbHeight / 2.0F;
@@ -28,11 +34,11 @@ public class ZombieBomb extends Entity {
 
         this.owner = owner;
 
-        float yawRad = yaw * (float)Math.PI / 180.0F;
-        float pitchRad = pitch * (float)Math.PI / 180.0F;
+        float yawRad = yaw * (float) Math.PI / 180.0F;
+        float pitchRad = pitch * (float) Math.PI / 180.0F;
 
         float vx = -MathHelper.sin(yawRad) * MathHelper.cos(pitchRad);
-        float vz =  MathHelper.cos(yawRad) * MathHelper.cos(pitchRad);
+        float vz = MathHelper.cos(yawRad) * MathHelper.cos(pitchRad);
         float vy = -MathHelper.sin(pitchRad);
 
         this.xd = vx * power;
@@ -44,7 +50,9 @@ public class ZombieBomb extends Entity {
 
     @Override
     public void tick() {
-        xo = x; yo = y; zo = z;
+        xo = x;
+        yo = y;
+        zo = z;
 
         // physics
         yd -= gravity;
@@ -74,37 +82,45 @@ public class ZombieBomb extends Entity {
         if (level == null) return;
         level.playSound("random/explode", this, 1.0F, 1.0F);
 
-        int radius = (int)explosionPower;
-        for (int xx=(int)(x-radius); xx <= (int)(x+radius); xx++) {
-            for (int yy=(int)(y-radius); yy <= (int)(y+radius); yy++) {
-                for (int zz=(int)(z-radius); zz <= (int)(z+radius); zz++) {
-                    if (!level.isInBounds(xx,yy,zz)) continue;
+        int radius = (int) explosionPower;
+        for (int xx = (int) (x - radius); xx <= (int) (x + radius); xx++) {
+            for (int yy = (int) (y - radius); yy <= (int) (y + radius); yy++) {
+                for (int zz = (int) (z - radius); zz <= (int) (z + radius); zz++) {
+                    if (!level.isInBounds(xx, yy, zz)) continue;
 
-                    float dx = xx+0.5f-x, dy = yy+0.5f-y, dz = zz+0.5f-z;
-                    float dist2 = dx*dx+dy*dy+dz*dz;
-                    if (dist2 > radius*radius) continue;
+                    float dx = xx + 0.5f - x, dy = yy + 0.5f - y, dz = zz + 0.5f - z;
+                    float dist2 = dx * dx + dy * dy + dz * dz;
+                    if (dist2 > radius * radius) continue;
 
-                    int id = level.getTile(xx,yy,zz);
+                    int id = level.getTile(xx, yy, zz);
 
-                    if (id == Block.COBBLESTONE.id ||
-                        id == Block.WOOD.id ||
-                        id == Block.GLASS.id) {
-                        Block.blocks[id].dropItems(level, xx,yy,zz,0.3F);
-                        level.setTile(xx,yy,zz,0);
-                        Block.blocks[id].explode(level, xx,yy,zz);
+                    if (id == Block.COBBLESTONE.id || id == Block.WOOD.id || id == Block.GLASS.id) {
+                        Block.blocks[id].dropItems(level, xx, yy, zz, 0.3F);
+                        level.setTile(xx, yy, zz, 0);
+                        Block.blocks[id].explode(level, xx, yy, zz);
 
-                        level.particleEngine.spawnParticle(new TerrainParticle(
-                            level, xx+0.5f,yy+0.5f,zz+0.5f,
-                            dx*0.1f,dy*0.1f,dz*0.1f,
-                            Block.blocks[id]));
+                        level.particleEngine.spawnParticle(
+                                new TerrainParticle(
+                                        level,
+                                        xx + 0.5f,
+                                        yy + 0.5f,
+                                        zz + 0.5f,
+                                        dx * 0.1f,
+                                        dy * 0.1f,
+                                        dz * 0.1f,
+                                        Block.blocks[id]));
                     }
                 }
             }
         }
     }
+
     @Override
-    public void render(net.classicremastered.minecraft.render.TextureManager textureManager, float partial) {
-        int tex = textureManager.load("/terrain.png");
+    public void render(
+            net.classicremastered.minecraft.render.TextureManager textureManager, float partial) {
+        int tex =
+                textureManager.load(
+                        net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE);
         org.lwjgl.opengl.GL11.glBindTexture(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, tex);
 
         int bx = MathHelper.floor(x);
@@ -113,14 +129,16 @@ public class ZombieBomb extends Entity {
 
         float brightness = 1.0F;
         try {
-            brightness = level.getBrightness(bx, by, bz);
-        } catch (Throwable ignored) {}
+            brightness = level.getRenderBrightness(bx, by, bz);
+        } catch (Throwable ignored) {
+        }
 
         org.lwjgl.opengl.GL11.glPushMatrix();
         org.lwjgl.opengl.GL11.glColor4f(brightness, brightness, brightness, 1.0F);
-        org.lwjgl.opengl.GL11.glTranslatef(xo + (x - xo) * partial - 0.5F,
-                                           yo + (y - yo) * partial - 0.5F,
-                                           zo + (z - zo) * partial - 0.5F);
+        org.lwjgl.opengl.GL11.glTranslatef(
+                xo + (x - xo) * partial - 0.5F,
+                yo + (y - yo) * partial - 0.5F,
+                zo + (z - zo) * partial - 0.5F);
 
         // base TNT cube
         ShapeRenderer sr = ShapeRenderer.instance;
@@ -137,8 +155,8 @@ public class ZombieBomb extends Entity {
         // tint white flash (you can make this green if you want)
         org.lwjgl.opengl.GL11.glColor4f(1F, 1F, 1F, alpha);
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_BLEND);
-        org.lwjgl.opengl.GL11.glBlendFunc(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
-                                          org.lwjgl.opengl.GL11.GL_ONE);
+        org.lwjgl.opengl.GL11.glBlendFunc(
+                org.lwjgl.opengl.GL11.GL_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE);
 
         Block.TNT.renderPreview(sr);
 
@@ -149,5 +167,7 @@ public class ZombieBomb extends Entity {
     }
 
     @Override
-    public boolean isPickable() { return !removed; }
+    public boolean isPickable() {
+        return !removed;
+    }
 }

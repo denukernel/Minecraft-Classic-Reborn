@@ -1,10 +1,8 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 import net.classicremastered.minecraft.model.ModelShulkerMan;
-import net.classicremastered.minecraft.mob.ai.BasicAttackAI;
-import net.classicremastered.minecraft.render.TextureManager;
-import org.lwjgl.opengl.GL11;
 
 public final class ShulkerMan extends Mob {
 
@@ -17,6 +15,7 @@ public final class ShulkerMan extends Mob {
         textureName = "/mob/stuckerman.png";
         modelName = "shulkerman";
         health = 20;
+        coinDrop = 2;
         heightOffset = 1.7F;
 
         ai = new BasicAttackAI();
@@ -42,11 +41,15 @@ public final class ShulkerMan extends Mob {
         }
     }
 
-
     @Override
     public void die(net.classicremastered.minecraft.Entity cause) {
+        if (dead || removed)
+            return;
         super.die(cause);
-        if (level != null) {
+        if (level != null
+                && (level.minecraft == null
+                        || level.minecraft.settings == null
+                        || level.minecraft.settings.allowMobSounds)) {
             level.playSound("random/explode", this, 1.0F, 1.0F);
         }
     }

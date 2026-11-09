@@ -3,14 +3,13 @@ package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.phys.AABB;
-import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.opengl.GL11;
 
 public class DroppedItem extends Entity {
+    private static final long serialVersionUID = -4202125431351869001L;
     public int itemId;
     public int life = 6000; // ~5 mins
     public int count = 1;
@@ -23,16 +22,23 @@ public class DroppedItem extends Entity {
         super(level);
         this.itemId = itemId;
         this.count = count;
+        setSize(.25f, .25f);
+        heightOffset = bbHeight / 2;
         setPos(x, y, z);
-        this.bb = new AABB(x - 0.25F, y - 0.25F, z - 0.25F, x + 0.25F, y + 0.25F, z + 0.25F);
-        setSize(0.25F, 0.25F);
+        xo = x;
+        yo = y;
+        zo = z;
+        makeStepSound = false;
     }
 
     @Override
     public void tick() {
+        if (removed) return;
+        heightOffset = bbHeight / 2;
         super.tick();
-        if (!onGround) yd -= 0.04F;
+        yd -= 0.04F;
         move(xd, yd, zd);
+        if (cactusDamagesStack()) return;
         yd *= 0.98F; xd *= 0.98F; zd *= 0.98F;
         if (onGround) { xd *= 0.7F; zd *= 0.7F; yd *= -0.5F; }
         if (--life <= 0) remove();
@@ -69,6 +75,7 @@ public class DroppedItem extends Entity {
             if (this.level != null) {
                 float pitch = 1.0F + (MathHelper.random.nextFloat() - 0.5F) * 0.2F;
                 this.level.playSound("random/pop", this.x, this.y, this.z, 0.2F, pitch);
+                this.level.addEntity(new TakeEntityAnim(this.level, this, p));
             }
             this.count -= added;
             if (this.count <= 0) {
@@ -86,19 +93,21 @@ public class DroppedItem extends Entity {
             net.classicremastered.minecraft.level.itemstack.Item.items[lookupId];
         if (it == null) return;
 
+        float age = 6000 - life + partial;
+        float hover = MathHelper.sin(age / 10) * .1f + .1f;
         GL11.glPushMatrix();
         GL11.glTranslatef(xo + (x - xo) * partial,
-                          yo + (y - yo) * partial + 0.1F,
+                          yo + (y - yo) * partial + .1875f + hover,
                           zo + (z - zo) * partial);
-        GL11.glRotatef((System.currentTimeMillis() / 10) % 360, 0, 1, 0);
+        GL11.glRotatef(age * 3, 0, 1, 0);
         if (net.classicremastered.minecraft.model.GunModel.isGun(lookupId)) {
             GL11.glScalef(.6f,.6f,.6f);
-            net.classicremastered.minecraft.model.GunModel.render(lookupId, getBrightness(partial));
+            net.classicremastered.minecraft.model.GunModel.render(lookupId, getRenderBrightness(partial));
             GL11.glPopMatrix();
             return;
         }
         GL11.glScalef(.5f,.5f,.5f);
-        net.classicremastered.minecraft.render.ItemMeshRenderer.renderItem(tm,it,getBrightness(partial));
+        net.classicremastered.minecraft.render.ItemMeshRenderer.renderItem(tm,it,getRenderBrightness(partial));
         GL11.glPopMatrix();
     }
 

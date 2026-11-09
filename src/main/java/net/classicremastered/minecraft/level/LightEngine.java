@@ -1,22 +1,48 @@
 package net.classicremastered.minecraft.level;
 
-import java.util.Arrays;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.tile.Block;
+
+import java.util.Arrays;
 
 public final class LightEngine {
 
     private final Level level;
     private float lastDayFactor = -1f;
+    private final SkyLightCache skyCache;
 
-    // Fast local light source cache (eliminates all hash map lookups during chunk meshing)
-    private int cachedCx = Integer.MIN_VALUE;
-    private int cachedCz = Integer.MIN_VALUE;
-    private int[] sourceX = new int[128];
-    private int[] sourceY = new int[128];
-    private int[] sourceZ = new int[128];
-    private int[] sourceLv = new int[128];
-    private int sourceCount = 0;
+    public void blockChanged(int x, int y, int z) {
+        skyCache.invalidate(x, z);
+        querySources.cx = querySources.cz = Integer.MIN_VALUE;
+    }
+
+    public float getAmbientBrightness(int x, int y, int z) {
+        float sky = cachingMesh ? meshSky : getSkyLight();
+        return Math.max(.2f + .15f * sky, sky * skyCache.exposure(x, y, z));
+    }
+
+    private static final class Sources {
+        int cx = Integer.MIN_VALUE, cz = Integer.MIN_VALUE, count;
+        long revision = Long.MIN_VALUE;
+        int[] x = new int[128], y = new int[128], z = new int[128], light = new int[128];
+
+        void add(int px, int py, int pz, int value, int minY, int maxY) {
+            if (py < minY || py > maxY) return;
+            if (count == x.length) {
+                int capacity = count * 2;
+                x = Arrays.copyOf(x, capacity);
+                y = Arrays.copyOf(y, capacity);
+                z = Arrays.copyOf(z, capacity);
+                light = Arrays.copyOf(light, capacity);
+            }
+            x[count] = px;
+            y[count] = py;
+            z[count] = pz;
+            light[count++] = value;
+        }
+    }
+
+    private final Sources querySources = new Sources(), meshSources = new Sources();
     private float[] meshBrightness;
     private int meshX, meshY, meshZ;
     private boolean cachingMesh;
@@ -26,8 +52,11 @@ public final class LightEngine {
     public void beginMesh(int x, int y, int z) {
         if (meshBrightness == null) meshBrightness = new float[18 * 18 * 18];
         Arrays.fill(meshBrightness, -1f);
-        meshX = x - 1; meshY = y - 1; meshZ = z - 1;
-        cachedCx = cachedCz = Integer.MIN_VALUE;
+        meshX = x - 1;
+        meshY = y - 1;
+        meshZ = z - 1;
+        querySources.cx = querySources.cz = Integer.MIN_VALUE;
+        updateCache(meshSources, x >> 4, z >> 4, meshY - 8, meshY + 25);
         meshSky = getSkyLight();
         cachingMesh = true;
     }
@@ -38,6 +67,7 @@ public final class LightEngine {
 
     public LightEngine(Level level) {
         this.level = level;
+        this.skyCache = new SkyLightCache(level);
         try {
             this.lastDayFactor = getSkyLight();
         } catch (Throwable ignored) {
@@ -50,73 +80,74 @@ public final class LightEngine {
         return level.getDayFactorSmooth();
     }
 
-    private void ensureCapacity(int cap) {
-        if (sourceX.length < cap) {
-            int newCap = Math.max(sourceX.length * 2, cap + 64);
-            sourceX = Arrays.copyOf(sourceX, newCap);
-            sourceY = Arrays.copyOf(sourceY, newCap);
-            sourceZ = Arrays.copyOf(sourceZ, newCap);
-            sourceLv = Arrays.copyOf(sourceLv, newCap);
+    private void updateCache(Sources sources, int cx, int cz, int minY, int maxY) {
+        sources.cx = cx;
+        sources.cz = cz;
+        sources.count = 0;
+        int minCx = cx - 1, maxCx = cx + 1, minCz = cz - 1, maxCz = cz + 1;
+        if (sources == meshSources) {
+            minCx = (meshX - 8) >> 4;
+            maxCx = (meshX + 25) >> 4;
+            minCz = (meshZ - 8) >> 4;
+            maxCz = (meshZ + 25) >> 4;
         }
-    }
-
-    private void updateCache(int cx, int cz) {
-        cachedCx = cx;
-        cachedCz = cz;
-        sourceCount = 0;
 
         if (level instanceof LevelInfiniteTerrain) {
             LevelInfiniteTerrain lit = (LevelInfiniteTerrain) level;
-            for (int dcx = -1; dcx <= 1; dcx++) {
-                for (int dcz = -1; dcz <= 1; dcz++) {
-                    SimpleChunk sc = lit.chunks.tryGet(cx + dcx, cz + dcz);
+            for (int sx = minCx; sx <= maxCx; sx++) {
+                for (int sz = minCz; sz <= maxCz; sz++) {
+                    SimpleChunk sc = lit.chunks.tryGet(sx, sz);
                     if (sc != null && sc.emissiveCount > 0 && sc.emissiveBlocks != null) {
-                        appendChunkSources(sc);
+                        appendChunkSources(sources, sc, minY, maxY);
                     }
                 }
             }
         } else if (level instanceof LevelInfiniteFlat) {
             LevelInfiniteFlat lif = (LevelInfiniteFlat) level;
-            for (int dcx = -1; dcx <= 1; dcx++) {
-                for (int dcz = -1; dcz <= 1; dcz++) {
-                    SimpleChunk sc = lif.chunks.tryGet(cx + dcx, cz + dcz);
+            for (int sx = minCx; sx <= maxCx; sx++) {
+                for (int sz = minCz; sz <= maxCz; sz++) {
+                    SimpleChunk sc = lif.chunks.tryGet(sx, sz);
                     if (sc != null && sc.emissiveCount > 0 && sc.emissiveBlocks != null) {
-                        appendChunkSources(sc);
+                        appendChunkSources(sources, sc, minY, maxY);
                     }
                 }
             }
         } else {
-            // Finite Level
-            if (level.emissiveCount > 0 && level.emissiveBlocks != null) {
-                int count = level.emissiveCount;
-                int[] list = level.emissiveBlocks;
-                ensureCapacity(count);
-                for (int i = 0; i < count; i++) {
-                    int packed = list[i];
-                    sourceX[sourceCount] = packed & 0x3FF;
-                    sourceZ[sourceCount] = (packed >> 10) & 0x3FF;
-                    sourceY[sourceCount] = (packed >> 20) & 0xFF;
-                    sourceLv[sourceCount] = (packed >> 28) & 0xF;
-                    sourceCount++;
+            // Eight-block glow cannot reach beyond these neighboring columns.
+            sources.revision = level.getEmissiveRevision();
+            for (int sx = minCx; sx <= maxCx; sx++)
+                for (int sz = minCz; sz <= maxCz; sz++) {
+                    int[] indices = level.getEmissiveColumn(sx, sz);
+                    int count = level.getEmissiveColumnCount(sx, sz);
+                    for (int i = 0; i < count; i++) {
+                        int packed = level.emissiveBlocks[indices[i]];
+                        sources.add(
+                                packed & 1023,
+                                (packed >>> 20) & 255,
+                                (packed >>> 10) & 1023,
+                                (packed >>> 28) & 15,
+                                minY,
+                                maxY);
+                    }
                 }
-            }
         }
     }
 
-    private void appendChunkSources(SimpleChunk sc) {
+    private void appendChunkSources(Sources sources, SimpleChunk sc, int minY, int maxY) {
         int count = sc.emissiveCount;
         int[] list = sc.emissiveBlocks;
         int baseLx = sc.cx << 4;
         int baseLz = sc.cz << 4;
-        ensureCapacity(sourceCount + count);
 
         for (int i = 0; i < count; i++) {
             int packed = list[i];
-            sourceX[sourceCount] = baseLx + (packed & 15);
-            sourceZ[sourceCount] = baseLz + ((packed >> 4) & 15);
-            sourceY[sourceCount] = (packed >> 8) & 0xFFFF;
-            sourceLv[sourceCount] = (packed >> 24) & 0xFF;
-            sourceCount++;
+            sources.add(
+                    baseLx + (packed & 15),
+                    (packed >>> 8) & 0xFFFF,
+                    baseLz + ((packed >>> 4) & 15),
+                    (packed >>> 24) & 0xFF,
+                    minY,
+                    maxY);
         }
     }
 
@@ -147,27 +178,49 @@ public final class LightEngine {
         }
 
         // --- Fast chunk-cached emissive evaluation ---
-        int cx = x >> 4;
-        int cz = z >> 4;
-        if (cx != cachedCx || cz != cachedCz) {
-            updateCache(cx, cz);
+        boolean inMesh =
+                cachingMesh
+                        && x >= meshX
+                        && x < meshX + 18
+                        && y >= meshY
+                        && y < meshY + 18
+                        && z >= meshZ
+                        && z < meshZ + 18;
+        Sources sources = inMesh ? meshSources : querySources;
+        if (!inMesh) {
+            int cx = x >> 4, cz = z >> 4;
+            boolean finite =
+                    !(level instanceof LevelInfiniteFlat)
+                            && !(level instanceof LevelInfiniteTerrain);
+            if (cx != sources.cx
+                    || cz != sources.cz
+                    || finite && sources.revision != level.getEmissiveRevision())
+                updateCache(sources, cx, cz, Integer.MIN_VALUE, Integer.MAX_VALUE);
         }
 
         float maxGlow = 0f;
-        if (sourceCount > 0) {
+        if (sources.count > 0) {
             final float R = 8.0f;
             final float R2 = R * R;
             final float invRPlusOne = 1.0f / (R + 1.0f);
 
-            for (int i = 0; i < sourceCount; i++) {
-                int dx = x - sourceX[i];
-                int dy = y - sourceY[i];
-                int dz = z - sourceZ[i];
+            for (int i = 0; i < sources.count; i++) {
+                int dx = x - sources.x[i];
+                int dy = y - sources.y[i];
+                int dz = z - sources.z[i];
                 int d2 = dx * dx + dy * dy + dz * dz;
                 if (d2 <= R2) {
                     float dist = (float) Math.sqrt(d2);
                     float fall = 1.0f - dist * invRPlusOne;
-                    float g = (sourceLv[i] / 15.0f) * fall;
+                    int light = sources.light[i];
+                    if (light == 7
+                            && level.getTile(sources.x[i], sources.y[i], sources.z[i])
+                                    == Block.REDSTONE_TORCH.id
+                            && level.redstone()
+                                            .state(sources.x[i], sources.y[i], sources.z[i])
+                                            .power
+                                    == 0) light = 0;
+                    float g = (light / 15.0f) * fall;
                     if (g > maxGlow) {
                         maxGlow = g;
                         if (maxGlow >= 1.0f) {
@@ -180,16 +233,13 @@ public final class LightEngine {
         }
 
         // --- Skylight & Cave Base ---
-        float sky = cachingMesh ? meshSky : getSkyLight();
-        float base = level.isLit(x, y, z) ? sky : 0.35f;
+        float base = getAmbientBrightness(x, y, z);
 
         // --- Combine base light with emissive glow ---
         float result = base + (1.0f - base) * maxGlow;
 
-        if (result < 0.05f)
-            result = 0.05f;
-        if (result > 1.0f)
-            result = 1.0f;
+        if (result < 0.05f) result = 0.05f;
+        if (result > 1.0f) result = 1.0f;
         return result;
     }
 
@@ -201,8 +251,7 @@ public final class LightEngine {
             return false;
         }
         boolean changed = Math.abs(f - lastDayFactor) > 0.02f;
-        if (changed)
-            lastDayFactor = f;
+        if (changed) lastDayFactor = f;
         return changed;
     }
 

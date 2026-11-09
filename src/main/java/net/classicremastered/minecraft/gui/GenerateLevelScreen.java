@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.LevelInfiniteFlat;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
+import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.generator.FlatLevelGenerator;
 import net.classicremastered.minecraft.level.generator.LevelGenerator;
 
@@ -18,13 +19,13 @@ public final class GenerateLevelScreen extends GuiScreen {
     private final Receiver receiver;
 
     // === Options ===
-    private static final String[] SIZE_NAMES = { "Small", "Normal", "Huge" };
+    private static final String[] SIZE_NAMES = {"Small", "Normal", "Huge"};
     private int sizeIndex = 0;
     private boolean flat = false;
     private boolean creative = false;
 
-    private enum WorldType { FINITE, INFINITE_TERRAIN, INFINITE_FLAT }
-    private WorldType worldType = WorldType.FINITE;
+    private boolean infinite;
+    private boolean biomes;
 
     private String seedString = "";
     private GuiTextField seedField;
@@ -34,6 +35,7 @@ public final class GenerateLevelScreen extends GuiScreen {
     }
 
     public GenerateLevelScreen(GuiScreen parent, Receiver receiver) {
+        super(parent);
         this.parent = parent;
         this.receiver = receiver;
     }
@@ -41,21 +43,38 @@ public final class GenerateLevelScreen extends GuiScreen {
     @Override
     public void onOpen() {
         this.buttons.clear();
-        int y = this.height / 4;
+        int rows = 6 + (!infinite ? 1 : 0) + (!infinite || !biomes ? 1 : 0);
+        int y = Math.max(8, (this.height - rows * 24 + 4) / 2);
         int cx = this.width / 2;
 
         // World type selector
-        this.buttons.add(new Button(2, cx - 100, y, "World Type: " + getWorldTypeName()));
+        this.buttons.add(
+                new Button(2, cx - 100, y, "World Type: " + (infinite ? "Infinite" : "Finite")));
         int line = 1;
 
-        if (worldType == WorldType.FINITE) {
-            this.buttons.add(new Button(0, cx - 100, y + 24 * line, "World Size: " + SIZE_NAMES[sizeIndex]));
+        this.buttons.add(
+                new Button(
+                        4,
+                        cx - 100,
+                        y + 24 * line++,
+                        "Terrain: " + (biomes ? "Biomes" : "Classic")));
+        if (!infinite) {
+            this.buttons.add(
+                    new Button(0, cx - 100, y + 24 * line, "World Size: " + SIZE_NAMES[sizeIndex]));
             line++;
-            this.buttons.add(new Button(1, cx - 100, y + 24 * line, "Flat World: " + (flat ? "ON" : "OFF")));
+        }
+        if (!infinite || !biomes) {
+            this.buttons.add(
+                    new Button(1, cx - 100, y + 24 * line, "Flat World: " + (flat ? "ON" : "OFF")));
             line++;
         }
 
-        this.buttons.add(new Button(3, cx - 100, y + 24 * line, "Mode: " + (creative ? "CREATIVE" : "SURVIVAL")));
+        this.buttons.add(
+                new Button(
+                        3,
+                        cx - 100,
+                        y + 24 * line,
+                        "Mode: " + (creative ? "CREATIVE" : "SURVIVAL")));
         line++;
 
         // Seed text field
@@ -108,8 +127,14 @@ public final class GenerateLevelScreen extends GuiScreen {
         }
 
         if (b.id == 2) { // World Type toggle
-            worldType = WorldType.values()[(worldType.ordinal() + 1) % WorldType.values().length];
+            infinite = !infinite;
             this.onOpen(); // rebuild buttons for current mode
+            return;
+        }
+
+        if (b.id == 4) {
+            biomes = !biomes;
+            this.onOpen();
             return;
         }
 
@@ -123,42 +148,29 @@ public final class GenerateLevelScreen extends GuiScreen {
             seedString = seedField.getText().trim();
             long seed = resolveSeed();
 
+            String creator =
+                    this.minecraft.session != null ? this.minecraft.session.username : "anonymous";
+            int size = 128 << sizeIndex;
             Level level;
-            switch (worldType) {
-                case INFINITE_TERRAIN: {
-                    level = new LevelInfiniteTerrain(seed, 64);
-                    level.name = "Infinite Terrain";
-                    break;
-                }
-                case INFINITE_FLAT: {
-                    level = new LevelInfiniteFlat(seed, 64);
-                    level.name = "Infinite Flat";
-                    break;
-                }
-                default: { // FINITE
-                    if (flat) {
-                        level = FlatLevelGenerator.makeFlatLevel(sizeIndex);
-                    } else {
-                        String creator = this.minecraft.session != null ? this.minecraft.session.username : "anonymous";
-                        level = new LevelGenerator(this.minecraft.progressBar)
-                                .generate(creator, 128 << sizeIndex, 128 << sizeIndex, 64);
-                    }
-                    break;
-                }
+            if (infinite) {
+                level =
+                        flat && !biomes
+                                ? new LevelInfiniteFlat(seed, 64)
+                                : new LevelInfiniteTerrain(seed, 64, biomes);
+                level.name =
+                        biomes ? "Infinite Biomes" : flat ? "Infinite Flat" : "Infinite Terrain";
+            } else if (biomes) {
+                level = new BiomeLevelGenerator(seed).generate(creator, size, flat);
+            } else if (flat) {
+                level = FlatLevelGenerator.makeFlatLevel(sizeIndex);
+            } else {
+                level =
+                        new LevelGenerator(this.minecraft.progressBar)
+                                .generate(creator, size, size, 64);
             }
-            level.creator = this.minecraft.session != null ? this.minecraft.session.username : "anonymous";
+            level.creator =
+                    this.minecraft.session != null ? this.minecraft.session.username : "anonymous";
             applyGamemode(level);
-        }
-    }
-
-    private String getWorldTypeName() {
-        switch (worldType) {
-            case INFINITE_TERRAIN:
-                return "Infinite Terrain";
-            case INFINITE_FLAT:
-                return "Infinite Flat";
-            default:
-                return "Finite";
         }
     }
 
@@ -199,8 +211,14 @@ public final class GenerateLevelScreen extends GuiScreen {
 
     @Override
     public void render(int mx, int my) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA0000000);
-        drawCenteredString(this.fontRenderer, "Generate new level", this.width / 2, 40, 0xFFFFFF);
+        drawCenteredString(
+                this.fontRenderer,
+                "Generate new level",
+                this.width / 2,
+                Math.max(0, ((Button) this.buttons.get(0)).y - 14),
+                0xFFFFFF);
 
         if (seedField != null) seedField.drawTextBox();
 

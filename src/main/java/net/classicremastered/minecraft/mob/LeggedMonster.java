@@ -1,9 +1,10 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.mob.ai.SmartHostileAI;
+import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 
 public final class LeggedMonster extends Mob {
+
     public static final long serialVersionUID = 0L;
 
     public LeggedMonster(Level level, float x, float y, float z) {
@@ -12,7 +13,7 @@ public final class LeggedMonster extends Mob {
         this.modelName = "leggedmonster";
         this.textureName = "/mob/legged_monster.png";
         this.heightOffset = 1.62F;
-        this.ai = new SmartHostileAI();
+        this.ai = new BasicAttackAI(true, true);
         this.setSize(0.8F, 1.8F);
         this.health = 20;
         this.speed = 0.25F;

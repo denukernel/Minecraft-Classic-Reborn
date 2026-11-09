@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.player.Player;
 
 public class Villager extends Mob {
+
     public boolean persistent = true;
     private int deathTicks = 0;
 
@@ -12,6 +13,21 @@ public class Villager extends Mob {
     public boolean hasHome = false;
     public float homeX = 0f, homeY = 0f, homeZ = 0f;
     public float homeRadius = 3.0f;
+    public boolean hasHomeDoor;
+    public int homeDoorX, homeDoorY, homeDoorZ;
+
+    public void setHomeDoor(int x, int y, int z) {
+        if (!hasHome)
+            throw new IllegalStateException("assign a home before its doorway");
+        if (hasHomeDoor && level != null)
+            level.villagerDoors().unregister(this);
+        homeDoorX = x;
+        homeDoorY = y;
+        homeDoorZ = z;
+        hasHomeDoor = true;
+        if (level != null)
+            level.villagerDoors().register(this);
+    }
 
     // --- Trading ---
     public int tradeCooldown = 0;
@@ -36,14 +52,21 @@ public class Villager extends Mob {
     }
 
     public void setHome(float x, float y, float z, float radius) {
+        if (hasHomeDoor && level != null)
+            level.villagerDoors().unregister(this);
+        hasHomeDoor = false;
         this.homeX = x;
         this.homeY = y;
         this.homeZ = z;
         this.homeRadius = radius;
         this.hasHome = true;
+        this.ai = new net.classicremastered.minecraft.mob.ai.villager.VillagerAI(x, y, z, radius);
     }
 
     public void clearHome() {
+        if (hasHomeDoor && level != null)
+            level.villagerDoors().unregister(this);
+        hasHomeDoor = false;
         this.hasHome = false;
     }
 
@@ -85,11 +108,16 @@ public class Villager extends Mob {
 
     @Override
     public void aiStep() {
-        if(hostile && ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
-                && !(ai instanceof net.classicremastered.minecraft.mob.ai.VillagerAI)) {
-            Player target=level.getNearestPlayer(x,y,z,32);
-            basic.attackTarget=target!=null && target.health>0
-                && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(target)?target:null;
+        if (hostile
+                && ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
+                && !(ai instanceof net.classicremastered.minecraft.mob.ai.villager.VillagerAI)) {
+            Player target = level.getNearestPlayer(x, y, z, 32);
+            basic.attackTarget = target != null
+                    && target.health > 0
+                    && !net.classicremastered.minecraft.util.CreativeModeHelper
+                            .shouldIgnoreTarget(target)
+                                    ? target
+                                    : null;
         }
         super.aiStep();
     }
@@ -142,7 +170,8 @@ public class Villager extends Mob {
                 if (step < 8) {
                     basePitch = (step % 2 == 0) ? 0.6f : 0.6f * (float) Math.pow(2.0, 3.0 / 12.0);
                 } else {
-                    basePitch = (step % 2 == 0) ? 0.6f * (float) Math.pow(2.0, 3.0 / 12.0)
+                    basePitch = (step % 2 == 0)
+                            ? 0.6f * (float) Math.pow(2.0, 3.0 / 12.0)
                             : 0.6f * (float) Math.pow(2.0, 6.0 / 12.0);
                 }
 
@@ -175,9 +204,13 @@ public class Villager extends Mob {
                 float mag = (float) Math.sqrt(dist2);
                 this.running = true;
 
-                if (mag < 2.0f && this.attackTime <= 0 && level.clip(
-                        new net.classicremastered.minecraft.model.Vec3D(x,bb.y0+bbHeight*0.85f,z),
-                        new net.classicremastered.minecraft.model.Vec3D(p.x,p.bb.y0+p.bbHeight*0.5f,p.z))==null) {
+                if (mag < 2.0f
+                        && this.attackTime <= 0
+                        && level.clip(
+                                new net.classicremastered.minecraft.model.Vec3D(
+                                        x, bb.y0 + bbHeight * 0.85f, z),
+                                new net.classicremastered.minecraft.model.Vec3D(
+                                        p.x, p.bb.y0 + p.bbHeight * 0.5f, p.z)) == null) {
                     // ✅ Skip hurting Creative players
                     if (!this.level.creativeMode) {
                         p.hurt(this, 2);
@@ -189,7 +222,16 @@ public class Villager extends Mob {
     }
 
     private void safePlaySound(String key, float volume, float pitch) {
-        if (this.level != null && this.level.minecraft != null && this.level.minecraft.soundPC != null) {
+        if (health <= 0
+                || removed
+                || (level != null
+                        && level.minecraft != null
+                        && level.minecraft.settings != null
+                        && !level.minecraft.settings.allowMobSounds))
+            return;
+        if (this.level != null
+                && this.level.minecraft != null
+                && this.level.minecraft.soundPC != null) {
             float v = Math.max(0.05f, Math.min(1.0f, volume));
             float p = Math.max(0.25f, Math.min(2.0f, pitch));
             this.level.minecraft.soundPC.playSoundClean(key, v, p);
@@ -198,6 +240,8 @@ public class Villager extends Mob {
 
     @Override
     public void hurt(Entity attacker, int damage) {
+        if (health <= 0 || dead || removed)
+            return;
         if (attacker != null) {
             Entity actualAttacker = attacker;
             if (attacker instanceof net.classicremastered.minecraft.entity.Arrow) {
@@ -234,6 +278,8 @@ public class Villager extends Mob {
 
     @Override
     public void die(Entity killer) {
+        if (dead || removed)
+            return;
         super.die(killer);
 
         if (killer instanceof Player p) {

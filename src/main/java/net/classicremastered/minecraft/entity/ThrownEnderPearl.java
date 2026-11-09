@@ -2,48 +2,45 @@ package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.particle.SmokeParticle;
 import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.render.CameraView;
+import net.classicremastered.minecraft.render.ItemMeshRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
-import net.classicremastered.minecraft.render.ShapeRenderer;
-import org.lwjgl.opengl.GL11;
 import net.classicremastered.util.MathHelper;
-import java.util.List;
+import org.lwjgl.opengl.GL11;
 
 public class ThrownEnderPearl extends Entity {
-    public float xd, yd, zd;
-    private Entity owner;
-    private int time = 0;
+    private static final long serialVersionUID = -1856424994218433223L;
+    private final Entity owner;
+    private int time;
+    private transient Vec3D lastSafeLanding;
 
     public ThrownEnderPearl(Level level, Entity owner, float x, float y, float z, float yaw, float pitch, float speed) {
         super(level);
         this.owner = owner;
-        this.setSize(0.25F, 0.25F);
-        this.heightOffset = 0.125F;
+        setSize(0.25F, 0.25F);
+        setPos(x, y, z);
+        xo = x;
+        yo = y;
+        zo = z;
 
-        float cy = MathHelper.cos(-yaw * 0.017453292F - (float)Math.PI);
-        float sy = MathHelper.sin(-yaw * 0.017453292F - (float)Math.PI);
-        float cp = MathHelper.cos(-pitch * 0.017453292F);
-        float sp = MathHelper.sin(-pitch * 0.017453292F);
-
-        float lx = sy * cp;
-        float ly = sp;
-        float lz = cy * cp;
-
-        this.x = x + lx * 0.5f;
-        this.y = y + ly * 0.5f;
-        this.z = z + lz * 0.5f;
-
-        this.xd = lx * speed;
-        this.yd = ly * speed;
-        this.zd = lz * speed;
-
-        this.setPos(this.x, this.y, this.z);
+        float azimuth = -yaw * 0.017453292F - (float) Math.PI;
+        float elevation = -pitch * 0.017453292F;
+        float horizontalSpeed = MathHelper.cos(elevation) * speed;
+        xd = MathHelper.sin(azimuth) * horizontalSpeed;
+        yd = MathHelper.sin(elevation) * speed;
+        zd = MathHelper.cos(azimuth) * horizontalSpeed;
     }
 
     @Override
     public void tick() {
-        time++;
-        if (time > 100) {
+        if (++time > 100 || owner == null || owner.removed || owner.level != level) {
             remove();
             return;
         }
@@ -51,100 +48,115 @@ public class ThrownEnderPearl extends Entity {
         xo = x;
         yo = y;
         zo = z;
-
-        yd -= 0.04F; // Gravity
-
-        // Move with collision checking
-        float prevXd = xd;
-        float prevYd = yd;
-        float prevZd = zd;
-        move(xd, yd, zd);
-
-        // Check if we hit a block (velocity changed) or collided
-        boolean hitBlock = (xd != prevXd) || (yd != prevYd) || (zd != prevZd) || this.onGround || this.horizontalCollision;
-
-        if (hitBlock) {
-            teleport(prevXd, prevYd, prevZd);
-            return;
+        Vec3D start = new Vec3D(x, y, z);
+        Vec3D end = start.add(xd, yd, zd);
+        AABB sweep = bb.expand(xd, yd, zd);
+        if (owner instanceof Player player && level.getCubes(landingBox(player, start)).isEmpty()) {
+            lastSafeLanding = start;
         }
 
-        // Check if we hit any mob
-        AABB checkBB = bb.grow(0.2f, 0.2f, 0.2f);
-        List targets = level.blockMap.getEntities(this, checkBB);
-        for (Object obj : targets) {
-            if (obj instanceof net.classicremastered.minecraft.mob.Mob) {
-                net.classicremastered.minecraft.mob.Mob m = (net.classicremastered.minecraft.mob.Mob) obj;
-                if (m != owner && m.isPickable() && m.health > 0) {
-                    teleport(prevXd, prevYd, prevZd);
+        for (Object cube : level.getCubes(sweep)) {
+            AABB block = (AABB) cube;
+            if (block.contains(start) || block.clip(start, end) != null) {
+                teleport();
+                return;
+            }
+        }
+        for (Entity target : level.blockMap.getEntities(this, sweep.grow(0.1F, 0.1F, 0.1F))) {
+            if (target != owner && target instanceof Mob mob && target.isPickable() && mob.health > 0) {
+                AABB hitbox = target.bb.grow(0.1F, 0.1F, 0.1F);
+                if (hitbox.contains(start) || hitbox.clip(start, end) != null) {
+                    teleport();
                     return;
                 }
             }
         }
+
+        setPos(end.x, end.y, end.z);
+        float drag = level.containsLiquid(bb, LiquidType.WATER) ? 0.8F : 0.99F;
+        xd *= drag;
+        yd = yd * drag - 0.03F;
+        zd *= drag;
     }
 
-    private void teleport(float vx, float vy, float vz) {
-        if (!level.isNetworkMode() && owner instanceof net.classicremastered.minecraft.player.Player) {
-            net.classicremastered.minecraft.player.Player p = (net.classicremastered.minecraft.player.Player) owner;
-            
-            // Spawn particles at old location
-            spawnTeleportParticles(p.x, p.y, p.z);
+    private static AABB landingBox(Player player, Vec3D feet) {
+        float halfWidth = player.bbWidth * 0.5F;
+        return new AABB(feet.x - halfWidth, feet.y, feet.z - halfWidth,
+                feet.x + halfWidth, feet.y + player.bbHeight, feet.z + halfWidth);
+    }
 
-            // Pull back target position by 0.5 blocks to avoid wall/floor clipping
-            float len = (float) Math.sqrt(vx * vx + vy * vy + vz * vz);
-            float tx = x;
-            float ty = y;
-            float tz = z;
-            if (len > 0.01f) {
-                tx -= (vx / len) * 0.5f;
-                ty -= (vy / len) * 0.5f;
-                tz -= (vz / len) * 0.5f;
-            }
-
-            // Teleport player
-            p.setPos(tx, ty + p.heightOffset, tz);
-
-            // Spawn particles at new location
-            spawnTeleportParticles(x, y, z);
-
-            level.playSound("random/explode", p, 1.0F, 1.5F);
-
-            // Hurt player by 5 damage (2.5 hearts)
-            if (!level.creativeMode) {
-                p.hurt(null, 5);
-            }
-        }
+    private void teleport() {
         remove();
+        if (level.isNetworkMode() || !(owner instanceof Player player) || player.health <= 0
+                || lastSafeLanding == null) {
+            return;
+        }
+
+        // Use the last clear point on the incoming path, with room for the player's full hitbox.
+        AABB landing = landingBox(player, lastSafeLanding);
+        if (!level.getCubes(landing).isEmpty()) {
+            return;
+        }
+
+        spawnTeleportParticles(player.x, player.y, player.z);
+        player.ySlideOffset = 0.0F;
+        player.setPos(lastSafeLanding.x, lastSafeLanding.y + player.heightOffset, lastSafeLanding.z);
+        player.bb = landing;
+        player.xo = player.x;
+        player.yo = player.y;
+        player.zo = player.z;
+        player.fallDistance = 0.0F;
+        player.onGround = false;
+        spawnTeleportParticles(player.x, player.y, player.z);
+        level.playSound("random/explode", player, 1.0F, 1.5F);
+
+        if (!level.creativeMode) {
+            player.hurt(null, 5);
+        }
     }
 
     private void spawnTeleportParticles(float px, float py, float pz) {
         if (level.particleEngine != null) {
             for (int i = 0; i < 15; i++) {
-                float rx = (float) (Math.random() - 0.5) * 1.5f;
-                float ry = (float) (Math.random() - 0.5) * 1.5f;
-                float rz = (float) (Math.random() - 0.5) * 1.5f;
-                level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.SmokeParticle(level, px + rx, py + ry, pz + rz));
+                float rx = (level.random.nextFloat() - 0.5F) * 1.5F;
+                float ry = (level.random.nextFloat() - 0.5F) * 1.5F;
+                float rz = (level.random.nextFloat() - 0.5F) * 1.5F;
+                level.particleEngine.spawnParticle(new SmokeParticle(level, px + rx, py + ry, pz + rz));
             }
         }
     }
 
     @Override
     public void render(TextureManager tm, float partial) {
-        net.classicremastered.minecraft.level.itemstack.Item it = net.classicremastered.minecraft.level.itemstack.Item.items[20]; // Ender Pearl
-        if (it == null) return;
+        if (Item.ENDER_PEARL == null) {
+            return;
+        }
 
         GL11.glPushMatrix();
-        GL11.glTranslatef(xo + (x - xo) * partial, yo + (y - yo) * partial + 0.1F, zo + (z - zo) * partial);
-        GL11.glRotatef((System.currentTimeMillis() / 10) % 360, 0, 1, 0);
-        GL11.glScalef(0.03F, -0.03F, 0.1F);
-        GL11.glDisable(GL11.GL_CULL_FACE);
-        GL11.glTranslatef(-8.0F, -8.0F, 0.0F);
-        it.renderIcon(tm, ShapeRenderer.instance);
-        GL11.glEnable(GL11.GL_CULL_FACE);
-        GL11.glPopMatrix();
+        try {
+            GL11.glTranslatef(xo + (x - xo) * partial, yo + (y - yo) * partial, zo + (z - zo) * partial);
+            if (level.player instanceof Player cameraPlayer) {
+                int mode = level.minecraft == null ? 0 : level.minecraft.cameraMode;
+                CameraView camera = CameraView.resolve(cameraPlayer, mode, partial);
+                GL11.glRotatef(-camera.yaw(), 0.0F, 1.0F, 0.0F);
+                GL11.glRotatef(-camera.pitch(), 1.0F, 0.0F, 0.0F);
+            }
+            GL11.glRotatef(30.0F, 0.0F, 1.0F, 0.0F);
+            GL11.glRotatef((time + partial) * 18.0F, 0.0F, 0.0F, 1.0F);
+            GL11.glScalef(0.5F, 0.5F, 0.5F);
+            ItemMeshRenderer.renderItem(tm, Item.ENDER_PEARL, 1.0F);
+        } finally {
+            GL11.glPopMatrix();
+        }
     }
 
     @Override
-    public boolean isPickable() { return false; }
+    public boolean isPickable() {
+        return false;
+    }
+
     @Override
-    public boolean isPushable() { return false; }
+    public boolean isPushable() {
+        return false;
+    }
 }

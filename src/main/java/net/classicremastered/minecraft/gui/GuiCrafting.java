@@ -1,27 +1,28 @@
 package net.classicremastered.minecraft.gui;
 
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.GL11;
-import net.classicremastered.minecraft.player.Player;
-import net.classicremastered.minecraft.player.Inventory;
-import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.level.itemstack.Item;
-import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.crafting.CraftingManager;
 import net.classicremastered.minecraft.crafting.CraftingManager.ItemStack;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.player.Inventory;
+import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.render.ShapeRenderer;
+
+import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.GL11;
 
 public final class GuiCrafting extends GuiScreen {
 
     private int texture;
-    
+
     // GUI Texture Layout Constants
     private static final int GUI_W = 176;
     private static final int GUI_H = 166;
-    
+
     // Separate crafting matrix (3x3)
     private int[] craftMatrix = new int[9];
     private int[] craftCount = new int[9];
-    
+
     // Output result
     private int resultId = -1;
     private int resultCount = 0;
@@ -64,16 +65,16 @@ public final class GuiCrafting extends GuiScreen {
 
             int slot = getUnifiedSlotAt(mx, my);
             if (slot != -1 && !painted[slot] && carriedId > 0 && carriedCnt > 0) {
-                 // Dispatch "Place One" (button 1)
-                 if (slot < 9) {
-                     slotClick(craftMatrix, craftCount, slot, 1);
-                     checkRecipe();
-                 } else if (slot < 36) {
-                     inventoryClick(minecraft.player.inventory, slot, 1);
-                 } else {
-                     inventoryClick(minecraft.player.inventory, slot - 36, 1);
-                 }
-                 painted[slot] = true;
+                // Dispatch "Place One" (button 1)
+                if (slot < 9) {
+                    slotClick(craftMatrix, craftCount, slot, 1);
+                    checkRecipe();
+                } else if (slot < 36) {
+                    inventoryClick(minecraft.player.inventory, slot, 1);
+                } else {
+                    inventoryClick(minecraft.player.inventory, slot - 36, 1);
+                }
+                painted[slot] = true;
             }
         }
     }
@@ -89,7 +90,7 @@ public final class GuiCrafting extends GuiScreen {
                     if (craftCount[i] == 0) craftMatrix[i] = -1;
                 }
             }
-            
+
             // Also flush carried item
             if (carriedId > 0 && carriedCnt > 0) {
                 carriedCnt = returnStack(p, carriedId, carriedCnt);
@@ -104,11 +105,13 @@ public final class GuiCrafting extends GuiScreen {
         if (count > 0 && player.level != null) {
             net.classicremastered.minecraft.Entity dropped;
             if (id >= 256) {
-                dropped = new net.classicremastered.minecraft.entity.DroppedItem(
-                    player.level, player.x, player.y, player.z, id - 256, count);
+                dropped =
+                        new net.classicremastered.minecraft.entity.DroppedItem(
+                                player.level, player.x, player.y, player.z, id - 256, count);
             } else {
-                dropped = new net.classicremastered.minecraft.entity.DroppedBlock(
-                    player.level, player.x, player.y, player.z, id, count);
+                dropped =
+                        new net.classicremastered.minecraft.entity.DroppedBlock(
+                                player.level, player.x, player.y, player.z, id, count);
             }
             player.level.addEntity(dropped);
             count = 0;
@@ -155,7 +158,8 @@ public final class GuiCrafting extends GuiScreen {
 
         // 4. Draw Player Inventory (Main 9-35)
         // Starts at (8, 84) - Reverted to standard 84 (Matches InventoryScreen)
-        // Any value > 88 causes overlap with Hotbar (142), so 84 is the only logical choice unless texture is non-standard.
+        // Any value > 88 causes overlap with Hotbar (142), so 84 is the only logical choice unless
+        // texture is non-standard.
         Inventory inv = minecraft.player.inventory;
         // Main Inventory grid (3 rows of 9)
         for (int i = 0; i < 27; i++) {
@@ -164,10 +168,10 @@ public final class GuiCrafting extends GuiScreen {
             int row = i / 9;
             int x = x0 + 8 + col * 18;
             int y = y0 + 84 + row * 18; // Reverted to 84
-            
+
             int id = inv.getId(slotIdx);
             int count = inv.getCount(slotIdx);
-            
+
             if (id > 0 && count > 0) {
                 drawSlotIcon(id, x, y);
                 if (count > 1) drawCountString(count, x, y);
@@ -181,7 +185,7 @@ public final class GuiCrafting extends GuiScreen {
             int y = y0 + 142;
             int id = inv.getId(i);
             int count = inv.getCount(i);
-             if (id > 0 && count > 0) {
+            if (id > 0 && count > 0) {
                 drawSlotIcon(id, x, y);
                 if (count > 1) drawCountString(count, x, y);
             }
@@ -213,12 +217,14 @@ public final class GuiCrafting extends GuiScreen {
     }
 
     private void drawCountString(int count, int x, int y) {
-         String s = Integer.toString(count);
-         GL11.glDisable(GL11.GL_LIGHTING);
-         GL11.glDisable(GL11.GL_DEPTH_TEST);
-         fontRenderer.render(s, x + 19 - fontRenderer.getWidth(s), y + 6 + 3, 0xFFFFFFFF);
-         GL11.glEnable(GL11.GL_LIGHTING);
-         GL11.glEnable(GL11.GL_DEPTH_TEST);
+        String s = Integer.toString(count);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT);
+        try {
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            fontRenderer.render(s, x + 19 - fontRenderer.getWidth(s), y + 9, 0xFFFFFF);
+        } finally {
+            GL11.glPopAttrib();
+        }
     }
 
     @Override
@@ -237,27 +243,33 @@ public final class GuiCrafting extends GuiScreen {
         int slot = getUnifiedSlotAt(mouseX, mouseY);
         if (slot != -1) {
             boolean isRightClick = (button == 1);
-            
+
             if (isRightClick) {
                 draggingRMB = true;
-                for(int i=0; i<painted.length; i++) painted[i] = false;
+                for (int i = 0; i < painted.length; i++) painted[i] = false;
                 painted[slot] = true;
             }
-            
+
             // Dispatch click
             if (slot < 9) { // Matrix
-                 slotClick(craftMatrix, craftCount, slot, button);
-                 checkRecipe();
+                slotClick(craftMatrix, craftCount, slot, button);
+                checkRecipe();
             } else if (slot < 36) { // Main
-                 inventoryClick(minecraft.player.inventory, slot, button);
+                inventoryClick(minecraft.player.inventory, slot, button);
             } else { // Hotbar (Unified 36-44 -> Inv 0-8)
-                 inventoryClick(minecraft.player.inventory, slot - 36, button);
+                inventoryClick(minecraft.player.inventory, slot - 36, button);
             }
         }
     }
-    
+
     private boolean isOver(int mx, int my, int sx, int sy) {
         return mx >= sx && mx < sx + 18 && my >= sy && my < sy + 18;
+    }
+
+    private static int cap(int id) {
+        return id >= 256 && id - 256 < Item.items.length && Item.items[id - 256] != null
+                ? Item.items[id - 256].maxStackSize
+                : 64;
     }
 
     // Handles clicking on a raw array-based slot (Crafting Matrix)
@@ -278,14 +290,14 @@ public final class GuiCrafting extends GuiScreen {
                 // Place or Swap
                 if (id == -1) {
                     // Place all
-                     ids[slot] = carriedId;
-                     counts[slot] = carriedCnt;
-                     carriedId = -1;
-                     carriedCnt = 0;
+                    ids[slot] = carriedId;
+                    counts[slot] = carriedCnt;
+                    carriedId = -1;
+                    carriedCnt = 0;
                 } else if (id == carriedId) {
                     // Add matches
-                    if (count < 64) { // Stack limit
-                        int space = 64 - count;
+                    if (count < cap(id)) { // Stack limit
+                        int space = cap(id) - count;
                         int move = Math.min(space, carriedCnt);
                         counts[slot] += move;
                         carriedCnt -= move;
@@ -302,30 +314,30 @@ public final class GuiCrafting extends GuiScreen {
                 }
             }
         } else if (button == 1) { // Right click
-             if (carriedId == -1) {
-                 // Split
-                 if (id != -1) {
-                     int half = (count + 1) / 2;
-                     carriedId = id;
-                     carriedCnt = half;
-                     counts[slot] -= half;
-                     if (counts[slot] == 0) ids[slot] = -1;
-                 }
-             } else {
-                 // Place One
-                 if (id == -1) {
-                     ids[slot] = carriedId;
-                     counts[slot] = 1;
-                     carriedCnt--;
-                     if (carriedCnt == 0) carriedId = -1;
-                 } else if (id == carriedId) {
-                     if (count < 64) {
-                         counts[slot]++;
-                         carriedCnt--;
-                         if (carriedCnt == 0) carriedId = -1;
-                     }
-                 }
-             }
+            if (carriedId == -1) {
+                // Split
+                if (id != -1) {
+                    int half = (count + 1) / 2;
+                    carriedId = id;
+                    carriedCnt = half;
+                    counts[slot] -= half;
+                    if (counts[slot] == 0) ids[slot] = -1;
+                }
+            } else {
+                // Place One
+                if (id == -1) {
+                    ids[slot] = carriedId;
+                    counts[slot] = 1;
+                    carriedCnt--;
+                    if (carriedCnt == 0) carriedId = -1;
+                } else if (id == carriedId) {
+                    if (count < cap(id)) {
+                        counts[slot]++;
+                        carriedCnt--;
+                        if (carriedCnt == 0) carriedId = -1;
+                    }
+                }
+            }
         }
     }
 
@@ -333,7 +345,7 @@ public final class GuiCrafting extends GuiScreen {
     private void inventoryClick(Inventory inv, int slot, int button) {
         int id = inv.getId(slot);
         int count = inv.getCount(slot);
-        
+
         if (button == 0) {
             if (carriedId == -1) {
                 if (id > 0) {
@@ -347,8 +359,8 @@ public final class GuiCrafting extends GuiScreen {
                     carriedId = -1;
                     carriedCnt = 0;
                 } else if (id == carriedId) {
-                    if (count < 64) {
-                        int space = 64 - count;
+                    if (count < cap(id)) {
+                        int space = cap(id) - count;
                         int move = Math.min(space, carriedCnt);
                         inv.setIdCount(slot, id, count + move);
                         carriedCnt -= move;
@@ -362,30 +374,30 @@ public final class GuiCrafting extends GuiScreen {
                 }
             }
         } else if (button == 1) {
-             if (carriedId == -1) {
-                 if (id > 0) {
-                     int half = (count + 1) / 2;
-                     carriedId = id;
-                     carriedCnt = half;
-                     inv.setIdCount(slot, id, count - half);
-                     if (count - half == 0) inv.setIdCount(slot, -1, 0);
-                 }
-             } else {
-                 if (id <= 0) {
-                     inv.setIdCount(slot, carriedId, 1);
-                     carriedCnt--;
-                     if (carriedCnt == 0) carriedId = -1;
-                 } else if (id == carriedId) {
-                     if (count < 64) {
-                         inv.setIdCount(slot, id, count + 1);
-                         carriedCnt--;
-                         if (carriedCnt == 0) carriedId = -1;
-                     }
-                 }
-             }
+            if (carriedId == -1) {
+                if (id > 0) {
+                    int half = (count + 1) / 2;
+                    carriedId = id;
+                    carriedCnt = half;
+                    inv.setIdCount(slot, id, count - half);
+                    if (count - half == 0) inv.setIdCount(slot, -1, 0);
+                }
+            } else {
+                if (id <= 0) {
+                    inv.setIdCount(slot, carriedId, 1);
+                    carriedCnt--;
+                    if (carriedCnt == 0) carriedId = -1;
+                } else if (id == carriedId) {
+                    if (count < cap(id)) {
+                        inv.setIdCount(slot, id, count + 1);
+                        carriedCnt--;
+                        if (carriedCnt == 0) carriedId = -1;
+                    }
+                }
+            }
         }
     }
-    
+
     private void checkRecipe() {
         ItemStack result = CraftingManager.getInstance().findMatchingRecipe(craftMatrix, 3);
         if (result != null) {
@@ -399,7 +411,7 @@ public final class GuiCrafting extends GuiScreen {
 
     private void handleOutputClick() {
         if (resultId <= 0) return;
-        
+
         // Can we pick it up?
         if (carriedId == -1) {
             carriedId = resultId;
@@ -407,28 +419,23 @@ public final class GuiCrafting extends GuiScreen {
             consumeGrid();
             checkRecipe();
         } else if (carriedId == resultId) {
-            if (carriedCnt + resultCount <= 64) {
+            if (carriedCnt + resultCount
+                    <= (resultId >= 256 && Item.items[resultId - 256] != null
+                            ? Item.items[resultId - 256].maxStackSize
+                            : 64)) {
                 carriedCnt += resultCount;
                 consumeGrid();
                 checkRecipe();
             }
         }
     }
-    
+
     private void consumeGrid() {
-        // Decrease items in grid
-        for (int i = 0; i < 9; i++) {
-            if (craftMatrix[i] > 0) {
-                craftCount[i]--;
-                if (craftCount[i] <= 0) {
-                    craftMatrix[i] = -1;
-                    craftCount[i] = 0;
-                }
-            }
-        }
+        CraftingManager.consumeIngredients(craftMatrix, craftCount);
     }
 
     private void drawSlotIcon(int id, int x, int y) {
+        id = net.classicremastered.minecraft.level.itemstack.Item.iconId(id);
         if (id > 0 && id < 256 && Block.blocks[id] != null) {
             GL11.glPushMatrix();
             GL11.glTranslatef(x, y, 0f);
@@ -438,7 +445,9 @@ public final class GuiCrafting extends GuiScreen {
             GL11.glRotatef(45.0F, 0.0F, 1.0F, 0.0F);
             GL11.glTranslatef(-1.5F, 0.5F, 0.5F);
             GL11.glScalef(-1.0F, -1.0F, -1.0F);
-            int tex = minecraft.textureManager.load("/terrain.png");
+            int tex =
+                    minecraft.textureManager.load(
+                            net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE);
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
             ShapeRenderer.instance.begin();
             Block.blocks[id].renderFullbright(ShapeRenderer.instance);
@@ -446,12 +455,12 @@ public final class GuiCrafting extends GuiScreen {
             GL11.glPopMatrix();
         } else {
             int idx = id - 256;
-             if (idx >= 0 && idx < Item.items.length && Item.items[idx] != null) {
+            if (idx >= 0 && idx < Item.items.length && Item.items[idx] != null) {
                 GL11.glPushMatrix();
                 GL11.glTranslatef(x, y, 0);
                 Item.items[idx].renderIcon(minecraft.textureManager, ShapeRenderer.instance);
                 GL11.glPopMatrix();
-             }
+            }
         }
     }
 
@@ -463,9 +472,9 @@ public final class GuiCrafting extends GuiScreen {
         int gridX = x0 + 30;
         int gridY = y0 + 17;
         for (int i = 0; i < 9; i++) {
-             int col = i % 3;
-             int row = i / 3;
-             if (isOver(mx, my, gridX + col * 18, gridY + row * 18)) return i;
+            int col = i % 3;
+            int row = i / 3;
+            if (isOver(mx, my, gridX + col * 18, gridY + row * 18)) return i;
         }
 
         // Main Inventory (9-35)

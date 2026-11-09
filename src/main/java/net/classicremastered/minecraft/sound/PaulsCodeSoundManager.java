@@ -20,7 +20,12 @@ public final class PaulsCodeSoundManager {
     private final Map<String, List<URL>> sfx = new HashMap<>();
     private final Map<String, List<URL>> musicPools = new HashMap<>();
 
+    private static final String FAR_LANDS_MELODY = "FarLandsMelody";
+    private static final String FAR_LANDS_HARMONY = "FarLandsHarmony";
+    private static final float MINOR_THIRD = (float) Math.pow(2.0, 3.0 / 12.0);
     private final SoundSystem sys;
+    private int farLandsTrackTick;
+    private boolean farLandsTrackStarted;
     private final Set<String> registeredKeys = new HashSet<>();
 
     // Far Lands audio chaos
@@ -60,6 +65,14 @@ public final class PaulsCodeSoundManager {
     }
 
     public void registerSound(File file, String id) {
+        try {
+            registerSound(file.toURI().toURL(), id);
+        } catch (java.net.MalformedURLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public synchronized void registerSound(URL url, String id) {
         String noExt = id;
         int dot = noExt.lastIndexOf('.');
         if (dot > 0)
@@ -72,11 +85,7 @@ public final class PaulsCodeSoundManager {
         String pooledName = base.replaceAll("\\d+$", "");
         String poolKey = (folder.isEmpty() ? pooledName : (folder + "/" + pooledName));
 
-        try {
-            sfx.computeIfAbsent(poolKey, k -> new ArrayList<>()).add(file.toURI().toURL());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        sfx.computeIfAbsent(poolKey, k -> new ArrayList<>()).add(url);
     }
 
     public void registerMusic(String poolKey, File file) {
@@ -160,19 +169,9 @@ public final class PaulsCodeSoundManager {
 
         String chosenKey = key;
 
-        // Far Lands corruption rules (unchanged)
-        if (farlandsActive && !forceClean) {
-            if (playerDist > 5_000_000) {
-                List<String> keys = new ArrayList<>(sfx.keySet());
-                if (!keys.isEmpty()) {
-                    chosenKey = keys.get(rng.nextInt(keys.size()));
-                }
-            } else if (playerDist > 1_000_000 && rng.nextFloat() < 0.3f) {
-                List<String> keys = new ArrayList<>(sfx.keySet());
-                if (!keys.isEmpty()) {
-                    chosenKey = keys.get(rng.nextInt(keys.size()));
-                }
-            }
+        if (farlandsActive && !forceClean && (playerDist > 5_000_000
+                || playerDist > 1_000_000 && rng.nextFloat() < 0.3f)) {
+            chosenKey = randomFarLandsSoundKey(key);
         }
 
         List<URL> list = sfx.get(chosenKey);
@@ -233,9 +232,57 @@ public final class PaulsCodeSoundManager {
 
     /* ---------------- Far Lands corruption tick ---------------- */
 
-    public void tickFarlandsAudio() {
-        if (!farlandsActive)
+    private synchronized String randomFarLandsSoundKey(String fallback) {
+        if (sfx.isEmpty()) return fallback;
+        List<String> keys = new ArrayList<>(sfx.keySet());
+        return keys.get(rng.nextInt(keys.size()));
+    }
+
+    public synchronized void tickFarLandsSoundtrack(boolean enabled) {
+        if (!enabled || !settings.sound) {
+            stopFarLandsSoundtrack();
             return;
+        }
+
+        if (!farLandsTrackStarted) {
+            List<URL> clips = sfx.get("note/pling");
+            if (clips == null || clips.isEmpty()) return;
+            URL clip = clips.get(rng.nextInt(clips.size()));
+            sys.newSource(true, FAR_LANDS_MELODY, clip, clip.toString(), false,
+                    0f, 0f, 0f, SoundSystemConfig.ATTENUATION_NONE, 0f);
+            sys.newSource(true, FAR_LANDS_HARMONY, clip, clip.toString(), false,
+                    0f, 0f, 0f, SoundSystemConfig.ATTENUATION_NONE, 0f);
+            farLandsTrackStarted = true;
+        }
+
+        farLandsTrackTick = (farLandsTrackTick + 1) % (16 * 6);
+        if (farLandsTrackTick % 6 != 0) return;
+        int step = farLandsTrackTick / 6;
+        int thirds = (step >= 8 ? 1 : 0) + step % 2;
+        float pitch = .6f * (float) Math.pow(MINOR_THIRD, thirds);
+        playFarLandsNote(FAR_LANDS_MELODY, pitch, .9f);
+        playFarLandsNote(FAR_LANDS_HARMONY, pitch * MINOR_THIRD, .7f);
+    }
+
+    private void playFarLandsNote(String source, float pitch, float volume) {
+        if (sys.playing(source)) sys.stop(source);
+        sys.setPitch(source, pitch);
+        sys.setVolume(source, volume * master);
+        sys.play(source);
+    }
+
+    public synchronized void stopFarLandsSoundtrack() {
+        if (!farLandsTrackStarted) return;
+        if (sys.playing(FAR_LANDS_MELODY)) sys.stop(FAR_LANDS_MELODY);
+        if (sys.playing(FAR_LANDS_HARMONY)) sys.stop(FAR_LANDS_HARMONY);
+        sys.removeSource(FAR_LANDS_MELODY);
+        sys.removeSource(FAR_LANDS_HARMONY);
+        farLandsTrackStarted = false;
+        farLandsTrackTick = 0;
+    }
+
+    public void tickFarlandsAudio() {
+        if (!farlandsActive || !settings.music) return;
 
         // Music corruption
         if (sys.playing("BgMusic")) {
@@ -320,6 +367,7 @@ public final class PaulsCodeSoundManager {
 
     public void resetAudioState() {
         farlandsActive = false;
+        stopFarLandsSoundtrack();
         playerDist = 0;
         musicGlitchCounter = 0;
         herobrineCounter = 0;

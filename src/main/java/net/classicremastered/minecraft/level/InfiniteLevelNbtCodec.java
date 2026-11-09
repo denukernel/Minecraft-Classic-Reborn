@@ -1,13 +1,12 @@
 package net.classicremastered.minecraft.level;
 
-import java.io.*;
-import java.util.Map;
-
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
-import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.nbt.*;
+
+import java.io.*;
+import java.util.Map;
 
 /** Reads and writes infinite terrain and flat world NBT data. */
 final class InfiniteLevelNbtCodec {
@@ -27,6 +26,7 @@ final class InfiniteLevelNbtCodec {
             depthY = flat.depth;
             map = flat.chunks().getAllChunks();
         } else if (level instanceof LevelInfiniteTerrain terrain) {
+            if (terrain.biomesEnabled) root.putString("TerrainType", "Biomes");
             seed = terrain.randomSeed;
             depthY = terrain.depth;
             map = terrain.chunks().getAllChunks();
@@ -34,6 +34,15 @@ final class InfiniteLevelNbtCodec {
 
         root.putLong("Seed", seed);
         root.putInt("Depth", depthY);
+        root.putString("Name", level.name);
+        root.putString("Creator", level.creator);
+        root.putLong("CreateTime", level.createTime);
+        root.putBoolean("Creative", level.creativeMode);
+        root.putInt("SpawnX", level.xSpawn);
+        root.putInt("SpawnY", level.ySpawn);
+        root.putInt("SpawnZ", level.zSpawn);
+        root.putFloat("SpawnRot", level.rotSpawn);
+        root.putInt("WaterLevel", level.waterLevel);
         root.putInt("TimeOfDay", level.timeOfDay);
         root.putByte("DoDayNightCycle", (byte) (level.doDayNightCycle ? 1 : 0));
 
@@ -75,7 +84,9 @@ final class InfiniteLevelNbtCodec {
             for (Map.Entry<Long, SimpleChunk> e : map.entrySet()) {
                 CompoundTag chunkTag = new CompoundTag(null);
                 chunkTag.putLong("Key", e.getKey());
+                chunkTag.putBoolean("Loaded", e.getValue().loaded);
                 chunkTag.putByteArray("Blocks", e.getValue().blocks);
+                GeneratedOccupant.save(e.getValue().generatedOccupants, chunkTag);
                 chunks.add(chunkTag);
             }
         }
@@ -107,9 +118,14 @@ final class InfiniteLevelNbtCodec {
             mobTag.put(mRot);
 
             mobTag.putInt("Health", m.health);
+            m.savePersistence(mobTag);
+            net.classicremastered.minecraft.level.itemstack.Equipment.save(m, mobTag);
+            VillagerDoorManager.saveHome(m, mobTag);
             entities.add(mobTag);
         }
         root.put(entities);
+        level.villagerDoors().save(root);
+        WorldStateNbtCodec.save(level, root);
 
         net.classicremastered.nbt.NBTIO.write(root, out);
     }
@@ -118,18 +134,36 @@ final class InfiniteLevelNbtCodec {
         String type = root.getString("TerrainType");
         long seed = root.getLong("Seed");
         int depth = root.getInt("Depth");
+        if (depth <= 0 || depth > Integer.MAX_VALUE / 256) {
+            throw new IOException("Invalid infinite world depth: " + depth);
+        }
+        ListTag chunks = root.getList("Chunks");
+        for (int i = 0; i < chunks.size(); i++) {
+            CompoundTag chunkTag = (CompoundTag) chunks.get(i);
+            if (chunkTag.getByteArray("Blocks").length != depth * 256) {
+                throw new IOException("Invalid block count for chunk " + chunkTag.getLong("Key"));
+            }
+        }
 
         Level level;
         if ("Flat".equalsIgnoreCase(type)) {
             level = new LevelInfiniteFlat(seed, depth);
         } else {
-            level = new LevelInfiniteTerrain(seed, depth);
+            level = new LevelInfiniteTerrain(seed, depth, "Biomes".equalsIgnoreCase(type));
         }
 
         level.setTime(root.getInt("TimeOfDay"));
         level.doDayNightCycle = root.getBoolean("DoDayNightCycle");
+        if (root.hasKey("Name")) level.name = root.getString("Name");
+        if (root.hasKey("Creator")) level.creator = root.getString("Creator");
+        if (root.hasKey("CreateTime")) level.createTime = root.getLong("CreateTime");
+        if (root.hasKey("Creative")) level.creativeMode = root.getBoolean("Creative");
+        if (root.hasKey("SpawnX")) level.xSpawn = root.getInt("SpawnX");
+        if (root.hasKey("SpawnY")) level.ySpawn = root.getInt("SpawnY");
+        if (root.hasKey("SpawnZ")) level.zSpawn = root.getInt("SpawnZ");
+        if (root.hasKey("SpawnRot")) level.rotSpawn = root.getFloat("SpawnRot");
+        if (root.hasKey("WaterLevel")) level.waterLevel = root.getInt("WaterLevel");
 
-        ListTag chunks = root.getList("Chunks");
         SimpleChunkManager chunkMgr = null;
         if (level instanceof LevelInfiniteFlat) {
             chunkMgr = ((LevelInfiniteFlat) level).chunks();
@@ -143,10 +177,16 @@ final class InfiniteLevelNbtCodec {
                 long key = chunkTag.getLong("Key");
                 byte[] blocks = chunkTag.getByteArray("Blocks");
                 chunkMgr.restoreChunk(key, blocks);
+                chunkMgr.restoreOccupants(key, chunkTag);
+                if (chunkTag.hasKey("Loaded"))
+                    chunkMgr.tryGet((int) (key >> 32), (int) key).loaded =
+                            chunkTag.getBoolean("Loaded");
             }
         }
 
-        level.blockMap = new net.classicremastered.minecraft.level.BlockMap(level.width, level.depth, level.height);
+        level.blockMap =
+                new net.classicremastered.minecraft.level.BlockMap(
+                        level.width, level.depth, level.height);
         level.blockMap.infiniteMode = true;
         for (Entity e : level.blockMap.all) {
             e.blockMap = level.blockMap;
@@ -169,7 +209,8 @@ final class InfiniteLevelNbtCodec {
             }
 
             if (level.player == null) {
-                net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(null);
+                net.classicremastered.minecraft.player.Player loadedPlayer =
+                        new net.classicremastered.minecraft.player.Player(null);
                 loadedPlayer.level = level;
                 level.player = loadedPlayer;
                 loadedPlayer.moveTo(px, py, pz, yaw, pitch);
@@ -181,6 +222,7 @@ final class InfiniteLevelNbtCodec {
 
         PlayerNbtCodec.load(player, level.player);
         ListTag entities = root.getList("Entities");
+        level.villagerDoors().load(root);
         net.classicremastered.minecraft.mob.MobRegistry.bootstrapDefaults();
         for (int i = 0; i < entities.size(); i++) {
             CompoundTag mobTag = (CompoundTag) entities.get(i);
@@ -210,12 +252,16 @@ final class InfiniteLevelNbtCodec {
 
             var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, level, mx, my, mz);
             if (mob != null) {
+                net.classicremastered.minecraft.level.itemstack.Equipment.load(mob, mobTag);
+                VillagerDoorManager.loadHome(mob, mobTag);
                 mob.yRot = myRot;
                 mob.xRot = mxRot;
                 mob.health = health;
+                mob.loadPersistence(mobTag);
                 level.addEntity(mob);
             }
         }
+        WorldStateNbtCodec.load(level, root);
         level.updateDayNightColorsSmooth();
 
         return level;

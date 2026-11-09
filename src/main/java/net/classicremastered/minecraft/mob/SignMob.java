@@ -1,13 +1,13 @@
 // File: src/net/classicremastered/minecraft/mob/SignMob.java
 package net.classicremastered.minecraft.mob;
 
-import org.lwjgl.opengl.GL11;
-
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.model.ModelPart;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
+
+import org.lwjgl.opengl.GL11;
 
 public final class SignMob extends Mob {
 
@@ -17,15 +17,10 @@ public final class SignMob extends Mob {
     static {
         board.setBounds(-12.0F, -14.0F, -1.0F, 24, 12, 2, 0.0F); // board
         stick = new ModelPart(0, 14);
-        stick.setBounds(-1.0F, -2.0F, -1.0F, 2, 14, 2, 0.0F);   // stick
+        stick.setBounds(-1.0F, -2.0F, -1.0F, 2, 14, 2, 0.0F); // stick
     }
 
-    private final String[] taunts = {
-        "KEEP OUT!",
-        "NO TRESPASSING",
-        "STOP!",
-        "TURN BACK!"
-    };
+    private final String[] taunts = {"KEEP OUT!", "NO TRESPASSING", "STOP!", "TURN BACK!"};
     private String currentText = "KEEP OUT!";
 
     public SignMob(Level level, float x, float y, float z) {
@@ -66,7 +61,8 @@ public final class SignMob extends Mob {
             // changed: use persistent AI instead of recreating
             if (!(this.ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI)) {
                 this.ai = new net.classicremastered.minecraft.mob.ai.BasicAI();
-                ((net.classicremastered.minecraft.mob.ai.BasicAI) this.ai).runSpeed = 0.23F; // changed: normal speed cap
+                ((net.classicremastered.minecraft.mob.ai.BasicAI) this.ai).runSpeed =
+                        0.23F; // changed: normal speed cap
             }
             ((net.classicremastered.minecraft.mob.ai.BasicAI) this.ai).attackTarget = target;
 
@@ -78,7 +74,6 @@ public final class SignMob extends Mob {
         }
     }
 
-
     @Override
     public void render(TextureManager tm, float partial) {
         GL11.glPushMatrix();
@@ -89,7 +84,7 @@ public final class SignMob extends Mob {
         GL11.glTranslatef(px, py, pz);
 
         GL11.glRotatef(-this.yRot, 0.0F, 1.0F, 0.0F); // fixed: now faces player
-        
+
         int tex = tm.load("/item/sign.png");
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
         GL11.glEnable(GL11.GL_TEXTURE_2D);
@@ -102,7 +97,10 @@ public final class SignMob extends Mob {
         GL11.glPopMatrix();
 
         // Text overlay
-        if (this.currentText != null && !this.currentText.isEmpty() && level != null && level.minecraft != null) {
+        if (this.currentText != null
+                && !this.currentText.isEmpty()
+                && level != null
+                && level.minecraft != null) {
             net.classicremastered.minecraft.gui.FontRenderer font = level.minecraft.fontRenderer;
             if (font != null) {
                 float scale = 0.016666668F;
@@ -123,11 +121,16 @@ public final class SignMob extends Mob {
 
     @Override
     public void die(Entity killer) {
+        if (dead || removed) return;
         super.die(killer);
+        if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
         // Drop wood when killed
-        this.level.addEntity(new net.classicremastered.minecraft.entity.DroppedBlock(
-            this.level, this.x, this.y, this.z,
-            net.classicremastered.minecraft.level.tile.Block.WOOD.id
-        ));
+        this.level.addEntity(
+                new net.classicremastered.minecraft.entity.DroppedBlock(
+                        this.level,
+                        this.x,
+                        this.y,
+                        this.z,
+                        net.classicremastered.minecraft.level.tile.Block.WOOD.id));
     }
 }

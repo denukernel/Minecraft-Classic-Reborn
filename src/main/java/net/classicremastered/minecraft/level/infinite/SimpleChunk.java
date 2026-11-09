@@ -9,6 +9,10 @@ public final class SimpleChunk {
     public final int cz;
     public final int height;
 
+    public final java.util.List<Runnable> residents = new java.util.ArrayList<>();
+    public boolean residentsPublished;
+    public final java.util.List<net.classicremastered.minecraft.level.GeneratedOccupant>
+            generatedOccupants = new java.util.ArrayList<>();
     public byte[] blocks;
     public byte[] light;
 

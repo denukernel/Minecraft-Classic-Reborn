@@ -1,384 +1,275 @@
-// File: src/com/mojang/minecraft/level/MobSpawner.java
 package net.classicremastered.minecraft.level;
 
-import java.util.List;
-
+import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.ProgressBarDisplay;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.*;
+import net.classicremastered.minecraft.phys.AABB;
 
-/**
- * Mob spawner tuned so monsters spawn more often on the surface at night
- * (rather than mostly in caves). Keeps the safer placement checks.
- */
+/** Bounded local populations and individually validated species packs. */
 public final class MobSpawner {
     public Level level;
-    public static final int SPAWN_RADIUS = 48;
-    public static final int DESPAWN_RADIUS = 64;
-    public static final int LOCAL_MOB_CAP = 32;
+    public static final int SPAWN_RADIUS = 48, DESPAWN_RADIUS = 128, LOCAL_MOB_CAP = 32;
+    public static final int ANIMAL_CAP = 12;
 
     public MobSpawner(Level level) {
         this.level = level;
     }
 
-    private boolean isBrightDay() {
-        return level != null && level.getDaylightBrightness() >= 0.60f;
+    public static boolean isAnimal(Mob mob) {
+        return mob instanceof Pig
+                || mob instanceof Sheep
+                || mob instanceof Chicken
+                || mob instanceof Cow;
     }
 
-    private int countNearby(Class<?> cls, float cx, float cy, float cz, float r, int limit) {
-        if (level == null || level.blockMap == null) return 0;
-        float r2 = r * r;
-        int n = 0;
-        List all = level.blockMap.all;
-        for (int i = 0; i < all.size(); i++) {
-            Object o = all.get(i);
-            if (!(o instanceof Entity)) continue;
-            if (!cls.isAssignableFrom(o.getClass())) continue;
-            Entity e = (Entity) o;
-            if (e.removed || e instanceof net.classicremastered.minecraft.player.Player) continue;
-            float dx = e.x - cx, dy = e.y - cy, dz = e.z - cz;
-            if (dx * dx + dy * dy + dz * dz <= r2 && ++n >= limit) break;
+    public static boolean isMonster(Mob mob) {
+        return mob instanceof Zombie
+                || mob instanceof Creeper
+                || mob instanceof Spider
+                || mob instanceof Enderman
+                || mob instanceof HouseVandalizer;
+    }
+
+    public int monsterCap() {
+        return switch (CombatRules.difficulty(level)) {
+            case PEACEFUL -> 0;
+            case EASY -> 12;
+            case NORMAL -> 20;
+            case HARD -> 28;
+        };
+    }
+
+    private int nearby(float x, float y, float z, int category, Class<?> species, float radius) {
+        int count = 0;
+        for (Object value :
+                level.findEntities(
+                        null,
+                        new AABB(
+                                x - radius,
+                                y - radius,
+                                z - radius,
+                                x + radius,
+                                y + radius,
+                                z + radius))) {
+            if (!(value instanceof Mob mob) || mob.removed || mob.health <= 0) continue;
+            float dx = mob.x - x, dy = mob.y - y, dz = mob.z - z;
+            if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+            if (species != null
+                    ? species.isInstance(mob)
+                    : category == 0 ? isAnimal(mob) : isMonster(mob)) count++;
         }
-        return n;
+        return count;
     }
 
-    private boolean allowThisCallToSpawn(boolean brightDay) {
-        int denom = brightDay ? 4 : 2;
-        return level.random.nextInt(denom) == 0;
+    private int population(float x, float y, float z, int category, Entity near) {
+        if (near != null) return nearby(x, y, z, category, null, DESPAWN_RADIUS);
+        int count = 0;
+        if (level.blockMap != null)
+            for (Object value : level.blockMap.all)
+                if (value instanceof Mob mob
+                        && !mob.removed
+                        && mob.health > 0
+                        && (category == 0 ? isAnimal(mob) : isMonster(mob))) count++;
+        return count;
     }
 
-    private boolean isFeetOk(int x, int y, int z) {
-        if (y <= 0) return false;
-        return y > 0 && y < level.depth - 1
-            && !level.isSolidTile(x, y, z)
-            && level.isSolidTile(x, y - 1, z)
-            && level.getLiquid(x, y, z) == LiquidType.NOT_LIQUID
-            && level.getLiquid(x, y - 1, z) == LiquidType.NOT_LIQUID;
+    private boolean inside(int x, int z) {
+        return level instanceof LevelInfiniteTerrain
+                || level instanceof LevelInfiniteFlat
+                || x >= 0 && z >= 0 && x < level.width && z < level.height;
     }
 
-    private int findSafeFeetY(int x, int guessY, int z) {
-        if (isFeetOk(x, guessY, z)) return guessY;
-        for (int d = 1; d <= 8; d++) {
-            int y1 = guessY - d; if (isFeetOk(x, y1, z)) return y1;
-            int y2 = guessY + d; if (isFeetOk(x, y2, z)) return y2;
+    private void ensureColumn(int x, int z) {
+        if (level instanceof LevelInfiniteTerrain t) t.chunks().getOrCreate(x >> 4, z >> 4);
+        else if (level instanceof LevelInfiniteFlat f) f.chunks.getOrCreate(x >> 4, z >> 4);
+    }
+
+    private boolean feetOk(int x, int y, int z) {
+        return y > 0
+                && y < level.depth - 1
+                && level.isSolidTile(x, y - 1, z)
+                && !level.isSolidTile(x, y, z)
+                && level.getLiquid(x, y, z) == LiquidType.NOT_LIQUID
+                && level.getLiquid(x, y - 1, z) == LiquidType.NOT_LIQUID;
+    }
+
+    private int feet(int x, int y, int z) {
+        for (int delta = 0; delta <= 8; delta++) {
+            if (feetOk(x, y - delta, z)) return y - delta;
+            if (delta > 0 && feetOk(x, y + delta, z)) return y + delta;
         }
         return -1;
     }
 
-    private void ensureColumn(int x, int z) {
-        if (level instanceof LevelInfiniteTerrain terrain) terrain.chunks().getOrCreate(x >> 4, z >> 4);
-        else if (level instanceof LevelInfiniteFlat flat) flat.chunks.getOrCreate(x >> 4, z >> 4);
+    private boolean range(float x, float y, float z, Entity near) {
+        float dx = x - (near == null ? level.xSpawn : near.x),
+                dy = y - (near == null ? level.ySpawn : near.y),
+                dz = z - (near == null ? level.zSpawn : near.z);
+        float d = dx * dx + dy * dy + dz * dz;
+        return d >= 24 * 24 && (near == null || d <= SPAWN_RADIUS * SPAWN_RADIUS);
     }
 
-    private boolean withinSpawnRange(float x, float y, float z, Entity near) {
-        float dx = x - (near == null ? level.xSpawn : near.x);
-        float dy = y - (near == null ? level.ySpawn : near.y);
-        float dz = z - (near == null ? level.zSpawn : near.z);
-        float distance = dx * dx + dy * dy + dz * dz;
-        // Initial finite-world seeding may populate the whole map. Runtime spawning
-        // stays inside the active population radius, with a quiet area around the player.
-        return distance >= 24 * 24 && (near == null || distance <= SPAWN_RADIUS * SPAWN_RADIUS);
+    private boolean animalSpot(int x, int y, int z) {
+        return level.getTile(x, y - 1, z) == Block.GRASS.id
+                && level.isLit(x, y, z)
+                && level.getDaylightBrightness() >= .6f;
     }
 
-    // ==== API ================================================================
+    private boolean dark(int x, int y, int z) {
+        return !(level.isLit(x, y, z) && level.getDaylightBrightness() >= .6f)
+                && level.getBrightness(x, y, z) <= .45f;
+    }
+
+    private boolean villagerNear(float x, float y, float z) {
+        for (Object o :
+                level.findEntities(null, new AABB(x - 32, y - 16, z - 32, x + 32, y + 16, z + 32)))
+            if (o instanceof Villager v && v.hasHome && !v.removed && v.health > 0) return true;
+        return false;
+    }
+
+    private short monster() {
+        int r = level.random.nextInt(97);
+        if (r < 4) return 7;
+        if (r < 47) return 1;
+        if (r < 77) return 2;
+        if (r < 90) return 23;
+        return 3;
+    }
 
     public final int spawn(int batches, Entity near, ProgressBarDisplay bar) {
         return spawn(batches, near, bar, true);
     }
 
-    public final int spawn(int batches, Entity near, ProgressBarDisplay bar, boolean allowHostiles) {
-        if (this.level == null) return 0;
-        try { MobRegistry.bootstrapDefaults(); } catch (Throwable ignored) {}
-
+    public final int spawn(
+            int batches, Entity near, ProgressBarDisplay bar, boolean allowHostiles) {
+        if (level == null || level.isNetworkMode() || !level.doMobSpawning) return 0;
+        MobRegistry.bootstrapDefaults();
+        allowHostiles &= near != null && monsterCap() > 0;
+        float centerX = near == null ? level.xSpawn : near.x,
+                centerY = near == null ? level.ySpawn : near.y,
+                centerZ = near == null ? level.zSpawn : near.z;
         int spawned = 0;
-
-        // Herobrine far away
-        double dist = Math.max(Math.abs(near != null ? near.x : level.xSpawn),
-                               Math.abs(near != null ? near.z : level.zSpawn));
-        if (dist >= 6_000_000) {
-            if (level.random.nextInt(200) == 0) {
-                float px = (near != null ? near.x : level.xSpawn) + (level.random.nextInt(32) - 16);
-                float pz = (near != null ? near.z : level.zSpawn) + (level.random.nextInt(32) - 16);
-                int py = level.getHighestTile((int)px, (int)pz);
-
-                FakeHerobrine h = new FakeHerobrine(level);
-                h.setPos(px + 0.5f, py, pz + 0.5f);
-
-                if (!level.isFree(h.bb)) {
-                    h.y += 1.0f;
-                    h.setPos(h.x, h.y, h.z);
+        // Preserve the distant-world special encounter, with safe final placement.
+        if (Math.max(Math.abs(centerX), Math.abs(centerZ)) >= 6000000) {
+            if (allowHostiles && level.random.nextInt(200) == 0) {
+                int x = (int) centerX + 24 + level.random.nextInt(20), z = (int) centerZ;
+                ensureColumn(x, z);
+                int y = feet(x, level.getHighestTile(x, z), z);
+                if (y > 0) {
+                    FakeHerobrine mob = new FakeHerobrine(level);
+                    if (place(mob, x, y, z, near)) {
+                        level.addEntity(mob);
+                        spawned++;
+                    }
                 }
-
-                level.addEntity(h);
-                spawned++;
             }
             return spawned;
         }
-
-        final boolean brightDay = isBrightDay();
-        if (!allowThisCallToSpawn(brightDay)) return 0;
-
-        int area;
-        final boolean isInfinite = level instanceof LevelInfiniteTerrain || level instanceof LevelInfiniteFlat;
-        if (isInfinite) {
-            final int SIM_RADIUS = 128;
-            area = Math.max(1, ((SIM_RADIUS * 2) / 16) * ((SIM_RADIUS * 2) / 16));
-        } else {
-            area = Math.max(1, (this.level.width * this.level.height * this.level.depth) / 64 / 64 / 64);
-        }
-
-        // spawn caps
-        final int GLOBAL_CAP    = near == null ? area * 60 : Math.min(area * 60, LOCAL_MOB_CAP);
-        final int ZOMBIE_CAP    = area * 20;
-        final int SKELETON_CAP  = area * 20;
-        final int CREEPER_CAP   = area * 15;
-        final int SPIDER_CAP    = area * 18;
-        final int PIG_CAP       = area * 35;
-        final int SHEEP_CAP     = area * 35;
-        final int CHICKEN_CAP   = area * 35;
-        final int BABYZ_CAP     = Math.max(2, area * 6);
-
-        final short ENDERMAN_ID = MobRegistry.idOfName("Enderman");
-        final int ENDERMAN_CAP  = area * 6;
-
-        final int IRON_GOLEM_CAP = area * 4; // NEW: rare cap
-
-        int countAll      = near == null ? this.level.countInstanceOf(Mob.class)
-            : countNearby(Mob.class, near.x, near.y, near.z, DESPAWN_RADIUS, Integer.MAX_VALUE);
-        int countZombie   = this.level.countInstanceOf(Zombie.class);
-        int countSkel     = this.level.countInstanceOf(Skeleton.class);
-        int countCreeper  = this.level.countInstanceOf(Creeper.class);
-        int countSpider   = this.level.countInstanceOf(Spider.class);
-        int countPig      = this.level.countInstanceOf(Pig.class);
-        int countSheep    = this.level.countInstanceOf(Sheep.class);
-        int countChicken  = this.level.countInstanceOf(Chicken.class);
-        int countBabyZ    = this.level.countInstanceOf(BabyZombie.class);
-        int countEnderman = this.level.countInstanceOf(Enderman.class);
-        int countIronGolem= this.level.countInstanceOf(IronGolem.class); // NEW
-
-        final int w = this.level.width, h = this.level.height, d = this.level.depth;
-        final int SIM_RADIUS = SPAWN_RADIUS;
-
-        for (int b = 0; b < batches; ++b) {
-            if (bar != null && batches > 1) bar.setProgress(b * 100 / (batches - 1));
-            if (countAll >= GLOBAL_CAP) break;
-
-            int x0, z0;
-            if (isInfinite) {
-                int px = (near != null) ? (int) near.x : level.xSpawn;
-                int pz = (near != null) ? (int) near.z : level.zSpawn;
-                x0 = px + level.random.nextInt(SIM_RADIUS * 2) - SIM_RADIUS;
-                z0 = pz + level.random.nextInt(SIM_RADIUS * 2) - SIM_RADIUS;
-                ensureColumn(x0, z0);
-            } else {
-                int minX = near == null ? 0 : Math.max(0, (int) Math.floor(near.x) - SPAWN_RADIUS);
-                int maxX = near == null ? w - 1 : Math.min(w - 1, (int) Math.floor(near.x) + SPAWN_RADIUS);
-                int minZ = near == null ? 0 : Math.max(0, (int) Math.floor(near.z) - SPAWN_RADIUS);
-                int maxZ = near == null ? h - 1 : Math.min(h - 1, (int) Math.floor(near.z) + SPAWN_RADIUS);
-                if (minX > maxX || minZ > maxZ) break;
-                x0 = minX + this.level.random.nextInt(maxX - minX + 1);
-                z0 = minZ + this.level.random.nextInt(maxZ - minZ + 1);
-            }
-
-            int ySurface = this.level.getHighestTile(x0, z0);
-            int yCave = (int)(Math.min(this.level.random.nextFloat(), this.level.random.nextFloat()) * d);
-            boolean surfaceLit = this.level.isLit(x0, ySurface, z0);
-
-            for (int cluster = 0; cluster < 2 && countAll < GLOBAL_CAP; ++cluster) {
-                int x = x0 + this.level.random.nextInt(6) - this.level.random.nextInt(6);
-                int z = z0 + this.level.random.nextInt(6) - this.level.random.nextInt(6);
-
-                if (!isInfinite) {
-                    if (x < 0 || z < 0 || x >= w || z >= h) continue;
-                } else {
-                    ensureColumn(x, z);
-                }
-
-                boolean tryCave;
-                if (brightDay) {
-                    tryCave = (!surfaceLit);
-                } else {
-                    tryCave = (!surfaceLit) && (this.level.random.nextInt(6) == 0);
-                }
-
-                int guessY = tryCave ? yCave : level.getHighestTile(x, z);
-                int feetY = findSafeFeetY(x, guessY, z);
-                if (feetY < 1 || feetY >= d - 2) continue;
-
-                float cx = x + 0.5f, cy = feetY + 1.0f, cz = z + 0.5f;
-                if (!withinSpawnRange(cx, cy, cz, near)) {
+        // Initial seeding uses a finite work budget and one bounded population budget.
+        int limit = Math.min(Math.max(0, batches), near == null ? 256 : 6);
+        for (int batch = 0; batch < limit; batch++) {
+            if (bar != null) bar.setProgress(batch * 100 / Math.max(1, limit - 1));
+            int animals = population(centerX, centerY, centerZ, 0, near),
+                    monsters = population(centerX, centerY, centerZ, 1, near);
+            boolean golemCandidate = near != null && level.random.nextInt(100) == 0;
+            boolean animal =
+                    golemCandidate
+                            || animals < ANIMAL_CAP
+                                    && (!allowHostiles
+                                            || monsters >= monsterCap()
+                                            || level.random.nextBoolean());
+            if (!golemCandidate
+                    && (animal
+                            ? animals >= ANIMAL_CAP
+                            : !allowHostiles || monsters >= monsterCap())) continue;
+            boolean infinite =
+                    level instanceof LevelInfiniteTerrain || level instanceof LevelInfiniteFlat;
+            int x =
+                    near == null && !infinite
+                            ? level.random.nextInt(level.width)
+                            : (int) Math.floor(centerX) + level.random.nextInt(97) - 48;
+            int z =
+                    near == null && !infinite
+                            ? level.random.nextInt(level.height)
+                            : (int) Math.floor(centerZ) + level.random.nextInt(97) - 48;
+            if (!inside(x, z)) continue;
+            ensureColumn(x, z);
+            int guess = level.getHighestTile(x, z);
+            if (!animal && level.random.nextInt(3) == 0)
+                guess = 1 + level.random.nextInt(Math.max(1, Math.min(level.depth - 2, guess)));
+            int y = feet(x, guess, z);
+            if (y < 1) continue;
+            short id = animal ? new short[] {21, 22, 25, 43}[level.random.nextInt(4)] : monster();
+            boolean golem = golemCandidate && villagerNear(x, y, z);
+            if (golemCandidate && !golem) continue;
+            boolean vandal =
+                    !animal
+                            && level.getDaylightBrightness() < .6f
+                            && level.isLit(x, y, z)
+                            && level.random.nextInt(2000) == 0
+                            && level.countInstanceOf(HouseVandalizer.class) < 2
+                            && villagerNear(x, y, z);
+            if (golem) id = 27;
+            else if (vandal) id = HouseVandalizer.REGISTRY_ID;
+            int pack =
+                    golem || vandal
+                            ? 1
+                            : animal ? 2 + level.random.nextInt(3) : 1 + level.random.nextInt(3);
+            for (int member = 0; member < pack; member++) {
+                if (!golem
+                        && population(centerX, centerY, centerZ, animal ? 0 : 1, near)
+                                >= (animal ? ANIMAL_CAP : monsterCap())) break;
+                int sx = x + level.random.nextInt(7) - 3, sz = z + level.random.nextInt(7) - 3;
+                if (!inside(sx, sz)) continue;
+                ensureColumn(sx, sz);
+                int sy = feet(sx, y, sz);
+                if (sy < 1) continue;
+                if (animal ? !animalSpot(sx, sy, sz) : !dark(sx, sy, sz)) continue;
+                if (golem
+                        && (!villagerNear(sx, sy, sz)
+                                || nearby(sx, sy, sz, 0, IronGolem.class, 32) > 0)) continue;
+                if (vandal && !villagerNear(sx, sy, sz)) continue;
+                short variant = id;
+                if (id == 2 && level.random.nextInt(100) < 5) variant = BabySkeleton.REGISTRY_ID;
+                if (id == 1 && level.random.nextInt(100) < 5) variant = 40;
+                Mob mob = MobRegistry.create(variant, level, sx + .5f, sy, sz + .5f);
+                if (mob == null || mob.getRegistryId() != variant || !place(mob, sx, sy, sz, near))
                     continue;
-                }
-
-                short mobId = pickMobId(tryCave, brightDay, this.level.isLit(x, feetY, z), allowHostiles, ENDERMAN_ID);
-                if (mobId < 0) continue;
-
-                if ((mobId == 1  && countZombie   >= ZOMBIE_CAP)   ||
-                    (mobId == 2  && countSkel     >= SKELETON_CAP) ||
-                    (mobId == 3  && countCreeper  >= CREEPER_CAP)  ||
-                    (mobId == 23 && countSpider   >= SPIDER_CAP)   ||
-                    (mobId == 21 && countPig      >= PIG_CAP)      ||
-                    (mobId == 22 && countSheep    >= SHEEP_CAP)    ||
-                    (mobId == 25 && countChicken  >= CHICKEN_CAP)  ||
-                    (mobId == 40 && countBabyZ    >= BABYZ_CAP)    ||
-                    (mobId == 27 && countIronGolem>= IRON_GOLEM_CAP) || // NEW
-                    (ENDERMAN_ID >= 0 && mobId == ENDERMAN_ID && countEnderman >= ENDERMAN_CAP))  continue;
-
-                final float D_RAD = 32f;
-                final int D_MAX = (mobId == 21 || mobId == 22 || mobId == 25) ? 6 : (mobId == 23) ? 6 : 8;
-                Class<?> cls = (mobId == 1)  ? Zombie.class
-                                : (mobId == 2)  ? Skeleton.class
-                                : (mobId == 3)  ? Creeper.class
-                                : (mobId == 23) ? Spider.class
-                                : (mobId == 21) ? Pig.class
-                                : (mobId == 22) ? Sheep.class
-                                : (mobId == 25) ? Chicken.class
-                                : (mobId == 40) ? BabyZombie.class
-                                : (mobId == 27) ? IronGolem.class  // NEW
-                                : Mob.class;
-
-                if (countNearby(cls, cx, cy, cz, D_RAD, D_MAX) >= D_MAX) continue;
-
-                int packMin, packMax;
-                boolean isHostile = (mobId == 1 || mobId == 2 || mobId == 3 || mobId == 23 || mobId == 40 || mobId == 27);
-                if (!tryCave && !brightDay && isHostile) {
-                    packMin = 1;
-                    packMax = 2;
-                } else {
-                    switch (mobId) {
-                        case 21: case 22: case 25: packMin = 2; packMax = 3; break; // animals
-                        case 23: case 40: case 27: packMin = 1; packMax = 2; break; // spiders, baby z, iron golems
-                        default:          packMin = 1; packMax = 2; break;
-                    }
-                }
-
-                boolean spotLit = this.level.isLit(x, feetY, z);
-                boolean daytimeSurfacePassive = (brightDay && spotLit && !tryCave && (mobId == 21 || mobId == 22 || mobId == 25));
-                if (!daytimeSurfacePassive) {
-                    if (brightDay) {
-                        if (this.level.random.nextInt(3) != 0) continue;
-                    }
-                }
-
-                int pack = packMin + this.level.random.nextInt(Math.max(1, packMax - packMin + 1));
-                for (int i = 0; i < pack && countAll < GLOBAL_CAP; ++i) {
-                    int sx = x + this.level.random.nextInt(3) - 1;
-                    int sz = z + this.level.random.nextInt(3) - 1;
-
-                    if (!isInfinite) {
-                        if (sx < 0 || sz < 0 || sx >= w || sz >= h) continue;
-                    } else {
-                        ensureColumn(sx, sz);
-                    }
-
-                    int syFeet = findSafeFeetY(sx, feetY, sz);
-                    if (syFeet < 1 || syFeet >= d - 2) continue;
-                    if (!this.level.isSolidTile(sx, syFeet - 1, sz)) continue;
-                    if (this.level.isSolidTile(sx, syFeet, sz))     continue;
-                    if (this.level.isSolidTile(sx, syFeet + 1, sz)) continue;
-                    if (this.level.getLiquid(sx, syFeet, sz) != LiquidType.NOT_LIQUID) continue;
-
-                    float px = sx + 0.5F, py = syFeet + 0.05F, pz = sz + 0.5F;
-                    if (brightDay && !tryCave && (mobId == 1 || mobId == 2 || mobId == 3 || mobId == 40 || mobId == 27)) continue;
-
-                    Mob m = MobRegistry.create(mobId, this.level, px, py, pz);
-                    if (m == null || m.getRegistryId() < 0) continue;
-
-                    m.setPos(px, py, pz);
-
-                    final int MAX_LIFT_STEPS = 32;
-                    final float LIFT_STEP = 0.0625f;
-                    boolean placed = false;
-
-                    for (int lift = 0; lift <= MAX_LIFT_STEPS; lift++) {
-                        float tryY = py + lift * LIFT_STEP;
-                        if (tryY < 1f) tryY = 1f;
-                        m.setPos(px, tryY, pz);
-                        if (this.level.isFree(m.bb) && this.level.getCubes(m.bb).size() == 0) {
-                            placed = true;
-                            break;
-                        }
-                    }
-
-                    if (!placed) {
-                        for (int jitter = 0; jitter < 8 && !placed; jitter++) {
-                            float jx = px + (this.level.random.nextFloat() - 0.5f);
-                            float jz = pz + (this.level.random.nextFloat() - 0.5f);
-                            for (int lift = 0; lift <= MAX_LIFT_STEPS; lift++) {
-                                float tryY = py + lift * LIFT_STEP;
-                                if (tryY < 1f) tryY = 1f;
-                                m.setPos(jx, tryY, jz);
-                                if (this.level.isFree(m.bb) && this.level.getCubes(m.bb).size() == 0) {
-                                    px = jx; pz = jz;
-                                    placed = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!placed) continue;
-                    if (!withinSpawnRange(m.x, m.y, m.z, near)) continue;
-
-                    if (m.y < 1f) {
-                        m.y = 1f;
-                        m.setPos(m.x, m.y, m.z);
-                        if (!this.level.isFree(m.bb) || this.level.getCubes(m.bb).size() > 0) continue;
-                    }
-
-                    this.level.addEntity(m);
-                    spawned++;
-                    countAll++;
-
-                    if (mobId == 1)      countZombie++;
-                    else if (mobId == 2) countSkel++;
-                    else if (mobId == 3) countCreeper++;
-                    else if (mobId == 23)countSpider++;
-                    else if (mobId == 21)countPig++;
-                    else if (mobId == 22)countSheep++;
-                    else if (mobId == 25)countChicken++;
-                    else if (mobId == 40)countBabyZ++;
-                    else if (mobId == 27)countIronGolem++; // NEW
-                    else if (ENDERMAN_ID >= 0 && mobId == ENDERMAN_ID) countEnderman++;
-
-                    m.xd += (this.level.random.nextFloat() - 0.5f) * 0.03f;
-                    m.zd += (this.level.random.nextFloat() - 0.5f) * 0.03f;
-                }
+                level.addEntity(mob);
+                spawned++;
             }
         }
-
         return spawned;
     }
 
-    private short pickMobId(boolean tryCave, boolean brightDay, boolean spotLit, boolean allowHostiles, short ENDERMAN_ID) {
-        if (!tryCave) {
-            if (brightDay && spotLit) {
-                int r = this.level.random.nextInt(100);
-                if (r < 34) return 21;   // Pig
-                else if (r < 67) return 22;  // Sheep
-                else return 25;          // Chicken
-            } else {
-                if (!allowHostiles) return -1;
-                int r = this.level.random.nextInt(100);
-                if (r < 4 && ENDERMAN_ID >= 0) return ENDERMAN_ID;
-                else if (r < 47) return 1;   // Zombie
-                else if (r < 77) return 2;   // Skeleton
-                else if (r < 90) return 23;  // Spider
-                else if (r < 95) return 3;   // Creeper
-                else if (r < 97) return 40;  // Baby Zombie
-                else return 27;              // Iron Golem (~3%)
-            }
-        } else {
-            if (!allowHostiles) return -1;
-            int r = this.level.random.nextInt(100);
-            if (r < 4 && ENDERMAN_ID >= 0) return ENDERMAN_ID;
-            else if (r < 52) return 1;   // Zombie
-            else if (r < 82) return 2;   // Skeleton
-            else if (r < 95) return 23;  // Spider
-            else if (r < 97) return 3;   // Creeper
-            else if (r < 99) return 40;  // Baby Zombie
-            else return 27;              // Iron Golem (~2% in caves)
-        }
+    private boolean dry(AABB bounds) {
+        for (int x = (int) Math.floor(bounds.x0); x < Math.ceil(bounds.x1); x++)
+            for (int y = (int) Math.floor(bounds.y0); y < Math.ceil(bounds.y1); y++)
+                for (int z = (int) Math.floor(bounds.z0); z < Math.ceil(bounds.z1); z++)
+                    if (level.getLiquid(x, y, z) != LiquidType.NOT_LIQUID) return false;
+        return true;
+    }
+
+    private boolean place(Mob mob, int x, int feetY, int z, Entity near) {
+        // Refresh bounds after constructors that assign dimensions directly.
+        mob.setPos(mob.x, mob.y, mob.z);
+        // Respect species with feet-based origins as well as centered entities.
+        float originAboveFeet = mob.y - mob.bb.y0;
+        mob.setPos(x + .5f, feetY + originAboveFeet + .01f, z + .5f);
+        if (mob.bb.y0 < 1 || mob.bb.y1 >= level.depth) return false;
+        if (!(level instanceof LevelInfiniteTerrain || level instanceof LevelInfiniteFlat)
+                && (mob.bb.x0 < 0
+                        || mob.bb.z0 < 0
+                        || mob.bb.x1 > level.width
+                        || mob.bb.z1 > level.height)) return false;
+        return range(mob.x, mob.y, mob.z, near)
+                && level.getLiquid(x, feetY, z) == LiquidType.NOT_LIQUID
+                && dry(mob.bb)
+                && level.getCubes(mob.bb).isEmpty()
+                && level.isFree(mob.bb)
+                && level.findEntities(mob, mob.bb).isEmpty();
     }
 }

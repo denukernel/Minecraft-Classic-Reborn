@@ -1,13 +1,11 @@
 package net.classicremastered.minecraft.level.structure;
 
+import java.util.Arrays;
 import java.util.Random;
-
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
-
-import java.util.Arrays;
 
 public final class HouseStructure implements Structure {
 
@@ -65,6 +63,7 @@ public final class HouseStructure implements Structure {
     }
 
     private static final class FootprintStats {
+
         int maxUp, maxDown, maxWater; // relative to padY
         boolean lava;
     }
@@ -86,8 +85,8 @@ public final class HouseStructure implements Structure {
                 if (-diff > s.maxDown)
                     s.maxDown = -diff;
 
-                int idBelowPad = level.getTile(wx, padY, wz);
-                if (idBelowPad == Block.WATER.id || idBelowPad == Block.STATIONARY_WATER.id) {
+                int aboveSurface = level.getTile(wx, solid + 1, wz);
+                if (aboveSurface == Block.WATER.id || aboveSurface == Block.STATIONARY_WATER.id) {
                     s.maxWater = Math.max(s.maxWater, 1);
                 }
             }
@@ -110,7 +109,7 @@ public final class HouseStructure implements Structure {
         if (s.maxWater > 0)
             return false; // no water footprints
 
-        return true; // allow slopes; we terraform in generate()
+        return s.maxUp <= 2 && s.maxDown <= 2;
     }
 
     // ---- Generation (terraform + build + NPCs) -------------------------------
@@ -120,6 +119,9 @@ public final class HouseStructure implements Structure {
         int targetY = computeTargetY(level, x, z);
         if (targetY < 1 || targetY + H - 1 >= level.depth)
             return false; // depth, not height
+        FootprintStats footprint = analyze(level, x, targetY, z);
+        if (footprint.lava || footprint.maxWater > 0 || footprint.maxUp > 2 || footprint.maxDown > 2)
+            return false;
         int padY = targetY - 1;
 
         // Terraform: fill upward to pad with cobble; clear build volume
@@ -190,7 +192,7 @@ public final class HouseStructure implements Structure {
 
         int toSpawn = 1 + (rand.nextBoolean() ? (1 + rand.nextInt(2)) : 0);
 
-// Villagers (replace the previous spawn block)
+        // Villagers (replace the previous spawn block)
         for (int idx = 0; idx < count && toSpawn > 0; idx++) {
             int enc = cells[idx];
             int sx = minX + (enc >> 8);
@@ -212,9 +214,11 @@ public final class HouseStructure implements Structure {
             float radius = 2.5f; // radius around home to consider "at home"
 
             v.setHome(homeX, homeY, homeZ, radius); // persist home on the villager
+            v.setHomeDoor(doorX, baseY, doorZ);
 
             // Give the villager a VillagerAI that enforces the home behaviour
-            net.classicremastered.minecraft.mob.ai.VillagerAI vai = new net.classicremastered.minecraft.mob.ai.VillagerAI(homeX, homeY, homeZ,
+            net.classicremastered.minecraft.mob.ai.villager.VillagerAI vai = new net.classicremastered.minecraft.mob.ai.villager.VillagerAI(
+                    homeX, homeY, homeZ,
                     radius);
             vai.suppressRandomJump = true;
             vai.runSpeed = 0.8f; // configurable
@@ -224,6 +228,11 @@ public final class HouseStructure implements Structure {
             toSpawn--;
         }
 
+        var occupants =
+                new java.util.ArrayList<net.classicremastered.minecraft.level.GeneratedOccupant>();
+        net.classicremastered.minecraft.level.GeneratedOccupant.offer(
+                occupants, rand.nextLong(), false, x + W / 2, baseY, z + D / 2);
+        for (var occupant : occupants) occupant.spawn(level);
         return true;
     }
 }

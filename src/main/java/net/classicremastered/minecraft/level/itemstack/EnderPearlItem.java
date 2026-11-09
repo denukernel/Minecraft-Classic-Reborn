@@ -13,20 +13,14 @@ public class EnderPearlItem extends Item {
     public void use(Player player, Level level) {
         if (player == null || level == null) return;
 
-        // Spawn thrown ender pearl
+        // Start at the camera so a throw cannot spawn across a nearby wall.
         if (!level.isNetworkMode()) {
-            level.addEntity(new ThrownEnderPearl(level, player, player.x, player.y + 0.12f, player.z, player.yRot, player.xRot, 1.5f));
+            level.addEntity(
+                    new ThrownEnderPearl(level, player, player.x, player.y, player.z, player.yRot, player.xRot, 1.5f));
             level.playSound("random/click", player, 0.8f, 1.2f);
         }
 
         // Reduce item stack
-        int slot = player.inventory.selected;
-        if (player.inventory.count[slot] > 0) {
-            player.inventory.count[slot]--;
-            if (player.inventory.count[slot] <= 0) {
-                player.inventory.slots[slot] = -1;
-                player.inventory.count[slot] = 0;
-            }
-        }
+        consumeSelected(player, level);
     }
 }

@@ -30,8 +30,12 @@ public class TextInputScreen extends GuiScreen {
         this.closeHandler = handler;
     }
 
-    public TextInputScreen() {}
+    public TextInputScreen() { this(null, ""); }
     public TextInputScreen(String defaultText) {
+        this(null, defaultText);
+    }
+    public TextInputScreen(GuiScreen parent, String defaultText) {
+        super(parent);
         setText(defaultText);
     }
 
@@ -45,9 +49,6 @@ public class TextInputScreen extends GuiScreen {
         Keyboard.enableRepeatEvents(false);
         dragging = false;
         selAnchor = -1;
-        if (closeHandler != null) {
-            closeHandler.onClosed(message.trim());
-        }
     }
 
     @Override
@@ -63,20 +64,21 @@ public class TextInputScreen extends GuiScreen {
 
     @Override
     protected void onKeyPress(char c, int key) {
-        boolean ctrlDown = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
-        boolean shiftDown = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
-
         clampCarets();
 
         if (key == Keyboard.KEY_ESCAPE) {
-            this.minecraft.setCurrentScreen(null);
+            super.onKeyPress(c, Keyboard.KEY_ESCAPE);
             return;
         }
 
         if (key == Keyboard.KEY_RETURN || key == Keyboard.KEY_NUMPADENTER) {
-            this.minecraft.setCurrentScreen(null); // will trigger onClose()
+            super.onKeyPress(c, Keyboard.KEY_ESCAPE);
+            if (closeHandler != null) closeHandler.onClosed(message.trim());
             return;
         }
+
+        boolean ctrlDown = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+        boolean shiftDown = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
 
         // Clipboard
         if (ctrlDown && key == Keyboard.KEY_A) { selAnchor = 0; caret = message.length(); return; }

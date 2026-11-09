@@ -3,6 +3,10 @@ package net.classicremastered.minecraft.level;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -40,14 +44,15 @@ public final class LevelIO {
     // SAVE
     // ----------------------------------------------------------------------
     public final boolean save(Level level, File file) {
+        Path tmp = null;
         try {
-            File dir = file.getParentFile();
-            if (dir != null && !dir.exists()) dir.mkdirs();
-            File tmp = new File(file.getPath() + ".tmp");
+            Path destination = file.toPath().toAbsolutePath();
+            Files.createDirectories(destination.getParent());
+            tmp = Files.createTempFile(destination.getParent(), ".level-save-", ".tmp");
 
-            try (FileOutputStream fos = new FileOutputStream(tmp);
-                 GZIPOutputStream gos = new GZIPOutputStream(fos);
-                 DataOutputStream out = new DataOutputStream(gos)) {
+            try (OutputStream fos = Files.newOutputStream(tmp);
+                    GZIPOutputStream gos = new GZIPOutputStream(fos);
+                    DataOutputStream out = new DataOutputStream(gos)) {
 
                 if (level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain) {
                     InfiniteLevelNbtCodec.save(level, out);
@@ -56,18 +61,29 @@ public final class LevelIO {
                 }
             }
 
-            // atomic replace
-            if (!tmp.renameTo(file)) {
-                if (file.exists() && !file.delete())
-                    throw new IOException("Failed to delete " + file);
-                if (!tmp.renameTo(file))
-                    throw new IOException("Failed to rename " + tmp + " -> " + file);
+            synchronized (LevelIO.class) {
+                try {
+                    Files.move(tmp, destination, StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException ex) {
+                    Files.move(tmp, destination, StandardCopyOption.REPLACE_EXISTING);
+                }
+                level.saveFile = destination.toFile();
             }
             return true;
         } catch (Exception ex) {
             ex.printStackTrace();
-            if (progressBar != null) progressBar.setText("Failed!");
+            if (progressBar != null)
+                progressBar.setText("Failed!");
             return false;
+        } finally {
+            if (tmp != null) {
+                try {
+                    Files.deleteIfExists(tmp);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+            }
         }
     }
 
@@ -194,10 +210,14 @@ public final class LevelIO {
     // ----------------------------------------------------------------------
     public final Level load(File file) {
         try (FileInputStream fis = new FileInputStream(file)) {
-            return load(fis);
+            Level level = load(fis);
+            if (level != null)
+                level.saveFile = file.getAbsoluteFile();
+            return level;
         } catch (Exception ex) {
             ex.printStackTrace();
-            if (progressBar != null) progressBar.setText("Failed!");
+            if (progressBar != null)
+                progressBar.setText("Failed!");
             return null;
         }
     }
@@ -258,6 +278,7 @@ public final class LevelIO {
         ObjectInputStream ois = new ObjectInputStream(in);
         Level L = (Level) ois.readObject();
         L.initTransient();
+        if (L.player instanceof net.classicremastered.minecraft.player.Player player) player.migrateLegacyArrows();
         L.setTime(L.timeOfDay);
         return L;
     }
@@ -274,6 +295,7 @@ public final class LevelIO {
             in.readFully(blocks);
             inf.chunks().restoreChunk(key, blocks);
         }
+        loadInfiniteMetadata(inf, in);
         return inf;
     }
 
@@ -283,7 +305,7 @@ public final class LevelIO {
         LevelInfiniteTerrain inf = new LevelInfiniteTerrain(seed, depth);
 
         // --- chunks ---
-     // --- chunks ---
+        // --- chunks ---
         int n = in.readInt();
         for (int i = 0; i < n; i++) {
             long key = in.readLong();
@@ -293,56 +315,61 @@ public final class LevelIO {
         }
 
         // ✅ make sure BlockMap exists before adding entities
-        inf.blockMap = new net.classicremastered.minecraft.level.BlockMap(inf.width, inf.depth, inf.height);
+        inf.blockMap = new net.classicremastered.minecraft.level.BlockMap(inf.width, inf.depth,
+                inf.height);
         inf.blockMap.infiniteMode = true;
         for (Entity e : inf.blockMap.all) {
             e.blockMap = inf.blockMap;
         }
 
-        // --- metadata ---
-        try {
-            inf.setTime(in.readInt());
-            inf.doDayNightCycle = in.readBoolean();
+        loadInfiniteMetadata(inf, in);
+        return inf;
+    }
 
-            float px = in.readFloat();
-            float py = in.readFloat();
-            float pz = in.readFloat();
-            float yaw = in.readFloat();
-            float pitch = in.readFloat();
+    private void loadInfiniteMetadata(Level inf, DataInputStream in) throws IOException {
+        // Chunk-only saves predate metadata. Once it starts, require a complete record.
+        int first = in.read();
+        if (first == -1)
+            return;
+        inf.setTime((first << 24) | (in.readUnsignedByte() << 16) | (in.readUnsignedByte() << 8)
+                | in.readUnsignedByte());
+        inf.doDayNightCycle = in.readBoolean();
 
-            if (inf.player == null) {
-                net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(null);
-                loadedPlayer.level = inf;
-                inf.player = loadedPlayer;
-                loadedPlayer.moveTo(px, py, pz, yaw, pitch);
-                inf.addEntity(loadedPlayer);
-            } else {
-                inf.player.moveTo(px, py, pz, yaw, pitch);
-            }
+        float px = in.readFloat();
+        float py = in.readFloat();
+        float pz = in.readFloat();
+        float yaw = in.readFloat();
+        float pitch = in.readFloat();
 
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                short id = in.readShort();
-                float x = in.readFloat();
-                float y = in.readFloat();
-                float z = in.readFloat();
-                float yRot = in.readFloat();
-                float xRot = in.readFloat();
-                int health = in.readInt();
-                var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
-                if (mob == null) continue;
-                mob.yRot = yRot;
-                mob.xRot = xRot;
-                mob.health = health;
-                inf.addEntity(mob);
-            }
-        } catch (EOFException ignored) {
-            // older saves
+        if (inf.player == null) {
+            net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(
+                    null);
+            loadedPlayer.level = inf;
+            inf.player = loadedPlayer;
+            loadedPlayer.moveTo(px, py, pz, yaw, pitch);
+            inf.addEntity(loadedPlayer);
+        } else {
+            inf.player.moveTo(px, py, pz, yaw, pitch);
         }
 
+        int count = in.readInt();
+        for (int i = 0; i < count; i++) {
+            short id = in.readShort();
+            float x = in.readFloat();
+            float y = in.readFloat();
+            float z = in.readFloat();
+            float yRot = in.readFloat();
+            float xRot = in.readFloat();
+            int health = in.readInt();
+            var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
+            if (mob == null)
+                continue;
+            mob.yRot = yRot;
+            mob.xRot = xRot;
+            mob.health = health;
+            inf.addEntity(mob);
+        }
         inf.updateDayNightColorsSmooth();
-
-        return inf;
     }
 
     // ----------------------------------------------------------------------

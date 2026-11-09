@@ -1,13 +1,13 @@
 package net.classicremastered.minecraft.player;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.HumanoidModel;
 import net.classicremastered.minecraft.render.TextureManager;
-import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.input.Keyboard;
@@ -18,6 +18,11 @@ import java.util.List;
 import java.util.Random;
 
 public class Player extends Mob {
+    public transient java.util.Map<Integer, java.util.List<Mob>> mobWandSelections;
+
+    private transient boolean deathMessageSent;
+    public transient net.classicremastered.minecraft.mob.StickFigure bossComboOwner;
+
     public Player(Level var1) {
         this(var1, true);
     }
@@ -34,7 +39,7 @@ public class Player extends Mob {
         this.health = 20;
         this.modelName = "humanoid";
         this.rotOffs = 180.0F;
-        this.ai = new Player$1(this);
+        this.ai = new PlayerInputAI(this);
     }
 
     public boolean helmet = false;
@@ -68,12 +73,14 @@ public class Player extends Mob {
     public int poisonEvery = 0;
     private int poisonCounter = 0;
     // --- Void handling ---
-    private boolean voidWarned = false; // one-shot warning when crossing below y<0 (Creative)
     private int lastJumpTap = 0;
     private int jumpTicks = 0;
 
     // --- Sneak (crouch) ---
     public boolean sneaking = false;
+    private transient float sneakProgress;
+    private transient float previousSneakProgress;
+    private transient float previousHeightOffset;
     private static final float SNEAK_HOFFSET = 1.42F; // eye height while sneaking
     private static final float STAND_HOFFSET = 1.62F;
     private static final float SNEAK_HEIGHT = 1.50F; // bb height while sneaking
@@ -83,70 +90,76 @@ public class Player extends Mob {
         return sneaking;
     }
 
-    // Player.java
+    @Override
+    public void tick() {
+        if (!developerPowers().aimingBlock(this)) developerPowers().cancelBlockAim();
+        previousHeightOffset = heightOffset;
+        previousSneakProgress = sneakProgress;
+        super.tick();
+        sneakProgress =
+                sneaking ? Math.min(1, sneakProgress + .5f) : Math.max(0, sneakProgress - .5f);
+    }
+
+    public float getSneakProgress(float partial) {
+        return lerp(previousSneakProgress, sneakProgress, partial);
+    }
+
+    public float getRenderHeightOffset(float partial) {
+        return previousHeightOffset > 0
+                ? lerp(previousHeightOffset, heightOffset, partial)
+                : heightOffset;
+    }
+
     public void dropSelectedItem() {
-        if (this.level == null || this.inventory == null)
-            return;
+        dropSelectedItem(false);
+    }
 
-        int id = this.inventory.getSelected();
-        if (id < 0)
-            return; // nothing selected
+    public void dropSelectedItem(boolean wholeStack) {
+        if (level == null || inventory == null) return;
 
-        int count = this.inventory.getCount(this.inventory.selected);
-        if (count <= 0)
-            return;
+        int id = inventory.getSelected();
+        int available = inventory.getCount(inventory.selected);
+        if (id <= 0 || available <= 0) return;
 
-        // remove the full stack from inventory
-        this.inventory.removeSelected(count);
+        float yaw = -yRot * (float) Math.PI / 180 - (float) Math.PI;
+        float pitch = -xRot * (float) Math.PI / 180;
+        float dirX = MathHelper.sin(yaw) * MathHelper.cos(pitch);
+        float dirY = MathHelper.sin(pitch);
+        float dirZ = MathHelper.cos(yaw) * MathHelper.cos(pitch);
 
-        // --- Modern-style drop spawn point ---
-        float eyeHeight = this.heightOffset;
-        
-        // Calculate actual look vector (matching Minecraft.java camera raycast)
-        float cosYaw = MathHelper.cos(-this.yRot * (float) Math.PI / 180.0F - (float) Math.PI);
-        float sinYaw = MathHelper.sin(-this.yRot * (float) Math.PI / 180.0F - (float) Math.PI);
-        float cosPitch = MathHelper.cos(-this.xRot * (float) Math.PI / 180.0F);
-        float sinPitch = MathHelper.sin(-this.xRot * (float) Math.PI / 180.0F);
-
-        float dirX = sinYaw * cosPitch;
-        float dirY = sinPitch;
-        float dirZ = cosYaw * cosPitch;
-
-        // spawn ~0.5 blocks in front of eyes
-        float spawnX = this.x + dirX * 0.5F;
-        float spawnY = this.y + eyeHeight - 0.3F; // a bit below eyes, like modern MC
-        float spawnZ = this.z + dirZ * 0.5F;
-
+        // Player.y already includes eye height. Spawn inside the player's
+        // footprint so the drop cannot start on the other side of a wall.
+        float spawnY = y - .3f;
+        int count = wholeStack ? available : 1;
         Entity dropped;
         if (id >= 256) {
-            dropped = new net.classicremastered.minecraft.entity.DroppedItem(this.level, spawnX, spawnY, spawnZ,
-                    id - 256, count);
+            int itemId = id - 256;
+            if (itemId >= Item.items.length || Item.items[itemId] == null) return;
+            dropped =
+                    new net.classicremastered.minecraft.entity.DroppedItem(
+                            level, x, spawnY, z, itemId, count);
         } else {
-            dropped = new net.classicremastered.minecraft.entity.DroppedBlock(this.level, spawnX, spawnY, spawnZ, id, count);
+            if (Block.blocks[id] == null) return;
+            dropped =
+                    new net.classicremastered.minecraft.entity.DroppedBlock(
+                            level, x, spawnY, z, id, count);
         }
 
-        // --- Modern throw velocity ---
-        float throwPower = 0.35F;
-        dropped.xd = dirX * throwPower;
-        dropped.yd = dirY * throwPower + 0.1F;
-        dropped.zd = dirZ * throwPower;
-
-        this.level.addEntity(dropped);
-
-        // play sound
-        this.level.playSound("random/pop", this, 0.2F, 1.0F);
+        dropped.xd = dirX * .3f;
+        dropped.yd = dirY * .3f + .1f;
+        dropped.zd = dirZ * .3f;
+        if (inventory.removeSelected(count)) level.addEntity(dropped);
     }
 
     /**
-     * Switch hitbox + eye height while keeping FEET glued and preventing stand-up
-     * in tight spaces.
+     * Switch hitbox + eye height while keeping FEET glued and preventing stand-up in tight spaces.
      */
     public void setSneaking(boolean s) {
-        if (this.sneaking == s)
-            return;
+        if (this.sneaking == s) return;
 
         // Keep current feet Y (true bottom of the AABB)
-        final float feetY = (this.bb != null) ? this.bb.y0 : (this.y - this.heightOffset + this.ySlideOffset);
+        final float feetY =
+                (this.bb != null) ? this.bb.y0 : (this.y - this.heightOffset + this.ySlideOffset);
 
         if (!s) {
             // Attempt to UNSNEAK: make sure there's room for a standing AABB at current
@@ -154,8 +167,14 @@ public class Player extends Mob {
             final float hw = 0.6F * 0.5F;
             final float targetHeight = STAND_HEIGHT;
 
-            net.classicremastered.minecraft.phys.AABB test = new net.classicremastered.minecraft.phys.AABB(this.x - hw,
-                    feetY, this.z - hw, this.x + hw, feetY + targetHeight, this.z + hw);
+            net.classicremastered.minecraft.phys.AABB test =
+                    new net.classicremastered.minecraft.phys.AABB(
+                            this.x - hw,
+                            feetY,
+                            this.z - hw,
+                            this.x + hw,
+                            feetY + targetHeight,
+                            this.z + hw);
 
             // If any solid cubes intersect, refuse to stand up
             if (this.level != null && !this.level.getCubes(test).isEmpty()) {
@@ -203,8 +222,7 @@ public class Player extends Mob {
 
         // normalize & scale
         float len = MathHelper.sqrt(fx * fx + fz * fz);
-        if (len < 1e-4f)
-            return;
+        if (len < 1e-4f) return;
         fx /= len;
         fz /= len;
         fx *= accel;
@@ -226,8 +244,9 @@ public class Player extends Mob {
         if (healthDrinkTimer > 0) {
             healthDrinkTimer--;
             if (healthDrinkTimer % 25 == 0) {
-                // Heals 2 hearts total over 5 seconds (4 hp total). 
-                // Since 100 ticks / 25 ticks = 4 pulses, healing 1 hp per pulse = 4 hp (2 hearts) total.
+                // Heals 2 hearts total over 5 seconds (4 hp total).
+                // Since 100 ticks / 25 ticks = 4 pulses, healing 1 hp per pulse = 4 hp (2
+                // hearts) total.
                 this.heal(1);
             }
         }
@@ -254,8 +273,7 @@ public class Player extends Mob {
             this.zd = 0.0F;
 
             // Block jump ascent while frozen (let gravity still act)
-            if (this.yd > 0.0F)
-                this.yd = 0.0F;
+            if (this.yd > 0.0F) this.yd = 0.0F;
         }
 
         // ===== Keys =====
@@ -266,19 +284,26 @@ public class Player extends Mob {
         // 🚫 Skip movement keybinds while any GUI screen is open (e.g. ChatInputScreen)
         if (this.minecraft != null && this.minecraft.currentScreen == null) {
             if (this.minecraft.settings != null) {
-                int descendKeyCode = (this.minecraft.settings.descendKey != null
-                        ? this.minecraft.settings.descendKey.key
-                        : Keyboard.KEY_LCONTROL);
+                int descendKeyCode =
+                        (this.minecraft.settings.descendKey != null
+                                ? this.minecraft.settings.descendKey.key
+                                : Keyboard.KEY_LCONTROL);
 
-                int runKeyCode = (this.minecraft.settings.runKey != null ? this.minecraft.settings.runKey.key
-                        : Keyboard.KEY_LSHIFT);
+                int runKeyCode =
+                        (this.minecraft.settings.runKey != null
+                                ? this.minecraft.settings.runKey.key
+                                : Keyboard.KEY_LSHIFT);
 
                 descendHeld = Keyboard.isKeyDown(descendKeyCode); // CTRL by default
                 boostHeld = Keyboard.isKeyDown(runKeyCode); // SHIFT by default
                 sneakHeld = descendHeld; // Sneak = CTRL
             } else {
-                descendHeld = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
-                boostHeld = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+                descendHeld =
+                        Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+                                || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+                boostHeld =
+                        Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
+                                || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
                 sneakHeld = descendHeld;
             }
         }
@@ -288,18 +313,8 @@ public class Player extends Mob {
             MobControl.prePhysicsSteer(this);
         }
 
-        // --- VOID WARNING & DAMAGE ---
+        // --- VOID DAMAGE ---
         if (this.level != null) {
-            if (this.y < 0.0f) {
-                if (!voidWarned && this.level.creativeMode && this.minecraft != null && this.minecraft.hud != null) {
-                    this.minecraft.hud.addChat(
-                            "YOU ARE FALLING THOUGH THE WORLD! CREATIVE PLAYER, PLEASE RETURN OR YOU'LL BE KILLED");
-                    voidWarned = true;
-                }
-            } else {
-                voidWarned = false;
-            }
-
             if (this.y < -30.0f) {
                 voidDamageCounter++;
                 if (voidDamageCounter >= 20) {
@@ -331,20 +346,24 @@ public class Player extends Mob {
 
         // ===== Modern Creative Flight Controls =====
         boolean jumpHeld = this.input.jumping; // Space
-        boolean ctrlHeld = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL); // Ctrl
-                                                                                                                   // =
-                                                                                                                   // down
-        boolean shiftHeld = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT); // Shift
-                                                                                                                // =
-                                                                                                                // boost
-
+        boolean ctrlHeld =
+                Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+                        || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL); // Ctrl
+        // =
+        // down
+        boolean shiftHeld =
+                Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
+                        || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT); // Shift
+        // =
+        // boost
 
         if (this.isFlying && this.canFly) {
             this.fallDistance = 0.0F;
             this.onGround = false;
 
             // --- Speeds ---
-            float base = Math.max(0.05F, this.flySpeed);
+            float boost = developerPowers().movementMultiplier(this);
+            float base = Math.max(0.05F, this.flySpeed) * boost;
             float accel = shiftHeld ? base * 3.0F : base * 2.0F; // Shift = faster
 
             float strafe = this.input.xxa;
@@ -357,14 +376,11 @@ public class Player extends Mob {
 
             // --- Vertical control (fixed) ---
             float vertSpeed = accel * 0.55F;
-            if (up && !down)
-                this.yd = lerp(this.yd, vertSpeed, 0.3F);
-            if (down && !up)
-                this.yd = lerp(this.yd, -vertSpeed, 0.3F);
-            if (!up && !down)
-                this.yd *= 0.6F; // hover
+            if (up && !down) this.yd = lerp(this.yd, vertSpeed, 0.3F);
+            if (down && !up) this.yd = lerp(this.yd, -vertSpeed, 0.3F);
+            if (!up && !down) this.yd *= 0.6F; // hover
 
-         // --- Move ---
+            // --- Move ---
             this.move(this.xd, this.yd, this.zd);
 
             // --- Stop instantly if no input ---
@@ -379,9 +395,8 @@ public class Player extends Mob {
                 this.zd *= 0.90F;
             }
 
-
             // --- Clamp speed ---
-            float max = shiftHeld ? 1.4F : 0.9F;
+            float max = (shiftHeld ? 1.4F : 0.9F) * boost;
             float mag = MathHelper.sqrt(this.xd * this.xd + this.yd * this.yd + this.zd * this.zd);
             if (mag > max) {
                 float s = max / mag;
@@ -398,7 +413,7 @@ public class Player extends Mob {
             deltaCurseCounter++;
             if (deltaCurseCounter >= 1) {
                 deltaCurseCounter = 0;
-                this.hurt(null, 1);
+                this.hurt(null, 1, "magic");
             }
             deltaCurseTicks--;
         }
@@ -430,7 +445,8 @@ public class Player extends Mob {
             int bid = this.level.getTile(bx, by, bz);
             if (bid == net.classicremastered.minecraft.level.tile.Block.PORTAL.id) {
                 // Teleport to spawn for now
-                this.setPos(this.level.xSpawn + 0.5F, this.level.ySpawn + 1, this.level.zSpawn + 0.5F);
+                this.setPos(
+                        this.level.xSpawn + 0.5F, this.level.ySpawn + 1, this.level.zSpawn + 0.5F);
 
                 if (this.minecraft != null && this.minecraft.hud != null) {
                     this.minecraft.hud.addChat("&5[Portal]&7 Teleported to spawn!");
@@ -443,12 +459,9 @@ public class Player extends Mob {
         // ===== Classic bob/tilt & entity touches =====
         float var1 = MathHelper.sqrt(this.xd * this.xd + this.zd * this.zd);
         float var2 = (float) Math.atan((double) (-this.yd * 0.2F)) * 15.0F;
-        if (var1 > 0.1F)
-            var1 = 0.1F;
-        if (!this.onGround || this.health <= 0)
-            var1 = 0.0F;
-        if (this.onGround || this.health <= 0)
-            var2 = 0.0F;
+        if (var1 > 0.1F) var1 = 0.1F;
+        if (!this.onGround || this.health <= 0) var1 = 0.0F;
+        if (this.onGround || this.health <= 0) var2 = 0.0F;
         this.bob += (var1 - this.bob) * 0.4F;
         this.tilt += (var2 - this.tilt) * 0.8F;
 
@@ -457,28 +470,32 @@ public class Player extends Mob {
             poisonCounter++;
             if (poisonCounter >= poisonEvery) {
                 poisonCounter = 0;
-                this.hurt(null, 1);
+                this.hurt(null, 1, "magic");
             }
             poisonTicks--;
         }
 
         List var3;
-        if (this.health > 0 && (var3 = this.level.findEntities(this, this.bb.grow(1.0F, 0.0F, 1.0F))) != null) {
+        if (this.health > 0
+                && (var3 = this.level.findEntities(this, this.bb.grow(1.0F, 0.0F, 1.0F))) != null) {
             for (int i = 0; i < var3.size(); ++i) {
-                ((Entity) var3.get(i)).playerTouch(this);
+                Entity entity = (Entity) var3.get(i);
+                if (!net.classicremastered.minecraft.level.itemstack.GunEntityDrag.isHeld(entity))
+                    entity.playerTouch(this);
             }
             if (this.health > 0) {
                 List nearby = this.level.findEntities(this, this.bb.grow(0.5F, 0.5F, 0.5F));
                 for (int i = 0; i < nearby.size(); i++) {
-                    ((Entity) nearby.get(i)).playerTouch(this);
+                    Entity entity = (Entity) nearby.get(i);
+                    if (!net.classicremastered.minecraft.level.itemstack.GunEntityDrag.isHeld(
+                            entity)) entity.playerTouch(this);
                 }
             }
         }
     }
 
     public void freezeFor(int ticks) {
-        if (ticks > frozenTicks)
-            frozenTicks = ticks;
+        if (ticks > frozenTicks) frozenTicks = ticks;
     }
 
     public void applyPoison(int ticks, int everyNTicks) {
@@ -506,9 +523,12 @@ public class Player extends Mob {
 
     @Override
     public void render(TextureManager var1, float var2) {
-        if (minecraft != null && minecraft.player == this && minecraft.renderer != null
+        if (minecraft != null
+                && minecraft.player == this
+                && minecraft.renderer != null
                 && !minecraft.renderer.shouldRenderLocalPlayer()) return;
-        if (this.getClass() != Player.class || (this.minecraft != null && this.minecraft.cameraMode > 0)) {
+        if (this.getClass() != Player.class
+                || (this.minecraft != null && this.minecraft.cameraMode > 0)) {
             super.render(var1, var2);
         }
     }
@@ -543,7 +563,10 @@ public class Player extends Mob {
 
         if (this.level instanceof net.classicremastered.minecraft.level.LevelInfiniteFlat) {
             // Infinite: spawn directly at Level spawn Y
-            this.setPos((float) this.level.xSpawn + 0.5F, (float) this.level.ySpawn, (float) this.level.zSpawn + 0.5F);
+            this.setPos(
+                    (float) this.level.xSpawn + 0.5F,
+                    (float) this.level.ySpawn,
+                    (float) this.level.zSpawn + 0.5F);
         } else {
             super.resetPos(); // vanilla safe fall logic
         }
@@ -554,10 +577,18 @@ public class Player extends Mob {
 
         this.health = 20;
         this.deathTime = 0;
+        this.deathMessageSent = false;
     }
 
     @Override
     public void die(Entity killer) {
+        if (!deathMessageSent) {
+            deathMessageSent = true;
+            if (minecraft != null && minecraft.hud != null) {
+                minecraft.hud.addChat(
+                        DeathMessages.message(this, killer, y < -30 ? "void" : damageCause));
+            }
+        }
         // Clear grappling hook anchor on death
         net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.remove(this);
         // existing physics
@@ -573,10 +604,19 @@ public class Player extends Mob {
         this.heightOffset = 0.1F;
 
         // --- lose all coins ---
-        this.coins = 0;
+        if (level == null || !level.keepInventory) this.coins = 0;
 
+        // Equipment follows the survival inventory death policy.
+        if (level != null && !level.isNetworkMode() && !level.keepInventory)
+            for (int i = 0; i < equipment.length; i++) {
+                if (equipment[i] >= 256)
+                    level.addEntity(
+                            new net.classicremastered.minecraft.entity.DroppedItem(
+                                    level, x, y, z, equipment[i] - 256));
+                equipment[i] = 0;
+            }
         // --- drop all inventory items/blocks ---
-        if (this.inventory != null && this.level != null) {
+        if (this.inventory != null && this.level != null && !level.keepInventory) {
             java.util.Random rnd = this.level.random;
             for (int i = 0; i < this.inventory.slots.length; i++) {
                 int id = this.inventory.slots[i];
@@ -586,31 +626,40 @@ public class Player extends Mob {
                     float rx = (rnd.nextFloat() - 0.5F) * 0.4F;
                     float ry = rnd.nextFloat() * 0.3F + 0.1F;
                     float rz = (rnd.nextFloat() - 0.5F) * 0.4F;
-                    
+
                     Entity dropped;
                     if (id >= 256) {
-                        dropped = new net.classicremastered.minecraft.entity.DroppedItem(
-                            this.level, this.x + rx, this.y + ry, this.z + rz, id - 256, count
-                        );
+                        dropped =
+                                new net.classicremastered.minecraft.entity.DroppedItem(
+                                        this.level,
+                                        this.x + rx,
+                                        this.y + ry,
+                                        this.z + rz,
+                                        id - 256,
+                                        count);
                     } else {
-                        dropped = new net.classicremastered.minecraft.entity.DroppedBlock(
-                            this.level, this.x + rx, this.y + ry, this.z + rz, id, count
-                        );
+                        dropped =
+                                new net.classicremastered.minecraft.entity.DroppedBlock(
+                                        this.level,
+                                        this.x + rx,
+                                        this.y + ry,
+                                        this.z + rz,
+                                        id,
+                                        count);
                     }
-                    
+
                     // Scatter velocity
                     dropped.xd = (rnd.nextFloat() - 0.5F) * 0.2F;
                     dropped.yd = rnd.nextFloat() * 0.2F + 0.1F;
                     dropped.zd = (rnd.nextFloat() - 0.5F) * 0.2F;
-                    
+
                     this.level.addEntity(dropped);
-                    
+
                     // Clear slot
                     this.inventory.slots[i] = -1;
                     this.inventory.count[i] = 0;
                 }
             }
-            this.arrows = 0; // also clear arrows
         }
 
         // --- new death sound ---
@@ -623,6 +672,12 @@ public class Player extends Mob {
 
     @Override
     public void hurt(Entity attacker, int damage) {
+        if (attacker != null && developerPowers().dodging(this)) return;
+        damage = developerPowers().incomingDamage(this, attacker, damage);
+        if (net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers.protects(this)) {
+            damage = Math.min(damage, Math.max(0, health - 1));
+            if (damage <= 0) return;
+        }
         if (!this.level.creativeMode) {
             super.hurt(attacker, damage);
 
@@ -642,20 +697,15 @@ public class Player extends Mob {
     public void awardKillScore(Entity e, int value) {
         super.awardKillScore(e, value);
         int add = 0;
-        if (e instanceof net.classicremastered.minecraft.mob.Zombie)
-            add = 1;
-        if (e instanceof net.classicremastered.minecraft.mob.Skeleton)
-            add = 2;
-        if (e instanceof net.classicremastered.minecraft.mob.Spider)
-            add = 2;
-        if (e instanceof net.classicremastered.minecraft.mob.Enderman)
-            add = 4;
+        if (e instanceof net.classicremastered.minecraft.mob.Zombie) add = 1;
+        if (e instanceof net.classicremastered.minecraft.mob.Skeleton) add = 2;
+        if (e instanceof net.classicremastered.minecraft.mob.Spider) add = 2;
+        if (e instanceof net.classicremastered.minecraft.mob.Enderman) add = 4;
         this.coins += add;
     }
 
     @Override
-    public void remove() {
-    }
+    public void remove() {}
 
     @Override
     public boolean isCreativeModeAllowed() {
@@ -663,15 +713,37 @@ public class Player extends Mob {
     }
 
     public static final long serialVersionUID = 0L;
+
+    // Serialized by old Java-format worlds before ammo became an inventory item.
+    private int arrows;
+
+    public void migrateLegacyArrows() {
+        if (arrows <= 0) return;
+        net.classicremastered.minecraft.level.itemstack.ItemRegistry.bootstrap();
+        int itemId = net.classicremastered.minecraft.level.itemstack.Equipment.ARROW.id;
+        while (arrows > 0 && inventory.addResource(itemId + 256)) arrows--;
+        if (arrows > 0) {
+            level.addEntity(
+                    new net.classicremastered.minecraft.entity.DroppedItem(
+                            level, x, y, z, itemId, arrows));
+            arrows = 0;
+        }
+    }
+
     public static final int MAX_HEALTH = 20;
-    public static final int MAX_ARROWS = 99;
+    private transient DeveloperPowers developerPowers;
+
+    public DeveloperPowers developerPowers() {
+        if (developerPowers == null) developerPowers = new DeveloperPowers();
+        return developerPowers;
+    }
+
     public transient InputHandler input;
     public Inventory inventory = new Inventory();
     public byte userType = 0;
     public float oBob;
     public float bob;
     public int score = 0;
-    public int arrows = 20;
     public transient net.classicremastered.minecraft.Minecraft minecraft;
     public static boolean creativeInvulnerable = false; // set by GameMode
     private static int newTextureId = -1;

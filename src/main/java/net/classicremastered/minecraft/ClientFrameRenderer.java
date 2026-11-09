@@ -1,8 +1,6 @@
 package net.classicremastered.minecraft;
 
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.LevelInfiniteFlat;
-import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -52,8 +50,9 @@ final class ClientFrameRenderer {
                 if (r.minecraft.levelLoaded) {
                     if (r.minecraft.canvas != null) {
                         Point canvasLoc;
-                        uiH = (canvasLoc = r.minecraft.canvas.getLocationOnScreen()).x
-                                + r.minecraft.width / 2;
+                        uiH =
+                                (canvasLoc = r.minecraft.canvas.getLocationOnScreen()).x
+                                        + r.minecraft.width / 2;
                         uiW = canvasLoc.y + r.minecraft.height / 2;
                         Point pointer;
                         mouseDX = (pointer = MouseInfo.getPointerInfo().getLocation()).x - uiH;
@@ -68,8 +67,7 @@ final class ClientFrameRenderer {
                 }
 
                 byte invert = 1;
-                if (r.minecraft.settings.invertMouse)
-                    invert = -1;
+                if (r.minecraft.settings.invertMouse) invert = -1;
                 r.minecraft.player.turn((float) mouseDX, (float) (mouseDY * invert));
             }
 
@@ -91,10 +89,8 @@ final class ClientFrameRenderer {
                             break;
                         }
                         if (r2.minecraft.settings.anaglyph) {
-                            if (stereoEye == 0)
-                                GL11.glColorMask(false, true, true, false);
-                            else
-                                GL11.glColorMask(true, false, false, false);
+                            if (stereoEye == 0) GL11.glColorMask(false, true, true, false);
+                            else GL11.glColorMask(true, false, false, false);
                         }
 
                         Player camPlayer = r2.minecraft.player;
@@ -120,8 +116,13 @@ final class ClientFrameRenderer {
                         r2.fogGreen *= r2.fogColorMultiplier;
 
                         Block feetBlock;
-                        if ((feetBlock = Block.blocks[levelRef.getTile((int) player.x,
-                                (int) (player.y + 0.12F), (int) player.z)]) != null
+                        if ((feetBlock =
+                                                Block.blocks[
+                                                        levelRef.getTile(
+                                                                (int) player.x,
+                                                                (int) (player.y + 0.12F),
+                                                                (int) player.z)])
+                                        != null
                                 && feetBlock.getLiquidType() != LiquidType.NOT_LIQUID) {
                             LiquidType lt;
                             if ((lt = feetBlock.getLiquidType()) == LiquidType.WATER) {
@@ -136,8 +137,9 @@ final class ClientFrameRenderer {
                         }
 
                         if (r2.minecraft.settings.anaglyph) {
-                            float rGray = (r2.fogRed * 30.0F + r2.fogBlue * 59.0F
-                                    + r2.fogGreen * 11.0F) / 100.0F;
+                            float rGray =
+                                    (r2.fogRed * 30.0F + r2.fogBlue * 59.0F + r2.fogGreen * 11.0F)
+                                            / 100.0F;
                             float gGray = (r2.fogRed * 30.0F + r2.fogBlue * 70.0F) / 100.0F;
                             float bGray = (r2.fogRed * 30.0F + r2.fogGreen * 70.0F) / 100.0F;
                             r2.fogRed = rGray;
@@ -154,8 +156,8 @@ final class ClientFrameRenderer {
                         GL11.glLoadIdentity();
                         float eyeShift = 0.07F;
                         if (r2.minecraft.settings.anaglyph) {
-                            GL11.glTranslatef((float) (-((stereoEye << 1) - 1)) * eyeShift, 0.0F,
-                                    0.0F);
+                            GL11.glTranslatef(
+                                    (float) (-((stereoEye << 1) - 1)) * eyeShift, 0.0F, 0.0F);
                         }
 
                         camPlayer = r2.minecraft.player;
@@ -166,13 +168,17 @@ final class ClientFrameRenderer {
                         }
                         if (camPlayer != null && camPlayer.inventory != null) {
                             int selId = camPlayer.inventory.getSelected();
-                            if (selId >= 256 && (selId - 256) == 19 && org.lwjgl.input.Mouse.isButtonDown(1)) {
+                            if (selId >= 256
+                                    && (selId - 256) == 19
+                                    && org.lwjgl.input.Mouse.isButtonDown(1)) {
                                 fov /= 2.0F;
                             }
                         }
 
-                        GLU.gluPerspective(fov,
-                                (float) r2.minecraft.width / (float) r2.minecraft.height, 0.05F,
+                        GLU.gluPerspective(
+                                fov,
+                                (float) r2.minecraft.width / (float) r2.minecraft.height,
+                                0.05F,
                                 r2.fogEnd);
                         GL11.glMatrixMode(5888);
                         GL11.glLoadIdentity();
@@ -191,7 +197,8 @@ final class ClientFrameRenderer {
                         mc.renderer.setupCamera(mc.timer.delta);
 
                         Frustrum fr = FrustrumImpl.update();
-                        // sky: stars + sun/moon background pass (rendered before terrain chunks so blocks occlude them)
+                        // sky: stars + sun/moon background pass (rendered before terrain chunks so
+                        // blocks occlude them)
                         if (mc.skyRenderer != null) {
                             mc.skyRenderer.renderStars(mc.player, renderPartial);
                             mc.skyRenderer.renderSunMoon(mc.player, renderPartial);
@@ -200,7 +207,7 @@ final class ClientFrameRenderer {
                         // Common path: this dispatches to your LevelRenderer logic.
                         // For finite: uses chunkCache. For infinite: uses your SimpleChunkManager
                         // path.
-                        lr.sortChunks(camPlayer, 0);
+                        lr.sortChunks(camPlayer, 0, renderPartial);
 
                         r2.updateFog();
                         GL11.glEnable(2912);
@@ -222,12 +229,10 @@ final class ClientFrameRenderer {
                                 for (int ny = cy - 1; ny <= cy + 1; ny++) {
                                     for (int nz = cz - 1; nz <= cz + 1; nz++) {
                                         int id = lr.level.getTile(nx, ny, nz);
-                                        if (id <= 0)
-                                            continue;
+                                        if (id <= 0) continue;
 
                                         Block b = Block.blocks[id];
-                                        if (b == null || !b.isSolid())
-                                            continue;
+                                        if (b == null || !b.isSolid()) continue;
 
                                         // Darken interior a bit
                                         GL11.glColor4f(0.2F, 0.2F, 0.2F, 1.0F);
@@ -265,27 +270,35 @@ final class ClientFrameRenderer {
                         float particlesPartial = renderPartial;
                         ParticleManager pmRef = pm;
                         float cosYaw2 = -MathHelper.cos(camPlayer.yRot * 3.1415927F / 180.0F);
-                        float sinYawNeg = -(skyR = -MathHelper
-                                .sin(camPlayer.yRot * 3.1415927F / 180.0F))
-                                * MathHelper.sin(camPlayer.xRot * 3.1415927F / 180.0F);
-                        float sinYaw2 = cosYaw2
-                                * MathHelper.sin(camPlayer.xRot * 3.1415927F / 180.0F);
+                        float sinYawNeg =
+                                -(skyR = -MathHelper.sin(camPlayer.yRot * 3.1415927F / 180.0F))
+                                        * MathHelper.sin(camPlayer.xRot * 3.1415927F / 180.0F);
+                        float sinYaw2 =
+                                cosYaw2 * MathHelper.sin(camPlayer.xRot * 3.1415927F / 180.0F);
                         float cosPitch2 = MathHelper.cos(camPlayer.xRot * 3.1415927F / 180.0F);
 
                         for (pass = 0; pass < 2; ++pass) {
                             if (pmRef.particles[pass].size() != 0) {
                                 texId = 0;
-                                if (pass == 0)
-                                    texId = pmRef.textureManager.load("/particles.png");
+                                if (pass == 0) texId = pmRef.textureManager.load("/particles.png");
                                 if (pass == 1)
-                                    texId = pmRef.textureManager.load("/terrain.png");
+                                    texId =
+                                            pmRef.textureManager.load(
+                                                    net.classicremastered.minecraft.render
+                                                            .BlockTextureAtlas.RESOURCE);
                                 GL11.glBindTexture(3553, texId);
                                 ShapeRenderer ps = ShapeRenderer.instance;
                                 ShapeRenderer.instance.begin();
                                 for (xTile = 0; xTile < pmRef.particles[pass].size(); ++xTile) {
-                                    ((Particle) pmRef.particles[pass].get(xTile)).render(ps,
-                                            particlesPartial, cosYaw2, cosPitch2, skyR, sinYawNeg,
-                                            sinYaw2);
+                                    ((Particle) pmRef.particles[pass].get(xTile))
+                                            .render(
+                                                    ps,
+                                                    particlesPartial,
+                                                    cosYaw2,
+                                                    cosPitch2,
+                                                    skyR,
+                                                    sinYawNeg,
+                                                    sinYaw2);
                                 }
                                 ps.end();
                             }
@@ -317,19 +330,26 @@ final class ClientFrameRenderer {
                             GL11.glEnable(3042);
                             GL11.glEnable(3008);
                             GL11.glBlendFunc(770, 1);
-                            GL11.glColor4f(1, 1, 1,
+                            GL11.glColor4f(
+                                    1,
+                                    1,
+                                    1,
                                     (MathHelper.sin((float) System.currentTimeMillis() / 100.0F)
-                                            * 0.2F + 0.4F) * 0.5F);
+                                                            * 0.2F
+                                                    + 0.4F)
+                                            * 0.5F);
                             if (lr.cracks > 0.0F) {
                                 GL11.glBlendFunc(774, 768);
-                                int terrainTex = lr.textureManager.load("/terrain.png");
+                                int terrainTex =
+                                        lr.textureManager.load(
+                                                net.classicremastered.minecraft.render
+                                                        .BlockTextureAtlas.RESOURCE);
                                 GL11.glBindTexture(3553, terrainTex);
                                 GL11.glColor4f(1, 1, 1, 0.5F);
                                 GL11.glPushMatrix();
                                 int pickId = lr.level.getTile(pick.x, pick.y, pick.z);
                                 Block pickBlock = pickId > 0 ? Block.blocks[pickId] : null;
-                                if (pickBlock == null)
-                                    pickBlock = Block.STONE;
+                                if (pickBlock == null) pickBlock = Block.STONE;
                                 float cx = (pickBlock.x1 + pickBlock.x2) / 2.0F;
                                 float cy = (pickBlock.y1 + pickBlock.y2) / 2.0F;
                                 float cz = (pickBlock.z1 + pickBlock.z2) / 2.0F;
@@ -340,7 +360,12 @@ final class ClientFrameRenderer {
                                 sr1.noColor();
                                 GL11.glDepthMask(false);
                                 for (int face = 0; face < 6; ++face)
-                                    pickBlock.renderSide(sr1, pick.x, pick.y, pick.z, face,
+                                    pickBlock.renderSide(
+                                            sr1,
+                                            pick.x,
+                                            pick.y,
+                                            pick.z,
+                                            face,
                                             240 + (int) (lrPick.cracks * 10.0F));
                                 sr1.end();
                                 GL11.glDepthMask(true);
@@ -358,8 +383,11 @@ final class ClientFrameRenderer {
                             float eps = 0.002F;
                             int id = lr.level.getTile(pick.x, pick.y, pick.z);
                             if (id > 0) {
-                                AABB bb = Block.blocks[id].getSelectionBox(pick.x, pick.y, pick.z)
-                                        .grow(eps, eps, eps);
+                                AABB bb =
+                                        Block.blocks[id]
+                                                .getSelectionBox(
+                                                        r.minecraft.level, pick.x, pick.y, pick.z)
+                                                .grow(eps, eps, eps);
                                 GL11.glBegin(3);
                                 GL11.glVertex3f(bb.x0, bb.y0, bb.z0);
                                 GL11.glVertex3f(bb.x1, bb.y0, bb.z0);
@@ -402,16 +430,18 @@ final class ClientFrameRenderer {
                         GL11.glDisable(3042);
                         GL11.glEnable(3042);
                         GL11.glColorMask(false, false, false, false);
-                        xTile = lr.sortChunks(camPlayer, 1);
+                        xTile = lr.sortChunks(camPlayer, 1, renderPartial);
                         GL11.glColorMask(true, true, true, true);
                         if (r2.minecraft.settings.anaglyph) {
-                            if (stereoEye == 0)
-                                GL11.glColorMask(false, true, true, false);
-                            else
-                                GL11.glColorMask(true, false, false, false);
+                            if (stereoEye == 0) GL11.glColorMask(false, true, true, false);
+                            else GL11.glColorMask(true, false, false, false);
                         }
                         if (xTile > 0) {
-                            GL11.glBindTexture(3553, lr.textureManager.load("/terrain.png"));
+                            GL11.glBindTexture(
+                                    3553,
+                                    lr.textureManager.load(
+                                            net.classicremastered.minecraft.render.BlockTextureAtlas
+                                                    .RESOURCE));
                             GL11.glCallLists(lr.buffer);
                         }
                         GL11.glDepthMask(true);
@@ -419,19 +449,25 @@ final class ClientFrameRenderer {
                         GL11.glDisable(2912);
 
                         ClientWeatherRenderer.render(r2, renderPartial);
+                        net.classicremastered.minecraft.render.DeveloperPowerRenderer.render(
+                                mc, renderPartial);
 
                         if (r2.entity != null) {
                             r2.entity.renderHover(r2.minecraft.textureManager, renderPartial);
                         }
 
                         ClientFirstPersonRenderer.render(r2, renderPartial, stereoEye);
-                        if (!r2.minecraft.settings.anaglyph)
-                            break;
+                        if (!r2.minecraft.settings.anaglyph) break;
                         ++stereoEye;
                     }
                     // Hide HUD hotbar when inventory/crafting/furnace GUI is open
-                    boolean hideHUD = (mc.currentScreen instanceof net.classicremastered.minecraft.gui.InventoryScreen)
-                            || (mc.currentScreen instanceof net.classicremastered.minecraft.gui.GuiCrafting);
+                    boolean hideHUD =
+                            (mc.currentScreen
+                                            instanceof
+                                            net.classicremastered.minecraft.gui.InventoryScreen)
+                                    || (mc.currentScreen
+                                            instanceof
+                                            net.classicremastered.minecraft.gui.GuiCrafting);
 
                     mc.renderer.renderUnderwaterOverlay(partial);
                     r.minecraft.hud.render(partial, hideHUD, mouseUiX, uiH);
@@ -463,4 +499,3 @@ final class ClientFrameRenderer {
         }
     }
 }
-

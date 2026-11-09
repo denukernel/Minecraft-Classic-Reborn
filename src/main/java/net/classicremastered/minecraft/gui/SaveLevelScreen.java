@@ -16,5 +16,6 @@ public final class SaveLevelScreen extends LoadLevelScreen {
             file = new File(file.getParentFile(), file.getName() + ".mine");
         }
         if (minecraft.levelIo.save(minecraft.level, file)) minecraft.setCurrentScreen(parent);
+        else minecraft.setCurrentScreen(new ErrorScreen("Failed to save", "Could not save the level file.", this));
     }
 }

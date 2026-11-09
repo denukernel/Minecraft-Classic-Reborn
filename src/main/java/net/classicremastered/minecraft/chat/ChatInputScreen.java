@@ -1,11 +1,11 @@
 package net.classicremastered.minecraft.chat;
 
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
-
 import net.classicremastered.minecraft.chat.commands.CommandManager;
 import net.classicremastered.minecraft.gui.GuiScreen;
 import net.classicremastered.minecraft.net.PacketType;
+
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 import java.awt.*;
 import java.awt.datatransfer.*;
@@ -16,6 +16,69 @@ public class ChatInputScreen extends GuiScreen {
 
     protected String message = "";
     private int counter = 0;
+    private java.util.List<
+                    net.classicremastered.minecraft.chat.commands.CommandSuggestions.Suggestion>
+            suggestions = java.util.List.of();
+    private String suggestionInput = "";
+    private int suggestionCaret = -1, selectedSuggestion = 0, suggestionScroll = 0;
+    private boolean suggestionsDismissed;
+
+    private void refreshSuggestions() {
+        if (closeHandler != null) {
+            suggestions = java.util.List.of();
+            return;
+        }
+        if (message.equals(suggestionInput) && caret == suggestionCaret) return;
+        suggestionInput = message;
+        suggestionCaret = caret;
+        suggestionsDismissed = false;
+        selectedSuggestion = 0;
+        suggestionScroll = 0;
+        CommandManager.ensureBootstrapped(minecraft);
+        suggestions =
+                net.classicremastered.minecraft.chat.commands.CommandSuggestions.complete(
+                        minecraft, minecraft.player, message, caret);
+    }
+
+    private boolean suggestionPanel() {
+        return !suggestionsDismissed && !suggestions.isEmpty() && closeHandler == null;
+    }
+
+    private void selectSuggestion(int delta) {
+        selectedSuggestion = Math.floorMod(selectedSuggestion + delta, suggestions.size());
+        suggestionScroll =
+                Math.max(
+                        0,
+                        Math.min(
+                                selectedSuggestion,
+                                Math.max(suggestionScroll, selectedSuggestion - 7)));
+    }
+
+    private void acceptSuggestion() {
+        var s = suggestions.get(selectedSuggestion);
+        String suffix = message.substring(s.end());
+        String replacement = s.text() + (suffix.isEmpty() && !s.text().endsWith("=") ? " " : "");
+        if (message.length() - (s.end() - s.start()) + replacement.length() > maxLen()) return;
+        message = message.substring(0, s.start()) + replacement + suffix;
+        caret = s.start() + replacement.length();
+        selAnchor = -1;
+        refreshSuggestions();
+    }
+
+    private int panelTop() {
+        return height - 28 - Math.min(8, suggestions.size()) * 12;
+    }
+
+    private int panelWidth() {
+        return Math.max(1, Math.min(width - 8, 320));
+    }
+
+    private String fitSuggestion(String text) {
+        text = text.replace('\n', ' ').replace('\r', ' ');
+        while (!text.isEmpty() && fontRenderer.getWidth(text) > panelWidth() - 8)
+            text = text.substring(0, text.length() - 1);
+        return text;
+    }
 
     private int caret = 0;
     private int selAnchor = -1;
@@ -30,12 +93,13 @@ public class ChatInputScreen extends GuiScreen {
     private static final int HISTORY_LIMIT = 100;
 
     private static final String ALLOWED =
-        " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.:-_'*!\"#%/()=+?[]{}<>@|$;";
+            " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.:-_'*!\"#%/()=+?[]{}<>@|$;";
 
     // Optional callback for seed input etc.
     public interface CloseHandler {
         void onClosed(String text);
     }
+
     private CloseHandler closeHandler;
 
     public void setCloseHandler(CloseHandler handler) {
@@ -53,10 +117,6 @@ public class ChatInputScreen extends GuiScreen {
         Keyboard.enableRepeatEvents(false);
         dragging = false;
         selAnchor = -1;
-
-        if (closeHandler != null) {
-            closeHandler.onClosed(this.message.trim());
-        }
     }
 
     @Override
@@ -72,11 +132,29 @@ public class ChatInputScreen extends GuiScreen {
 
     @Override
     protected void onKeyPress(char c, int key) {
-        boolean ctrlDown  = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
-        boolean shiftDown = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)   || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
-
         clampCarets();
 
+        refreshSuggestions();
+        if (key == Keyboard.KEY_ESCAPE && suggestionPanel()) {
+            suggestionsDismissed = true;
+            return;
+        }
+        if (suggestionPanel()) {
+            if (key == Keyboard.KEY_UP) {
+                selectSuggestion(-1);
+                return;
+            }
+            if (key == Keyboard.KEY_DOWN) {
+                selectSuggestion(1);
+                return;
+            }
+            if (key == Keyboard.KEY_TAB) {
+                if (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
+                        || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)) selectSuggestion(-1);
+                else acceptSuggestion();
+                return;
+            }
+        }
         // Exit
         if (key == Keyboard.KEY_ESCAPE) {
             this.minecraft.setCurrentScreen(null);
@@ -86,6 +164,11 @@ public class ChatInputScreen extends GuiScreen {
         // Submit
         if (key == Keyboard.KEY_RETURN || key == Keyboard.KEY_NUMPADENTER) {
             String msg = message.trim();
+            if (closeHandler != null) {
+                this.minecraft.setCurrentScreen(null);
+                closeHandler.onClosed(msg);
+                return;
+            }
             if (!msg.isEmpty()) {
                 addHistory(msg);
 
@@ -103,9 +186,13 @@ public class ChatInputScreen extends GuiScreen {
                         prefix = getUsernameSafe() + ": ";
                     }
 
-                    if (minecraft != null && minecraft.networkManager != null && minecraft.networkManager.netHandler != null && minecraft.player != null) {
+                    if (minecraft != null
+                            && minecraft.networkManager != null
+                            && minecraft.networkManager.netHandler != null
+                            && minecraft.player != null) {
                         // Send to server only if player exists
-                        minecraft.networkManager.netHandler.send(PacketType.CHAT_MESSAGE, new Object[]{-1, msg});
+                        minecraft.networkManager.netHandler.send(
+                                PacketType.CHAT_MESSAGE, new Object[] {-1, msg});
                     } else if (minecraft != null && minecraft.hud != null) {
                         minecraft.hud.addChat(prefix + msg);
                     }
@@ -114,6 +201,12 @@ public class ChatInputScreen extends GuiScreen {
             this.minecraft.setCurrentScreen(null);
             return;
         }
+
+        boolean ctrlDown =
+                Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+                        || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+        boolean shiftDown =
+                Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
 
         // History browse
         if (key == Keyboard.KEY_UP) {
@@ -138,26 +231,61 @@ public class ChatInputScreen extends GuiScreen {
         }
 
         // Clipboard
-        if (key == Keyboard.KEY_A && ctrlDown) { selAnchor = 0; caret = message.length(); return; }
-        if (key == Keyboard.KEY_C && ctrlDown) { String sel = getSelectedText(); if (!sel.isEmpty()) setClipboard(sel); return; }
-        if (key == Keyboard.KEY_X && ctrlDown) { if (hasSelection()) { setClipboard(getSelectedText()); deleteSelection(); } return; }
-        if (key == Keyboard.KEY_V && ctrlDown) { String clip = getClipboard(); if (!clip.isEmpty()) insertText(filterAllowed(clip)); return; }
+        if (key == Keyboard.KEY_A && ctrlDown) {
+            selAnchor = 0;
+            caret = message.length();
+            return;
+        }
+        if (key == Keyboard.KEY_C && ctrlDown) {
+            String sel = getSelectedText();
+            if (!sel.isEmpty()) setClipboard(sel);
+            return;
+        }
+        if (key == Keyboard.KEY_X && ctrlDown) {
+            if (hasSelection()) {
+                setClipboard(getSelectedText());
+                deleteSelection();
+            }
+            return;
+        }
+        if (key == Keyboard.KEY_V && ctrlDown) {
+            String clip = getClipboard();
+            if (!clip.isEmpty()) insertText(filterAllowed(clip));
+            return;
+        }
 
         // Navigation
-        if (key == Keyboard.KEY_LEFT)  { moveCaretLeft(ctrlDown, shiftDown); return; }
-        if (key == Keyboard.KEY_RIGHT) { moveCaretRight(ctrlDown, shiftDown); return; }
-        if (key == Keyboard.KEY_HOME)  { setCaret(0, shiftDown); return; }
-        if (key == Keyboard.KEY_END)   { setCaret(message.length(), shiftDown); return; }
+        if (key == Keyboard.KEY_LEFT) {
+            moveCaretLeft(ctrlDown, shiftDown);
+            return;
+        }
+        if (key == Keyboard.KEY_RIGHT) {
+            moveCaretRight(ctrlDown, shiftDown);
+            return;
+        }
+        if (key == Keyboard.KEY_HOME) {
+            setCaret(0, shiftDown);
+            return;
+        }
+        if (key == Keyboard.KEY_END) {
+            setCaret(message.length(), shiftDown);
+            return;
+        }
 
         // Editing
         if (key == Keyboard.KEY_BACK) {
             if (hasSelection()) deleteSelection();
-            else if (caret > 0) { message = message.substring(0, caret - 1) + message.substring(caret); caret--; }
+            else if (caret > 0) {
+                message = message.substring(0, caret - 1) + message.substring(caret);
+                caret--;
+            }
             return;
         }
         if (key == Keyboard.KEY_DELETE) {
             if (hasSelection()) deleteSelection();
-            else if (caret < message.length()) { message = message.substring(0, caret) + message.substring(caret + 1); }
+            else if (caret < message.length()) {
+                message = message.substring(0, caret) + message.substring(caret + 1);
+            }
             return;
         }
 
@@ -168,6 +296,30 @@ public class ChatInputScreen extends GuiScreen {
     @Override
     public void render(int mouseX, int mouseY) {
         clampCarets();
+        refreshSuggestions();
+        if (suggestionPanel()) {
+            int top = panelTop(), rows = Math.min(8, suggestions.size());
+            drawBox(4, top, 4 + panelWidth(), top + rows * 12, 0xE0202020);
+            for (int row = 0; row < rows; row++) {
+                int index = suggestionScroll + row;
+                if (index >= suggestions.size()) break;
+                if (index == selectedSuggestion)
+                    drawBox(4, top + row * 12, 4 + panelWidth(), top + row * 12 + 12, 0xFF505060);
+                drawString(
+                        fontRenderer,
+                        fitSuggestion(suggestions.get(index).text()),
+                        8,
+                        top + row * 12 + 2,
+                        index == selectedSuggestion ? 0xFFFF80 : 0xFFFFFF);
+            }
+        }
+        if (closeHandler == null && message.startsWith("/")) {
+            String usage =
+                    net.classicremastered.minecraft.chat.commands.CommandSuggestions.usage(message);
+            if (suggestionPanel()) usage = suggestions.get(selectedSuggestion).usage();
+            if (!usage.isEmpty())
+                drawString(fontRenderer, fitSuggestion(usage), 4, height - 25, 0xAAAAAA);
+        }
         drawBox(2, height - 14, width - 2, height - 2, Integer.MIN_VALUE);
 
         final String prefix = "> ";
@@ -178,14 +330,14 @@ public class ChatInputScreen extends GuiScreen {
             int a = Math.min(caret, selAnchor);
             int b = Math.max(caret, selAnchor);
             String left = message.substring(0, a);
-            String mid  = message.substring(a, b);
+            String mid = message.substring(a, b);
             int x0 = baseX + fontRenderer.getWidth(prefix) + fontRenderer.getWidth(left);
             int x1 = x0 + fontRenderer.getWidth(mid);
             drawBox(x0, baseY - 2, x1, baseY + 10, 0x80FFFFFF);
         }
 
         String before = (len == 0) ? "" : message.substring(0, caret);
-        String after  = (len == 0) ? "" : message.substring(caret);
+        String after = (len == 0) ? "" : message.substring(caret);
         String caretGlyph = (counter / 6 % 2 == 0 ? "_" : " ");
         drawString(fontRenderer, prefix + before + caretGlyph + after, baseX, baseY, 0xE0E0E0);
     }
@@ -273,8 +425,11 @@ public class ChatInputScreen extends GuiScreen {
         int best = 0, bestDist = Integer.MAX_VALUE;
         for (int i = 0; i <= message.length(); i++) {
             int xi = px + fontRenderer.getWidth(message.substring(0, i));
-            int d  = Math.abs(xi - mx);
-            if (d < bestDist) { bestDist = d; best = i; }
+            int d = Math.abs(xi - mx);
+            if (d < bestDist) {
+                bestDist = d;
+                best = i;
+            }
         }
         setCaret(best, extend);
     }
@@ -292,8 +447,11 @@ public class ChatInputScreen extends GuiScreen {
     private static void setClipboard(String text) {
         if (text == null || text.isEmpty()) return;
         try {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-        } catch (Exception ignored) {}
+            Toolkit.getDefaultToolkit()
+                    .getSystemClipboard()
+                    .setContents(new StringSelection(text), null);
+        } catch (Exception ignored) {
+        }
     }
 
     private static String getClipboard() {
@@ -302,14 +460,28 @@ public class ChatInputScreen extends GuiScreen {
             if (cb.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
                 return (String) cb.getData(DataFlavor.stringFlavor);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return "";
     }
 
     @Override
     protected void onMouseClick(int x, int y, int button) {
+        refreshSuggestions();
+        if (button == 0
+                && suggestionPanel()
+                && x >= 4
+                && x < 4 + panelWidth()
+                && y >= panelTop()
+                && y < panelTop() + Math.min(8, suggestions.size()) * 12) {
+            selectedSuggestion = suggestionScroll + (y - panelTop()) / 12;
+            if (selectedSuggestion < suggestions.size()) acceptSuggestion();
+            return;
+        }
         if (button == 0) {
-            boolean shift = Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+            boolean shift =
+                    Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
+                            || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
             if (!shift) {
                 selAnchor = caret;
                 setCaretFromMouse(x, false);

@@ -11,48 +11,35 @@ public final class StillLiquidBlock extends LiquidBlock {
         super(var1, var2);
         this.movingId = var1 - 1;
         this.stillId = var1;
-        this.setPhysics(false);
-    }
-
-    public final void update(Level level, int x, int y, int z, Random rand) {
+        this.setPhysics(var2 == LiquidType.LAVA);
     }
 
     @Override
-    public final void onNeighborChange(Level level, int x, int y, int z, int changedId) {
-        boolean needsFlow = false;
-
-        // check neighbors safely (don’t use finite width/height)
-        if (level.isInBounds(x - 1, y, z) && level.getTile(x - 1, y, z) == 0)
-            needsFlow = true;
-        if (level.isInBounds(x + 1, y, z) && level.getTile(x + 1, y, z) == 0)
-            needsFlow = true;
-        if (level.isInBounds(x, y, z - 1) && level.getTile(x, y, z - 1) == 0)
-            needsFlow = true;
-        if (level.isInBounds(x, y, z + 1) && level.getTile(x, y, z + 1) == 0)
-            needsFlow = true;
-        if (level.isInBounds(x, y - 1, z) && level.getTile(x, y - 1, z) == 0)
-            needsFlow = true;
-        if (level.isInBounds(x, y + 1, z) && level.getTile(x, y + 1, z) == 0)
-            needsFlow = true;
-
-        // water vs lava → stone
-        if (changedId != 0) {
-            LiquidType other = Block.blocks[changedId].getLiquidType();
-            if ((this.type == LiquidType.WATER && other == LiquidType.LAVA)
-                    || (this.type == LiquidType.LAVA && other == LiquidType.WATER)) {
-                level.setTile(x, y, z, Block.STONE.id);
-                return;
-            }
+    public void update(Level level, int x, int y, int z, Random random) {
+        if (level.isNetworkMode()) {
+            return;
         }
-
-        // turn into flowing liquid if needed
-        if (needsFlow) {
-            if (level.minecraft != null && level.minecraft.settings != null && level.minecraft.settings.finiteWater) {
-                level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) 0);
-            }
-            level.setTileNoUpdate(x, y, z, this.movingId);
-            level.addToTickNextTick(x, y, z, this.movingId);
+        if (this.type == LiquidType.WATER && usesLevelledFlow(level)) {
+            updateWater(level, x, y, z);
+        } else if (this.type == LiquidType.LAVA) {
+            tryIgniteNearLava(level, x, y, z, random);
         }
     }
 
+    @Override
+    public void onNeighborChange(Level level, int x, int y, int z, int changedId) {
+        if (level.isNetworkMode() || reactWithOtherLiquid(level, x, y, z, changedId)) {
+            return;
+        }
+
+        // A block above the surface cannot open a path for flow.
+        if (canFlowInto(level, x, y - 1, z) || canFlowInto(level, x - 1, y, z) || canFlowInto(level, x + 1, y, z)
+                || canFlowInto(level, x, y, z - 1) || canFlowInto(level, x, y, z + 1)) {
+            if (this.type == LiquidType.WATER && usesLevelledFlow(level)) {
+                level.addToTickNextTick(x, y, z, this.id);
+            } else if (level.setTileNoUpdate(x, y, z, this.movingId)) {
+                level.addToTickNextTick(x, y, z, this.movingId);
+            }
+        }
+    }
 }

@@ -11,6 +11,7 @@ public class ModsScreen extends GuiScreen {
     private final GuiScreen parent;
 
     public ModsScreen(GuiScreen parent) {
+        super(parent);
         this.parent = parent;
     }
 
@@ -26,6 +27,7 @@ public class ModsScreen extends GuiScreen {
 
     @Override
     public void render(int mouseX, int mouseY) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawCenteredString(this.fontRenderer, "Installed Mods", this.width / 2, 20, 0xFFFFFF);
 
         // list loaded mods

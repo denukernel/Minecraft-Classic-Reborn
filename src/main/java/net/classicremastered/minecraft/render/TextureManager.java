@@ -1,25 +1,24 @@
 package net.classicremastered.minecraft.render;
 
-import org.lwjgl.BufferUtils;
-import org.lwjgl.LWJGLException;
-import org.lwjgl.opengl.*;
-
 import net.classicremastered.minecraft.GameSettings;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.render.texture.TextureFX;
 
-import javax.imageio.ImageIO;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.*;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.zip.ZipFile;
+
+import javax.imageio.ImageIO;
 
 public class TextureManager {
     public TextureManager(GameSettings settings) {
@@ -46,6 +45,7 @@ public class TextureManager {
     public File texturesFolder;
 
     public int previousMipmapMode;
+
     // === added convenience ===
 
     public int load(String file) {
@@ -59,7 +59,10 @@ public class TextureManager {
                 GL11.glGenTextures(idBuffer);
                 int textureID = idBuffer.get(0);
 
-                if (file.endsWith(".png")) {
+                if (file.equals(BlockTextureAtlas.RESOURCE)) {
+                    load(BlockTextureAtlas.create(null), textureID);
+                    textures.put(file, textureID);
+                } else if (file.endsWith(".png")) {
                     BufferedImage img = null;
 
                     if (file.startsWith("##")) {
@@ -85,20 +88,9 @@ public class TextureManager {
                     textures.put(file, textureID);
 
                 } else if (file.endsWith(".zip")) {
-                    ZipFile zip = new ZipFile(new File(minecraftFolder, "texturepacks/" + file));
-                    String terrainPNG = "terrain.png";
-                    if (zip.getEntry(terrainPNG.startsWith("/") ? terrainPNG.substring(1) : terrainPNG) != null) {
-                        load(ImageIO.read(zip.getInputStream(zip.getEntry(terrainPNG))), textureID);
-                    } else {
-                        java.io.InputStream in = TextureManager.class.getResourceAsStream(terrainPNG);
-                        if (in == null) {
-                            System.err.println("[TextureManager] Missing default terrain.png in " + file);
-                            load(getMissingTexture(), textureID);
-                        } else {
-                            load(ImageIO.read(in), textureID);
-                        }
+                    try (ZipFile zip = new ZipFile(new File(texturesFolder, file))) {
+                        load(BlockTextureAtlas.create(zip), textureID);
                     }
-                    zip.close();
                     externalTexturePacks.put(file, textureID);
                 }
 
@@ -110,6 +102,7 @@ public class TextureManager {
             }
         }
     }
+
     private BufferedImage getMissingTexture() {
         BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
@@ -155,14 +148,18 @@ public class TextureManager {
     public void load(BufferedImage image, int textureID) {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureID);
         if (settings.smoothing > 0) {
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST_MIPMAP_LINEAR);
+            GL11.glTexParameteri(
+                    GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST_MIPMAP_LINEAR);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
 
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, 0);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, 4);
 
             if (settings.anisotropic > 0) {
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, EXTTextureFilterAnisotropic.GL_TEXTURE_MAX_ANISOTROPY_EXT, 16);
+                GL11.glTexParameteri(
+                        GL11.GL_TEXTURE_2D,
+                        EXTTextureFilterAnisotropic.GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                        16);
             }
         } else {
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
@@ -203,7 +200,15 @@ public class TextureManager {
         textureBuffer.put(color);
         textureBuffer.position(0).limit(color.length);
 
-        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, width, height, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE,
+        GL11.glTexImage2D(
+                GL11.GL_TEXTURE_2D,
+                0,
+                GL11.GL_RGBA,
+                width,
+                height,
+                0,
+                GL11.GL_RGBA,
+                GL11.GL_UNSIGNED_BYTE,
                 textureBuffer);
 
         if (settings.smoothing > 0) {
@@ -218,7 +223,8 @@ public class TextureManager {
                     GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
                 } else if (capabilities.GL_EXT_framebuffer_object) {
                     if (previousMipmapMode != settings.smoothing) {
-                        System.out.println("Using GL_EXT_framebuffer_object extension for mipmap generation.");
+                        System.out.println(
+                                "Using GL_EXT_framebuffer_object extension for mipmap generation.");
                     }
 
                     EXTFramebufferObject.glGenerateMipmapEXT(GL11.GL_TEXTURE_2D);
@@ -243,137 +249,11 @@ public class TextureManager {
 
     // TextureManager.java
     // TextureManager.java
-    public void applyBlockTilesToTerrainAtlas() {
-        int terrainTex = load("/terrain.png");
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, terrainTex);
-
-        // blit a BufferedImage (or a sub-rect) into a terrain.png cell
-        java.util.function.BiConsumer<Integer, BufferedImage> putImg = (index, img) -> {
-            if (img == null)
-                return;
-            if (img.getWidth() != 16 || img.getHeight() != 16) {
-                BufferedImage s = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-                Graphics g = s.getGraphics();
-                g.drawImage(img, 0, 0, 16, 16, null);
-                g.dispose();
-                img = s;
-            }
-            int x = (index % 16) * 16;
-            int y = (index / 16) * 16;
-            int[] px = new int[16 * 16];
-            byte[] rgba = new byte[16 * 16 * 4];
-            img.getRGB(0, 0, 16, 16, px, 0, 16);
-            for (int i = 0; i < px.length; i++) {
-                int a = px[i] >>> 24, r = (px[i] >> 16) & 255, g = (px[i] >> 8) & 255, b = px[i] & 255;
-                int o = i << 2;
-                rgba[o] = (byte) r;
-                rgba[o + 1] = (byte) g;
-                rgba[o + 2] = (byte) b;
-                rgba[o + 3] = (byte) a;
-            }
-            ByteBuffer buf = BufferUtils.createByteBuffer(rgba.length);
-            buf.put(rgba).flip();
-            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, x, y, 16, 16, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buf);
-        };
-
-        // load a 16×16 from classpath or filesystem fallback
-        java.util.function.BiConsumer<Integer, String> put = (index, path) -> {
-            try {
-                java.io.InputStream in = TextureManager.class.getResourceAsStream(path);
-                if (in == null) {
-                    java.io.File file = new java.io.File("src/main/resources" + path);
-                    if (file.exists()) {
-                        putImg.accept(index, ImageIO.read(file));
-                    } else {
-                        System.err.println("[TextureManager] Missing texture resource: " + path);
-                    }
-                } else {
-                    putImg.accept(index, ImageIO.read(in));
-                }
-            } catch (Exception e) {
-                System.err.println("[TextureManager] Failed to load block tile at index " + index + ": " + e);
-            }
-        };
-
-        // ---- vanilla/classic tiles (existing) ----
-        put.accept(1, "/terrain/blocks/stone.png");
-        put.accept(2, "/terrain/blocks/dirt.png");
-        put.accept(0, "/terrain/blocks/grass_top.png");
-        put.accept(3, "/terrain/blocks/grass_side.png");
-        put.accept(4, "/terrain/blocks/planks.png");
-        put.accept(5, "/terrain/blocks/smooth_stone2.png");
-        put.accept(6, "/terrain/blocks/smooth_stone1.png");
-        put.accept(7, "/terrain/blocks/bricks.png");
-        put.accept(8, "/terrain/blocks/tnt_side.png");
-        put.accept(9, "/terrain/blocks/tnt_up.png");
-        put.accept(10, "/terrain/blocks/tnt_bottom.png");
-        put.accept(12, "/terrain/blocks/rose.png");
-        put.accept(13, "/terrain/blocks/dandelion.png");
-        put.accept(52, "/terrain/blocks/web.png");
-        put.accept(18, "/terrain/blocks/sand.png");
-        put.accept(19, "/terrain/blocks/gravel.png");
-        put.accept(16, "/terrain/blocks/old_stone.png");
-        put.accept(36, "/terrain/blocks/mossy_cobblestone.png");
-        put.accept(32, "/terrain/blocks/gold_ore.png");
-        put.accept(33, "/terrain/blocks/iron_ore.png");
-        put.accept(34, "/terrain/blocks/coal_ore.png");
-        put.accept(21, "/terrain/blocks/wood_top.png");
-        put.accept(20, "/terrain/blocks/wood.png");
-        put.accept(22, "/terrain/blocks/leaves.png");
-        put.accept(35, "/terrain/blocks/bookshelv.png");
-        put.accept(49, "/terrain/blocks/glass.png");
-        put.accept(37, "/terrain/blocks/obsidian.png");
-        put.accept(48, "/terrain/blocks/sponge.png");
-        put.accept(40, "/terrain/blocks/gold_top.png");
-        put.accept(41, "/terrain/blocks/gold_side.png");
-        put.accept(42, "/terrain/blocks/gold_bottom.png");
-        put.accept(43, "/terrain/blocks/iron.png");
-        put.accept(44, "/terrain/blocks/iron_side.png");
-        put.accept(39, "/terrain/blocks/iron_bottom.png");
-        put.accept(15, "/terrain/blocks/saplings.png");
-        put.accept(208, "/terrain/blocks/tile_7_34.png"); // added
-        put.accept(209, "/terrain/blocks/tile_7_35.png"); // added
-        put.accept(210, "/terrain/blocks/tile_7_36.png"); // added
-        put.accept(211, "/terrain/blocks/tile_7_37.png"); // added
-        put.accept(212, "/terrain/blocks/jukebox.png"); // added
-
-        // ---- NEW BLOCKS (your /terrain/blocks/new_blocks/*) ----
-        // Reserve a clean range 176..189 for custom tiles to avoid collisions. // added
-        // Pistons
-        put.accept(176, "/terrain/blocks/new_blocks/piston_top_normal.png"); // added
-        put.accept(177, "/terrain/blocks/new_blocks/piston_bottom.png"); // added
-        put.accept(178, "/terrain/blocks/new_blocks/piston_side.png"); // added
-
-        // Cactus
-        put.accept(179, "/terrain/blocks/new_blocks/cactus_side.png"); // added
-        put.accept(180, "/terrain/blocks/new_blocks/cactus_top.png"); // added
-
-        // Furnace
-        put.accept(181, "/terrain/blocks/new_blocks/furnace_top.png"); // added
-        put.accept(182, "/terrain/blocks/new_blocks/furnace_front_off.png"); // added
-        put.accept(183, "/terrain/blocks/new_blocks/furnace_front_on.png"); // added
-        put.accept(184, "/terrain/blocks/new_blocks/furnace_side.png"); // added
-
-        // Beacon / Diamond / Pumpkin
-        put.accept(185, "/terrain/blocks/new_blocks/beacon.png"); // added
-        put.accept(186, "/terrain/blocks/new_blocks/diamond_block.png"); // added
-        put.accept(187, "/terrain/blocks/new_blocks/diamond_ore.png"); // added
-        put.accept(188, "/terrain/blocks/new_blocks/pumpkin_side.png"); // added
-        put.accept(189, "/terrain/blocks/new_blocks/pumpkin_face_off.png"); // added
-        put.accept(190, "/terrain/blocks/lucky_block.png");
-
-        // ---- optional: wool strip 64..79 ----
+    public void applyBlockTextures() {
         try {
-            BufferedImage strip = ImageIO
-                    .read(TextureManager.class.getResourceAsStream("/terrain/blocks/wooltextures.png"));
-            if (strip != null) {
-                for (int i = 0; i < 16; i++) {
-                    BufferedImage sub = strip.getSubimage(i * (strip.getWidth() / 16), 0, strip.getWidth() / 16,
-                            strip.getHeight());
-                    putImg.accept(64 + i, sub);
-                }
-            }
-        } catch (Exception ignored) {
+            load(BlockTextureAtlas.create(null), load(BlockTextureAtlas.RESOURCE));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Cannot load block textures", exception);
         }
     }
 
@@ -406,8 +286,16 @@ public class TextureManager {
                 }
             }
 
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, level, GL11.GL_RGBA, mipWidth, mipHeight, 0, GL11.GL_RGBA,
-                    GL11.GL_UNSIGNED_BYTE, mipData1);
+            GL11.glTexImage2D(
+                    GL11.GL_TEXTURE_2D,
+                    level,
+                    GL11.GL_RGBA,
+                    mipWidth,
+                    mipHeight,
+                    0,
+                    GL11.GL_RGBA,
+                    GL11.GL_UNSIGNED_BYTE,
+                    mipData1);
             GL11.glAlphaFunc(GL11.GL_GEQUAL, 0.1F * level); // Create transparency for each level.
 
             mipData = mipData1;

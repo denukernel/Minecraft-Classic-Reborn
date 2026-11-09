@@ -1,16 +1,18 @@
 package net.classicremastered.toolkit.modeleditor;
 
-
 import net.classicremastered.minecraft.model.*;
 
-import javax.swing.*;
 import java.awt.*;
+
+import javax.swing.*;
 
 /** Model Editor Ui responsibilities. */
 final class ModelEditorUi {
     private final ModelEditorApp editor;
 
-    ModelEditorUi(ModelEditorApp editor) { this.editor = editor; }
+    ModelEditorUi(ModelEditorApp editor) {
+        this.editor = editor;
+    }
 
     void buildUI() {
         Color bgDark = new Color(0x18181B); // dark gray-black for frame/panel backgrounds
@@ -21,7 +23,8 @@ final class ModelEditorUi {
 
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         UIManager.put("Panel.background", cardDark);
         UIManager.put("Label.foreground", textLight);
@@ -44,18 +47,21 @@ final class ModelEditorUi {
         UIManager.put("Spinner.border", BorderFactory.createLineBorder(borderDark));
         UIManager.put("Button.background", new Color(0x31313E));
         UIManager.put("Button.foreground", textLight);
-        UIManager.put("Button.border", BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(borderDark),
-            BorderFactory.createEmptyBorder(4, 10, 4, 10)
-        ));
+        UIManager.put(
+                "Button.border",
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(borderDark),
+                        BorderFactory.createEmptyBorder(4, 10, 4, 10)));
 
         editor.frame = new JFrame("Classic Model Editor");
         editor.frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        editor.frame.addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override public void windowClosing(java.awt.event.WindowEvent event) {
-                if (editor.confirmDiscard()) editor.running = false;
-            }
-        });
+        editor.frame.addWindowListener(
+                new java.awt.event.WindowAdapter() {
+                    @Override
+                    public void windowClosing(java.awt.event.WindowEvent event) {
+                        if (editor.confirmDiscard()) editor.running = false;
+                    }
+                });
         editor.frame.setLayout(new BorderLayout());
         editor.frame.getContentPane().setBackground(bgDark);
 
@@ -71,8 +77,8 @@ final class ModelEditorUi {
 
         JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
         modePanel.setBackground(new Color(0x18181B));
-        editor.btn3DMode = editor.createButton("3D Viewport");
-        editor.btnSettingsMode = editor.createButton("Settings & Properties");
+        editor.btn3DMode = editor.createButton("Viewport input");
+        editor.btnSettingsMode = editor.createButton("Property input");
         editor.btn3DMode.setPreferredSize(new Dimension(150, 28));
         editor.btnSettingsMode.setPreferredSize(new Dimension(170, 28));
 
@@ -81,6 +87,69 @@ final class ModelEditorUi {
 
         modePanel.add(editor.btn3DMode);
         modePanel.add(editor.btnSettingsMode);
+        JComboBox<String> presets = new JComboBox<>(ModelPresets.NAMES);
+        JButton loadPreset = editor.createButton("Load preset");
+        loadPreset.addActionListener(
+                e ->
+                        ModelEditorApp.safe(
+                                () -> {
+                                    if (!editor.confirmDiscard()) return;
+                                    editor.pushHistory();
+                                    editor.model =
+                                            ModelPresets.create((String) presets.getSelectedItem());
+                                    editor.document.reset();
+                                    editor.animText.setText("");
+                                    editor.selected =
+                                            editor.model.parts.isEmpty()
+                                                    ? null
+                                                    : editor.model.parts.get(0);
+                                    editor.refreshPartListSelect(editor.selected);
+                                    editor.syncModelFieldsToUI();
+                                    String resource =
+                                            "/mob/"
+                                                    + presets.getSelectedItem()
+                                                            .toString()
+                                                            .toLowerCase(java.util.Locale.ROOT)
+                                                    + ".png";
+                                    try (java.io.InputStream input =
+                                            ModelEditorUi.class.getResourceAsStream(resource)) {
+                                        editor.clearTexture();
+                                        if (input != null) {
+                                            java.awt.image.BufferedImage image =
+                                                    javax.imageio.ImageIO.read(input);
+                                            editor.textureImage = image;
+                                            editor.model.atlasW = image.getWidth();
+                                            editor.model.atlasH = image.getHeight();
+                                            editor.textureName = resource;
+                                            editor.textureLabel.setText(resource);
+                                            editor.uvPanel.setTexture(image);
+                                            editor.glTasks.add(
+                                                    () ->
+                                                            editor.glTextureId =
+                                                                    editor.uploadTexture(image));
+                                        }
+                                    }
+                                    editor.yaw = 30;
+                                    editor.pitch = 15;
+                                    editor.dist = 7;
+                                    editor.targetX = 0;
+                                    editor.targetY = 1.2f;
+                                    editor.targetZ = 0;
+                                    editor.syncModelFieldsToUI();
+                                }));
+        JButton frameModel = editor.createButton("Frame model");
+        frameModel.addActionListener(
+                e -> {
+                    editor.yaw = 30;
+                    editor.pitch = 15;
+                    editor.dist = 7;
+                    editor.targetX = 0;
+                    editor.targetY = 1.2f;
+                    editor.targetZ = 0;
+                });
+        modePanel.add(presets);
+        modePanel.add(loadPreset);
+        modePanel.add(frameModel);
         topBar.add(modePanel, BorderLayout.CENTER);
         editor.frame.add(topBar, BorderLayout.NORTH);
 
@@ -94,203 +163,243 @@ final class ModelEditorUi {
         editor.frame.add(editor.mainCardContainer, BorderLayout.CENTER);
 
         // Synchronize list selections
-        editor.settingsPartList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                EditablePart sel = editor.settingsPartList.getSelectedValue();
-                if (sel != null && sel != editor.selected) {
-                    editor.selected = sel;
-                    editor.partList.setSelectedValue(sel, true);
-                    editor.loadSelectedToUI();
-                }
-            }
-        });
-        editor.partList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                EditablePart sel = editor.partList.getSelectedValue();
-                if (sel != null) {
-                    editor.selected = sel;
-                    editor.settingsPartList.setSelectedValue(sel, true);
-                    editor.loadSelectedToUI();
-                    editor.uvPanel.setSelected(sel);
-                }
-            }
-        });
+        editor.settingsPartList.addListSelectionListener(
+                e -> {
+                    if (!e.getValueIsAdjusting()) {
+                        EditablePart sel = editor.settingsPartList.getSelectedValue();
+                        if (sel != null && sel != editor.selected) {
+                            editor.selected = sel;
+                            editor.partList.setSelectedValue(sel, true);
+                            editor.loadSelectedToUI();
+                        }
+                    }
+                });
+        editor.partList.addListSelectionListener(
+                e -> {
+                    if (!e.getValueIsAdjusting()) {
+                        EditablePart sel = editor.partList.getSelectedValue();
+                        if (sel != null) {
+                            editor.selected = sel;
+                            editor.settingsPartList.setSelectedValue(sel, true);
+                            editor.loadSelectedToUI();
+                            editor.uvPanel.setSelected(sel);
+                        }
+                    }
+                });
 
         // Set initial mode
         editor.switchMode(true);
 
         // Commit spinner text on focus loss
-        for (JSpinner s : new JSpinner[] { editor.u, editor.v, editor.x, editor.y, editor.z, editor.w, editor.h, editor.d, editor.posX, editor.posY, editor.posZ, editor.pitchSp, editor.yawSp, editor.rollSp, editor.inflate,
-                editor.atlasW, editor.atlasH }) {
-            ((JSpinner.DefaultEditor) s.getEditor()).getTextField()
+        for (JSpinner s :
+                new JSpinner[] {
+                    editor.u,
+                    editor.v,
+                    editor.x,
+                    editor.y,
+                    editor.z,
+                    editor.w,
+                    editor.h,
+                    editor.d,
+                    editor.posX,
+                    editor.posY,
+                    editor.posZ,
+                    editor.pitchSp,
+                    editor.yawSp,
+                    editor.rollSp,
+                    editor.inflate,
+                    editor.atlasW,
+                    editor.atlasH
+                }) {
+            ((JSpinner.DefaultEditor) s.getEditor())
+                    .getTextField()
                     .setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
         }
 
         // Live binding
-        editor.bindIntSpinner(editor.u, v -> {
-            if (editor.selected != null)
-                editor.selected.u = v;
-            editor.uvPanel.repaint();
-        });
-        editor.bindIntSpinner(editor.v, v -> {
-            if (editor.selected != null)
-                editor.selected.v = v;
-            editor.uvPanel.repaint();
-        });
-        editor.bindIntSpinner(editor.x, v -> {
-            if (editor.selected != null)
-                editor.selected.x = v;
-        });
-        editor.bindIntSpinner(editor.y, v -> {
-            if (editor.selected != null)
-                editor.selected.y = v;
-        });
-        editor.bindIntSpinner(editor.z, v -> {
-            if (editor.selected != null)
-                editor.selected.z = v;
-        });
-        editor.bindIntSpinner(editor.w, v -> {
-            if (editor.selected != null)
-                editor.selected.w = v;
-            editor.uvPanel.repaint();
-        });
-        editor.bindIntSpinner(editor.h, v -> {
-            if (editor.selected != null)
-                editor.selected.h = v;
-            editor.uvPanel.repaint();
-        });
-        editor.bindIntSpinner(editor.d, v -> {
-            if (editor.selected != null)
-                editor.selected.d = v;
-            editor.uvPanel.repaint();
-        });
+        editor.bindIntSpinner(
+                editor.u,
+                v -> {
+                    if (editor.selected != null) editor.selected.u = v;
+                    editor.uvPanel.repaint();
+                });
+        editor.bindIntSpinner(
+                editor.v,
+                v -> {
+                    if (editor.selected != null) editor.selected.v = v;
+                    editor.uvPanel.repaint();
+                });
+        editor.bindIntSpinner(
+                editor.x,
+                v -> {
+                    if (editor.selected != null) editor.selected.x = v;
+                });
+        editor.bindIntSpinner(
+                editor.y,
+                v -> {
+                    if (editor.selected != null) editor.selected.y = v;
+                });
+        editor.bindIntSpinner(
+                editor.z,
+                v -> {
+                    if (editor.selected != null) editor.selected.z = v;
+                });
+        editor.bindIntSpinner(
+                editor.w,
+                v -> {
+                    if (editor.selected != null) editor.selected.w = v;
+                    editor.uvPanel.repaint();
+                });
+        editor.bindIntSpinner(
+                editor.h,
+                v -> {
+                    if (editor.selected != null) editor.selected.h = v;
+                    editor.uvPanel.repaint();
+                });
+        editor.bindIntSpinner(
+                editor.d,
+                v -> {
+                    if (editor.selected != null) editor.selected.d = v;
+                    editor.uvPanel.repaint();
+                });
 
-        editor.bindFloatSpinner(editor.posX, d -> {
-            if (editor.selected != null)
-                editor.selected.posX = (float) d;
-        });
-        editor.bindFloatSpinner(editor.posY, d -> {
-            if (editor.selected != null)
-                editor.selected.posY = (float) d;
-        });
-        editor.bindFloatSpinner(editor.posZ, d -> {
-            if (editor.selected != null)
-                editor.selected.posZ = (float) d;
-        });
-        editor.bindFloatSpinner(editor.pitchSp, d -> {
-            if (editor.selected != null)
-                editor.selected.pitch = (float) d;
-        });
-        editor.bindFloatSpinner(editor.yawSp, d -> {
-            if (editor.selected != null)
-                editor.selected.yaw = (float) d;
-        });
-        editor.bindFloatSpinner(editor.rollSp, d -> {
-            if (editor.selected != null)
-                editor.selected.roll = (float) d;
-        });
-        editor.bindFloatSpinner(editor.inflate, d -> {
-            if (editor.selected != null)
-                editor.selected.inflate = (float) d;
-        });
+        editor.bindFloatSpinner(
+                editor.posX,
+                d -> {
+                    if (editor.selected != null) editor.selected.posX = (float) d;
+                });
+        editor.bindFloatSpinner(
+                editor.posY,
+                d -> {
+                    if (editor.selected != null) editor.selected.posY = (float) d;
+                });
+        editor.bindFloatSpinner(
+                editor.posZ,
+                d -> {
+                    if (editor.selected != null) editor.selected.posZ = (float) d;
+                });
+        editor.bindFloatSpinner(
+                editor.pitchSp,
+                d -> {
+                    if (editor.selected != null) editor.selected.pitch = (float) d;
+                });
+        editor.bindFloatSpinner(
+                editor.yawSp,
+                d -> {
+                    if (editor.selected != null) editor.selected.yaw = (float) d;
+                });
+        editor.bindFloatSpinner(
+                editor.rollSp,
+                d -> {
+                    if (editor.selected != null) editor.selected.roll = (float) d;
+                });
+        editor.bindFloatSpinner(
+                editor.inflate,
+                d -> {
+                    if (editor.selected != null) editor.selected.inflate = (float) d;
+                });
 
-        editor.mirror.addActionListener(e -> {
-            if (editor.restoring || editor.selected == null || editor.updatingUI)
-                return;
-            editor.pushHistory();
-            editor.selected.mirror = editor.mirror.isSelected();
-            editor.uvPanel.repaint();
-        });
+        editor.mirror.addActionListener(
+                e -> {
+                    if (editor.restoring || editor.selected == null || editor.updatingUI) return;
+                    editor.pushHistory();
+                    editor.selected.mirror = editor.mirror.isSelected();
+                    editor.uvPanel.repaint();
+                });
 
-        editor.partName.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            private void apply() {
-                if (editor.restoring || editor.selected == null || editor.updatingUI)
-                    return;
-                editor.pushHistoryThrottled();
-                editor.selected.name = editor.partName.getText().trim();
-                editor.partList.repaint();
-                editor.settingsPartList.repaint();
-                editor.uvPanel.repaint();
-            }
+        editor.partName
+                .getDocument()
+                .addDocumentListener(
+                        new javax.swing.event.DocumentListener() {
+                            private void apply() {
+                                if (editor.restoring
+                                        || editor.selected == null
+                                        || editor.updatingUI) return;
+                                editor.pushHistoryThrottled();
+                                editor.selected.name = editor.partName.getText().trim();
+                                editor.partList.repaint();
+                                editor.settingsPartList.repaint();
+                                editor.uvPanel.repaint();
+                            }
 
-            public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                apply();
-            }
+                            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                                apply();
+                            }
 
-            public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                apply();
-            }
+                            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                                apply();
+                            }
 
-            public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                apply();
-            }
-        });
+                            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                                apply();
+                            }
+                        });
 
         editor.frame.pack();
         editor.frame.setLocationRelativeTo(null);
-        editor.frame.setVisible(true);
     }
 
     JPanel titledBox(String title) {
         JPanel p = new JPanel();
         p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
         p.setBackground(new Color(0x202025));
-        p.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(0x2E2E35), 1),
-                title,
-                javax.swing.border.TitledBorder.LEFT,
-                javax.swing.border.TitledBorder.TOP,
-                new Font("Segoe UI", Font.BOLD, 12),
-                new Color(0x94A3B8)
-            ),
-            BorderFactory.createEmptyBorder(6, 6, 6, 6)
-        ));
+        p.setBorder(
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createTitledBorder(
+                                BorderFactory.createLineBorder(new Color(0x2E2E35), 1),
+                                title,
+                                javax.swing.border.TitledBorder.LEFT,
+                                javax.swing.border.TitledBorder.TOP,
+                                new Font("Segoe UI", Font.BOLD, 12),
+                                new Color(0x94A3B8)),
+                        BorderFactory.createEmptyBorder(6, 6, 6, 6)));
         return p;
     }
 
     JButton createButton(String text) {
-        JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                g.setColor(getBackground());
-                g.fillRect(0, 0, getWidth(), getHeight());
-                super.paintComponent(g);
-            }
-        };
+        JButton btn =
+                new JButton(text) {
+                    @Override
+                    protected void paintComponent(Graphics g) {
+                        g.setColor(getBackground());
+                        g.fillRect(0, 0, getWidth(), getHeight());
+                        super.paintComponent(g);
+                    }
+                };
         btn.setBackground(new Color(0x31313E));
         btn.setForeground(new Color(0xE4E4E7));
         btn.setFocusPainted(false);
         btn.setContentAreaFilled(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(0x2E2E35), 1),
-            BorderFactory.createEmptyBorder(4, 10, 4, 10)
-        ));
-        btn.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent e) {
-                btn.setBackground(new Color(0x454555));
-            }
+        btn.setBorder(
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(0x2E2E35), 1),
+                        BorderFactory.createEmptyBorder(4, 10, 4, 10)));
+        btn.addMouseListener(
+                new java.awt.event.MouseAdapter() {
+                    @Override
+                    public void mouseEntered(java.awt.event.MouseEvent e) {
+                        btn.setBackground(new Color(0x454555));
+                    }
 
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                btn.setBackground(new Color(0x31313E));
-            }
+                    @Override
+                    public void mouseExited(java.awt.event.MouseEvent e) {
+                        btn.setBackground(new Color(0x31313E));
+                    }
 
-            @Override
-            public void mousePressed(java.awt.event.MouseEvent e) {
-                btn.setBackground(new Color(0x252530));
-            }
+                    @Override
+                    public void mousePressed(java.awt.event.MouseEvent e) {
+                        btn.setBackground(new Color(0x252530));
+                    }
 
-            @Override
-            public void mouseReleased(java.awt.event.MouseEvent e) {
-                if (btn.getBounds().contains(e.getPoint())) {
-                    btn.setBackground(new Color(0x454555));
-                } else {
-                    btn.setBackground(new Color(0x31313E));
-                }
-            }
-        });
+                    @Override
+                    public void mouseReleased(java.awt.event.MouseEvent e) {
+                        if (btn.getBounds().contains(e.getPoint())) {
+                            btn.setBackground(new Color(0x454555));
+                        } else {
+                            btn.setBackground(new Color(0x31313E));
+                        }
+                    }
+                });
         return btn;
     }
 
@@ -320,48 +429,47 @@ final class ModelEditorUi {
     }
 
     void bindIntSpinner(JSpinner s, java.util.function.IntConsumer apply) {
-        s.addChangeListener(e -> {
-            if (editor.restoring || editor.updatingUI || editor.selected == null)
-                return;
-            editor.pushHistoryThrottled();
-            apply.accept(((Number) s.getValue()).intValue());
-            editor.partList.repaint();
-            if (editor.uvPanel != null)
-                editor.uvPanel.repaint();
-        });
+        s.addChangeListener(
+                e -> {
+                    if (editor.restoring || editor.updatingUI || editor.selected == null) return;
+                    editor.pushHistoryThrottled();
+                    apply.accept(((Number) s.getValue()).intValue());
+                    editor.partList.repaint();
+                    if (editor.uvPanel != null) editor.uvPanel.repaint();
+                });
     }
 
     void bindFloatSpinner(JSpinner s, java.util.function.DoubleConsumer apply) {
-        s.addChangeListener(e -> {
-            if (editor.restoring || editor.updatingUI || editor.selected == null)
-                return;
-            editor.pushHistoryThrottled();
-            apply.accept(((Number) s.getValue()).doubleValue());
-            editor.partList.repaint();
-            if (editor.uvPanel != null)
-                editor.uvPanel.repaint();
-        });
+        s.addChangeListener(
+                e -> {
+                    if (editor.restoring || editor.updatingUI || editor.selected == null) return;
+                    editor.pushHistoryThrottled();
+                    apply.accept(((Number) s.getValue()).doubleValue());
+                    editor.partList.repaint();
+                    if (editor.uvPanel != null) editor.uvPanel.repaint();
+                });
     }
 
     void syncModelFieldsToUI() {
         if (editor.modelName == null) return;
-        SwingUtilities.invokeLater(() -> {
-            editor.updatingUI = true;
-            try {
-                editor.modelName.setText(editor.model.name == null ? "" : editor.model.name);
-                int aw = (editor.model.atlasW > 0 ? editor.model.atlasW : 64);
-                int ah = (editor.model.atlasH > 0 ? editor.model.atlasH : 32);
-                editor.atlasW.setValue(aw);
-                editor.atlasH.setValue(ah);
-            } finally {
-                editor.updatingUI = false;
-            }
-        });
+        SwingUtilities.invokeLater(
+                () -> {
+                    editor.updatingUI = true;
+                    try {
+                        editor.modelName.setText(
+                                editor.model.name == null ? "" : editor.model.name);
+                        int aw = (editor.model.atlasW > 0 ? editor.model.atlasW : 64);
+                        int ah = (editor.model.atlasH > 0 ? editor.model.atlasH : 32);
+                        editor.atlasW.setValue(aw);
+                        editor.atlasH.setValue(ah);
+                    } finally {
+                        editor.updatingUI = false;
+                    }
+                });
     }
 
     void upd() {
-        if (editor.selected == null || editor.updatingUI)
-            return;
+        if (editor.selected == null || editor.updatingUI) return;
         editor.pushHistoryThrottled();
         editor.selected.name = editor.partName.getText().trim();
         editor.partList.repaint();
@@ -369,7 +477,10 @@ final class ModelEditorUi {
     }
 
     void refreshPartListSelect(EditablePart toSelect) {
-        if (editor.partList == null) { editor.selected = toSelect; return; }
+        if (editor.partList == null) {
+            editor.selected = toSelect;
+            return;
+        }
         editor.partListModel.clear();
         java.util.List<EditablePart> partsSnapshot;
         EditablePart selSnapshot;
@@ -378,8 +489,7 @@ final class ModelEditorUi {
             selSnapshot = toSelect;
         }
 
-        for (EditablePart p : partsSnapshot)
-            editor.addPartTreeToList(p);
+        for (EditablePart p : partsSnapshot) editor.addPartTreeToList(p);
 
         if (selSnapshot != null) {
             editor.partList.setSelectedValue(selSnapshot, true);
@@ -388,21 +498,36 @@ final class ModelEditorUi {
             }
         }
         editor.loadSelectedToUI();
-        if (editor.uvPanel != null)
-            editor.uvPanel.setSelected(selSnapshot);
+        if (editor.uvPanel != null) editor.uvPanel.setSelected(selSnapshot);
     }
 
     void addPartTreeToList(EditablePart p) {
         editor.partListModel.addElement(p);
-        for (EditablePart c : p.children)
-            editor.addPartTreeToList(c);
+        for (EditablePart c : p.children) editor.addPartTreeToList(c);
     }
 
     void loadSelectedToUI() {
         boolean has = editor.selected != null;
-        for (JComponent c : new JComponent[] { editor.partName, editor.mirror, editor.u, editor.v, editor.x, editor.y, editor.z, editor.w, editor.h, editor.d, editor.posX, editor.posY, editor.posZ, editor.pitchSp,
-                editor.yawSp, editor.rollSp, editor.inflate })
-            c.setEnabled(has);
+        for (JComponent c :
+                new JComponent[] {
+                    editor.partName,
+                    editor.mirror,
+                    editor.u,
+                    editor.v,
+                    editor.x,
+                    editor.y,
+                    editor.z,
+                    editor.w,
+                    editor.h,
+                    editor.d,
+                    editor.posX,
+                    editor.posY,
+                    editor.posZ,
+                    editor.pitchSp,
+                    editor.yawSp,
+                    editor.rollSp,
+                    editor.inflate
+                }) c.setEnabled(has);
 
         if (!has) {
             editor.partName.setText("");
@@ -438,10 +563,12 @@ final class ModelEditorUi {
     }
 
     void applyUIToSelected() {
-        if (editor.selected == null)
-            return;
+        if (editor.selected == null) return;
 
-        editor.selected.name = editor.partName.getText().trim().isEmpty() ? editor.selected.name : editor.partName.getText().trim();
+        editor.selected.name =
+                editor.partName.getText().trim().isEmpty()
+                        ? editor.selected.name
+                        : editor.partName.getText().trim();
         editor.selected.mirror = editor.mirror.isSelected();
 
         // read integers safely

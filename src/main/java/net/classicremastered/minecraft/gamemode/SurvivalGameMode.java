@@ -35,6 +35,14 @@ public final class SurvivalGameMode extends GameMode {
         int selId = player.inventory.getSelected();
         if (selId <= 0) return false;
 
+        if (selId == net.classicremastered.minecraft.level.itemstack.Item.REDSTONE_DUST_ID + 256
+                || selId == Block.REDSTONE_WIRE.id) {
+            if (!canPlace(selId) || !tryPlaceBlock(player, x, y, z, Block.REDSTONE_WIRE.id, face))
+                return false;
+            if (!level.creativeMode) player.inventory.removeSelected(1);
+            return true;
+        }
+
         if (selId >= 256) {
             int itemId = selId - 256;
             if (itemId >= 0 && itemId < net.classicremastered.minecraft.level.itemstack.Item.items.length) {
@@ -61,9 +69,8 @@ public final class SurvivalGameMode extends GameMode {
 
         if (selId < 256 && Block.blocks[selId] != null) {
             if (!this.canPlace(selId)) return false;
-            boolean placed = this.tryPlaceBlock(player, x, y, z, selId);
+            boolean placed = this.tryPlaceBlock(player, x, y, z, selId, face);
             if (!placed) return false;
-            Block.blocks[selId].onPlace(minecraft.level, x, y, z);
             player.inventory.removeResource(1);
             return true;
         }
@@ -184,7 +191,10 @@ public final class SurvivalGameMode extends GameMode {
 
         String n = it.name != null ? it.name.toLowerCase(java.util.Locale.ROOT) : "";
 
-        if (n.contains("mining axe") || n.contains("pickaxe") || n.equals("pick") || n.equals("pick axe")) {
+        if (n.contains("mining axe")
+                || n.contains("pickaxe")
+                || n.equals("pick")
+                || n.equals("pick axe")) {
             if (block.prefersPickaxe()) return 3.0f;
             return 1.0f;
         }

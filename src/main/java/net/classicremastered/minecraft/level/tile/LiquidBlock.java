@@ -9,337 +9,479 @@ import net.classicremastered.minecraft.render.ShapeRenderer;
 
 public class LiquidBlock extends Block {
 
-   protected LiquidType type;
-   protected int stillId;
-   protected int movingId;
+    private static final int FALLING_WATER = 8;
+    private static final int NO_WATER = 9;
+    private static final int SLOPE_RANGE = 4;
+    private static final int[] STEP_X = { -1, 1, 0, 0 };
+    private static final int[] STEP_Z = { 0, 0, -1, 1 };
 
+    protected LiquidType type;
+    protected int stillId;
+    protected int movingId;
 
-   protected LiquidBlock(int var1, LiquidType var2) {
-      super(var1, "Liquid");
-      this.type = var2;
-      this.textureId = 14;
-      if(var2 == LiquidType.LAVA) {
-         this.textureId = 30;
-      }
+    protected LiquidBlock(int var1, LiquidType var2) {
+        super(var1, "Liquid");
+        this.type = var2;
+        this.textureId = 14;
+        if (var2 == LiquidType.LAVA) {
+            this.textureId = 30;
+        }
 
-      Block.liquid[var1] = true;
-      this.movingId = var1;
-      this.stillId = var1 + 1;
-      float var4 = 0.01F;
-      float var3 = 0.1F;
-      this.setBounds(var4 + 0.0F, 0.0F - var3 + var4, var4 + 0.0F, var4 + 1.0F, 1.0F - var3 + var4, var4 + 1.0F);
-      this.setPhysics(true);
-      if(var2 == LiquidType.LAVA) {
-         this.setTickDelay(16);
-      }
+        Block.liquid[var1] = true;
+        this.movingId = var1;
+        this.stillId = var1 + 1;
+        float var4 = 0.01F;
+        float var3 = 0.1F;
+        this.setBounds(var4 + 0.0F, 0.0F - var3 + var4, var4 + 0.0F, var4 + 1.0F, 1.0F - var3 + var4, var4 + 1.0F);
+        if (var2 == LiquidType.WATER) {
+            this.setBounds(0, 0, 0, 1, 8.0F / 9.0F, 1);
+        }
+        this.setPhysics(true);
 
-   }
+    }
 
-   public final boolean isCube() {
-      return false;
-   }
+    public final boolean isCube() {
+        return false;
+    }
 
-   public final void onPlace(Level level, int x, int y, int z) {
-      level.addToTickNextTick(x, y, z, this.movingId);
-   }
+    @Override
+    public void onAdded(Level level, int x, int y, int z) {
+        if (this.id == this.movingId || (this.type == LiquidType.WATER && usesLevelledFlow(level))) {
+            level.addToTickNextTick(x, y, z, this.id);
+        }
+    }
 
-   public void update(Level level, int x, int y, int z, Random rand) {
-      if (this.type == LiquidType.LAVA) {
-         for (int i = 0; i < 3; ++i) {
-            int rx = x + rand.nextInt(3) - 1;
-            int ry = y + rand.nextInt(3) - 1;
-            int rz = z + rand.nextInt(3) - 1;
-            if (level.isInBounds(rx, ry, rz) && level.getTile(rx, ry, rz) == 0) {
-               if (FireBlock.isFlammable(level.getTile(rx - 1, ry, rz)) ||
-                   FireBlock.isFlammable(level.getTile(rx + 1, ry, rz)) ||
-                   FireBlock.isFlammable(level.getTile(rx, ry - 1, rz)) ||
-                   FireBlock.isFlammable(level.getTile(rx, ry + 1, rz)) ||
-                   FireBlock.isFlammable(level.getTile(rx, ry, rz - 1)) ||
-                   FireBlock.isFlammable(level.getTile(rx, ry, rz + 1))) {
-                  level.setTile(rx, ry, rz, Block.FIRE.id);
-               }
+    @Override
+    public final void onPlace(Level level, int x, int y, int z) {
+        onAdded(level, x, y, z);
+    }
+
+    @Override
+    public void update(Level level, int x, int y, int z, Random random) {
+        if (level.isNetworkMode()) {
+            return;
+        }
+        if (this.type == LiquidType.LAVA) {
+            tryIgniteNearLava(level, x, y, z, random);
+        }
+
+        if (!usesLevelledFlow(level)) {
+            updateClassic(level, x, y, z);
+        } else if (this.type == LiquidType.WATER) {
+            updateWater(level, x, y, z);
+        } else {
+            updateFinite(level, x, y, z);
+        }
+    }
+
+    public static boolean usesLevelledFlow(Level level) {
+        return level.minecraft == null || level.minecraft.settings == null || level.minecraft.settings.finiteWater;
+    }
+
+    protected final void tryIgniteNearLava(Level level, int x, int y, int z, Random random) {
+        for (int i = 0; i < 3; i++) {
+            int rx = x + random.nextInt(3) - 1;
+            int ry = y + random.nextInt(3) - 1;
+            int rz = z + random.nextInt(3) - 1;
+            if (level.isInBounds(rx, ry, rz) && level.getTile(rx, ry, rz) == 0
+                    && FireBlock.hasFuel(level, rx, ry, rz)) {
+                level.setTile(rx, ry, rz, Block.FIRE.id);
             }
-         }
-      }
+        }
+    }
 
-      if (level.minecraft != null && level.minecraft.settings != null && level.minecraft.settings.finiteWater) {
-         updateFinite(level, x, y, z, rand);
-         return;
-      }
+    private void updateClassic(Level level, int x, int y, int z) {
+        boolean spread = spreadTo(level, x, y - 1, z, 0);
+        if (!spread) {
+            spread = spreadTo(level, x - 1, y, z, 0) | spreadTo(level, x + 1, y, z, 0) | spreadTo(level, x, y, z - 1, 0)
+                    | spreadTo(level, x, y, z + 1, 0);
+        }
+        if (!spread && level.getTile(x, y, z) == this.movingId) {
+            level.setTileNoUpdate(x, y, z, this.stillId);
+        }
+    }
 
-      boolean var7 = false;
-      z = z;
-      y = y;
-      x = x;
-      level = level;
-      boolean var8 = false;
+    protected final void updateWater(Level level, int x, int y, int z) {
+        int current = level.getFlowLevel(x, y, z);
+        int target = current == 0 ? 0 : waterFromNeighbors(level, x, y, z);
+        if (target == NO_WATER) {
+            level.setTile(x, y, z, 0);
+            return;
+        }
+        if (target != current) {
+            setWaterFlow(level, x, y, z, target);
+        }
 
-      boolean var6;
-      do {
-         --y;
-         if(level.getTile(x, y, z) != 0 || !this.canFlow(level, x, y, z)) {
-            break;
-         }
-
-         if(var6 = level.setTile(x, y, z, this.movingId)) {
-            var8 = true;
-         }
-      } while(var6 && this.type != LiquidType.LAVA);
-
-      ++y;
-      if(this.type == LiquidType.WATER || !var8) {
-         var8 = var8 | this.flow(level, x - 1, y, z) | this.flow(level, x + 1, y, z) | this.flow(level, x, y, z - 1) | this.flow(level, x, y, z + 1);
-      }
-
-      if(!var8) {
-         level.setTileNoUpdate(x, y, z, this.stillId);
-      } else {
-         level.addToTickNextTick(x, y, z, this.movingId);
-      }
-
-   }
-
-   private void updateFinite(Level level, int x, int y, int z, Random rand) {
-      int currentLevel = level.getFlowLevel(x, y, z);
-      if (currentLevel < 0) return;
-
-      int targetLevel = calculateTargetFlowLevel(level, x, y, z);
-      int maxLevel = (this.type == LiquidType.WATER) ? 8 : 4;
-
-      if (targetLevel >= maxLevel) {
-         level.setTile(x, y, z, 0);
-         return;
-      }
-
-      if (targetLevel != currentLevel) {
-         level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) targetLevel);
-         level.addToTickNextTick(x, y, z, this.movingId);
-         level.updateNeighborsAt(x, y, z, this.movingId);
-         return;
-      }
-
-      // Check if we can flow down
-      int downTile = level.getTile(x, y - 1, z);
-      boolean flowedDown = false;
-      if (y > 0) {
-         if (downTile == 0) {
-            if (this.canFlow(level, x, y - 1, z)) {
-               if (level.setTile(x, y - 1, z, this.movingId)) {
-                  level.flowLevels.put(Level.getCoordKey(x, y - 1, z), (byte) 1);
-                  level.addToTickNextTick(x, y - 1, z, this.movingId);
-                  flowedDown = true;
-               }
+        boolean waterBelow = level.getLiquid(x, y - 1, z) == LiquidType.WATER;
+        boolean flowedDown = trySpreadWater(level, x, y - 1, z, FALLING_WATER);
+        if (flowedDown ? countWaterSources(level, x, y, z) >= 3 : target == 0 || !waterBelow) {
+            int next = target == FALLING_WATER ? 1 : target + 1;
+            if (next < FALLING_WATER) {
+                spreadWaterSides(level, x, y, z, next);
             }
-         } else if (Block.blocks[downTile] != null && Block.blocks[downTile].getLiquidType() == this.type) {
-            int downLevel = level.getFlowLevel(x, y - 1, z);
-            if (downLevel > 1) {
-               level.flowLevels.put(Level.getCoordKey(x, y - 1, z), (byte) 1);
-               level.addToTickNextTick(x, y - 1, z, this.movingId);
-               flowedDown = true;
-            } else {
-               flowedDown = (currentLevel > 0);
+        }
+
+        if (target == 0 && level.getTile(x, y, z) == this.movingId) {
+            level.setTileNoUpdate(x, y, z, this.stillId);
+        }
+    }
+
+    private int waterFromNeighbors(Level level, int x, int y, int z) {
+        if ((level.isSolidTile(x, y - 1, z) || getNeighborLevel(level, x, y - 1, z) == 0)
+                && countWaterSources(level, x, y, z) >= 2) {
+            return 0;
+        }
+        if (level.getLiquid(x, y + 1, z) == LiquidType.WATER) {
+            return FALLING_WATER;
+        }
+
+        int best = FALLING_WATER;
+        for (int i = 0; i < STEP_X.length; i++) {
+            int neighbor = getNeighborLevel(level, x + STEP_X[i], y, z + STEP_Z[i]);
+            best = Math.min(best, neighbor == FALLING_WATER ? 0 : neighbor);
+        }
+        return best < FALLING_WATER - 1 ? best + 1 : NO_WATER;
+    }
+
+    private int countWaterSources(Level level, int x, int y, int z) {
+        int count = 0;
+        for (int i = 0; i < STEP_X.length; i++) {
+            if (getNeighborLevel(level, x + STEP_X[i], y, z + STEP_Z[i]) == 0) {
+                count++;
             }
-         }
-      }
+        }
+        return count;
+    }
 
-      // Flow horizontally if we didn't flow down
-      if (!flowedDown && targetLevel < (maxLevel - 1)) {
-         int nextLevel = targetLevel + 1;
-         flowHorizontal(level, x - 1, y, z, nextLevel);
-         flowHorizontal(level, x + 1, y, z, nextLevel);
-         flowHorizontal(level, x, y, z - 1, nextLevel);
-         flowHorizontal(level, x, y, z + 1, nextLevel);
-      }
-
-      if (targetLevel == 0) {
-         level.setTileNoUpdate(x, y, z, this.stillId);
-      }
-   }
-
-   private int calculateTargetFlowLevel(Level level, int x, int y, int z) {
-      int upTile = level.getTile(x, y + 1, z);
-      if (upTile > 0 && Block.blocks[upTile].getLiquidType() == this.type) {
-         return 1;
-      }
-
-      long key = Level.getCoordKey(x, y, z);
-      Byte val = level.flowLevels.get(key);
-      if (val != null && val == 0) {
-         return 0;
-      }
-      int tile = level.getTile(x, y, z);
-      if (tile == this.stillId) {
-         return 0;
-      }
-      if (y <= level.waterLevel && (tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)) {
-         return 0;
-      }
-
-      int minL = 99;
-      minL = Math.min(minL, getNeighborLevel(level, x - 1, y, z));
-      minL = Math.min(minL, getNeighborLevel(level, x + 1, y, z));
-      minL = Math.min(minL, getNeighborLevel(level, x, y, z - 1));
-      minL = Math.min(minL, getNeighborLevel(level, x, y, z + 1));
-
-      return minL + 1;
-   }
-
-   private int getNeighborLevel(Level level, int x, int y, int z) {
-      int tile = level.getTile(x, y, z);
-      if (tile <= 0 || Block.blocks[tile].getLiquidType() != this.type) {
-         return 99;
-      }
-      long key = Level.getCoordKey(x, y, z);
-      Byte val = level.flowLevels.get(key);
-      if (val != null) {
-         return val.intValue();
-      }
-      if (tile == this.stillId) {
-         return 0;
-      }
-      if (y <= level.waterLevel && (tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)) {
-         return 0;
-      }
-      return 0;
-   }
-
-   private void flowHorizontal(Level level, int x, int y, int z, int nextLevel) {
-      int tile = level.getTile(x, y, z);
-      if (tile == 0) {
-         if (this.canFlow(level, x, y, z)) {
-            if (level.setTile(x, y, z, this.movingId)) {
-               level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) nextLevel);
-               level.addToTickNextTick(x, y, z, this.movingId);
+    private void spreadWaterSides(Level level, int x, int y, int z, int flow) {
+        int best = SLOPE_RANGE + 1;
+        int directions = 0;
+        for (int i = 0; i < STEP_X.length; i++) {
+            int nx = x + STEP_X[i];
+            int nz = z + STEP_Z[i];
+            if (!canTraverseWater(level, nx, y, nz)) {
+                continue;
             }
-         }
-      } else if (Block.blocks[tile] != null && Block.blocks[tile].getLiquidType() == this.type) {
-         int curLevel = level.getFlowLevel(x, y, z);
-         if (curLevel > nextLevel) {
-            level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) nextLevel);
-            level.addToTickNextTick(x, y, z, this.movingId);
-         }
-      }
-   }
-
-   private boolean canFlow(Level var1, int var2, int var3, int var4) {
-      if(this.type == LiquidType.WATER) {
-         for(int var7 = var2 - 2; var7 <= var2 + 2; ++var7) {
-            for(int var5 = var3 - 2; var5 <= var3 + 2; ++var5) {
-               for(int var6 = var4 - 2; var6 <= var4 + 2; ++var6) {
-                  if(var1.getTile(var7, var5, var6) == Block.SPONGE.id) {
-                     return false;
-                  }
-               }
+            int distance = findWaterDrop(level, nx, y, nz, i ^ 1, 0);
+            if (distance < best) {
+                best = distance;
+                directions = 0;
             }
-         }
-      }
+            if (distance == best) {
+                directions |= 1 << i;
+            }
+        }
+        for (int i = 0; i < STEP_X.length; i++) {
+            if ((directions & (1 << i)) != 0) {
+                trySpreadWater(level, x + STEP_X[i], y, z + STEP_Z[i], flow);
+            }
+        }
+    }
 
-      return true;
-   }
+    private int findWaterDrop(Level level, int x, int y, int z, int from, int distance) {
+        if (canFlowInto(level, x, y - 1, z) || level.getLiquid(x, y - 1, z) == LiquidType.WATER) {
+            return distance;
+        }
+        int best = SLOPE_RANGE + 1;
+        if (distance < SLOPE_RANGE) {
+            for (int i = 0; i < STEP_X.length; i++) {
+                int nx = x + STEP_X[i];
+                int nz = z + STEP_Z[i];
+                if (i != from && canTraverseWater(level, nx, y, nz)) {
+                    best = Math.min(best, findWaterDrop(level, nx, y, nz, i ^ 1, distance + 1));
+                }
+            }
+        }
+        return best;
+    }
 
-   private boolean flow(Level level, int x, int y, int z) {
-       if (level.getTile(x, y, z) == 0) {
-           if (!this.canFlow(level, x, y, z)) {
-               return false;
-           }
+    private boolean canTraverseWater(Level level, int x, int y, int z) {
+        int flow = getNeighborLevel(level, x, y, z);
+        return flow == 99 ? canFlowInto(level, x, y, z) : flow > 0;
+    }
 
-           if (level.setTile(x, y, z, this.movingId)) {
-               // Spread on the scheduled tick queue, never recursively across an unbounded world.
-               level.addToTickNextTick(x, y, z, this.movingId);
-               return true;
-           }
-       }
-       return false;
-   }
+    private boolean trySpreadWater(Level level, int x, int y, int z, int flow) {
+        int existing = getNeighborLevel(level, x, y, z);
+        if (existing != 99) {
+            if (existing == 0 || existing == FALLING_WATER || existing == flow
+                    || (flow != FALLING_WATER && existing < flow)) {
+                return false;
+            }
+        } else if (!level.isInBounds(x, y, z) || !canFlowInto(level, x, y, z) || !level.setTile(x, y, z, this.movingId)
+                || level.getTile(x, y, z) != this.movingId) {
+            return false;
+        }
+        setWaterFlow(level, x, y, z, flow);
+        level.addToTickNextTick(x, y, z, this.movingId);
+        return true;
+    }
 
-   @Override
-   public int getLightValue() {
-       return this.type == LiquidType.LAVA ? 15 : 0; // max brightness for lava
-   }
+    private void setWaterFlow(Level level, int x, int y, int z, int flow) {
+        level.setWaterFlowLevel(x, y, z, flow);
+        level.updateNeighborsAt(x, y, z, this.movingId);
+    }
 
+    private void updateFinite(Level level, int x, int y, int z) {
+        int currentLevel = level.getFlowLevel(x, y, z);
+        int maxLevel = 4;
+        int targetLevel = currentLevel == 0 ? 0 : calculateTargetFlowLevel(level, x, y, z);
+        if (targetLevel >= maxLevel) {
+            level.setTile(x, y, z, 0);
+            return;
+        }
 
-   @Override
-   public final boolean canRenderSide(Level level, int x, int y, int z, int side) {
-       // Use proper infinite bounds check
-       if (!level.isInBounds(x, y, z)) {
-           return false;
-       }
+        if (targetLevel != currentLevel) {
+            level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) targetLevel);
+            level.updateNeighborsAt(x, y, z, this.movingId);
+        }
 
-       int id = level.getTile(x, y, z);
-       if (id == this.movingId || id == this.stillId) {
-           return false; // skip self-adjacent liquids
-       }
+        boolean flowedDown = spreadTo(level, x, y - 1, z, 1);
+        if (!flowedDown && level.isInBounds(x, y - 1, z)) {
+            int downLevel = getNeighborLevel(level, x, y - 1, z);
+            if (downLevel > 1 && downLevel < maxLevel) {
+                level.flowLevels.put(Level.getCoordKey(x, y - 1, z), (byte) 1);
+                level.addToTickNextTick(x, y - 1, z, this.movingId);
+                flowedDown = true;
+            } else if (downLevel == 1 && targetLevel > 0) {
+                flowedDown = true;
+            }
+        }
 
-       // Special case: top face should render if any neighbor is air
-       if (side == 1) {
-           if (level.getTile(x - 1, y, z) == 0 ||
-               level.getTile(x + 1, y, z) == 0 ||
-               level.getTile(x, y, z - 1) == 0 ||
-               level.getTile(x, y, z + 1) == 0) {
-               return true;
-           }
-       }
+        if (!flowedDown && targetLevel + 1 < maxLevel) {
+            int nextLevel = targetLevel + 1;
+            spreadTo(level, x - 1, y, z, nextLevel);
+            spreadTo(level, x + 1, y, z, nextLevel);
+            spreadTo(level, x, y, z - 1, nextLevel);
+            spreadTo(level, x, y, z + 1, nextLevel);
+        }
 
-       return super.canRenderSide(level, x, y, z, side);
-   }
+        if (targetLevel == 0 && level.getTile(x, y, z) == this.movingId) {
+            level.setTileNoUpdate(x, y, z, this.stillId);
+        }
+    }
 
-   public final void renderInside(ShapeRenderer shapeRenderer, int x, int y, int z, int side) {
-      super.renderInside(shapeRenderer, x, y, z, side);
-      super.renderSide(shapeRenderer, x, y, z, side);
-   }
+    private int calculateTargetFlowLevel(Level level, int x, int y, int z) {
+        if (getNeighborLevel(level, x, y + 1, z) < 99) {
+            return 1;
+        }
 
-   public final boolean isOpaque() {
-      return true;
-   }
-   @Override
-   protected final float getBrightness(Level level, int x, int y, int z) {
-       return level.getBrightness(x, y, z);
-   }
+        int minLevel = Math.min(getNeighborLevel(level, x - 1, y, z), getNeighborLevel(level, x + 1, y, z));
+        minLevel = Math.min(minLevel, getNeighborLevel(level, x, y, z - 1));
+        minLevel = Math.min(minLevel, getNeighborLevel(level, x, y, z + 1));
+        return minLevel + 1;
+    }
 
-   public final boolean isSolid() {
-      return false;
-   }
+    private int getNeighborLevel(Level level, int x, int y, int z) {
+        if (level.getLiquid(x, y, z) != this.type) {
+            return 99;
+        }
+        return level.getFlowLevel(x, y, z);
+    }
 
-   public final LiquidType getLiquidType() {
-      return this.type;
-   }
+    private boolean spreadTo(Level level, int x, int y, int z, int flowLevel) {
+        if (!canFlowInto(level, x, y, z) || !level.setTile(x, y, z, this.movingId)
+                || level.getTile(x, y, z) != this.movingId) {
+            return false;
+        }
+        if (flowLevel > 0) {
+            level.flowLevels.put(Level.getCoordKey(x, y, z), (byte) flowLevel);
+        }
+        return true;
+    }
 
-   public void onNeighborChange(Level level, int x, int y, int z, int changedId) {
-       if (changedId != 0) {
-           LiquidType other = Block.blocks[changedId].getLiquidType();
-           if ((this.type == LiquidType.WATER && other == LiquidType.LAVA)
-            || (this.type == LiquidType.LAVA  && other == LiquidType.WATER)) {
-               level.setTile(x, y, z, Block.STONE.id);
-               return;
-           }
-       }
+    protected final boolean canFlowInto(Level level, int x, int y, int z) {
+        if (!level.isInBounds(x, y, z)) {
+            return false;
+        }
+        int tile = level.getTile(x, y, z);
+        if (tile != 0 && (this.type != LiquidType.WATER || tile != Block.FIRE.id)) {
+            return false;
+        }
+        if (this.type == LiquidType.WATER) {
+            for (int sx = x - 2; sx <= x + 2; sx++) {
+                for (int sy = y - 2; sy <= y + 2; sy++) {
+                    for (int sz = z - 2; sz <= z + 2; sz++) {
+                        if (level.getTile(sx, sy, sz) == Block.SPONGE.id) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
 
-       // Always reschedule THIS liquid block, not the neighbor
-       level.addToTickNextTick(x, y, z, this.movingId);
-   }
+    @Override
+    public int getLightValue() {
+        return this.type == LiquidType.LAVA ? 15 : 0; // max brightness for lava
+    }
 
+    @Override
+    public final boolean canRenderSide(Level level, int x, int y, int z, int side) {
+        // Use proper infinite bounds check
+        if (!level.isInBounds(x, y, z)) {
+            return false;
+        }
 
-   @Override
-   public final int getTickDelay() {
-       return this.type == LiquidType.LAVA ? 5 : 2; // lava slower, water every tick
-   }
+        int id = level.getTile(x, y, z);
+        if (id == this.movingId || id == this.stillId) {
+            return false; // skip self-adjacent liquids
+        }
 
+        return super.canRenderSide(level, x, y, z, side);
+    }
 
-   public final void dropItems(Level var1, int var2, int var3, int var4, float var5) {}
+    @Override
+    public boolean render(Level level, int x, int y, int z, ShapeRenderer renderer) {
+        if (this.type != LiquidType.WATER) {
+            return super.render(level, x, y, z, renderer);
+        }
 
-   public final void onBreak(Level var1, int var2, int var3, int var4) {}
+        boolean top = canRenderSide(level, x, y + 1, z, 1);
+        boolean north = canRenderSide(level, x, y, z - 1, 2);
+        boolean south = canRenderSide(level, x, y, z + 1, 3);
+        boolean west = canRenderSide(level, x - 1, y, z, 4);
+        boolean east = canRenderSide(level, x + 1, y, z, 5);
+        boolean bottom = canRenderSide(level, x, y - 1, z, 0);
+        if (bottom) {
+            colorWater(renderer, level, x, y - 1, z, 0.5F);
+            super.renderInside(renderer, x, y, z, 0);
+        }
+        if (!top && !north && !south && !west && !east) {
+            return bottom;
+        }
 
-   public final int getDropCount() {
-      return 0;
-   }
+        float nw = cornerWaterHeight(level, x, y, z);
+        float ne = cornerWaterHeight(level, x + 1, y, z);
+        float sw = cornerWaterHeight(level, x, y, z + 1);
+        float se = cornerWaterHeight(level, x + 1, y, z + 1);
+        float u0 = (textureId % 16) / 16.0F;
+        float v0 = (textureId / 16) / 16.0F;
+        float uvSize = 15.99F / 256.0F;
+        if (top) {
+            colorWater(renderer, level, x, y + 1, z, 1.0F);
+            renderer.vertexUV(x + 1, y + se, z + 1, u0 + uvSize, v0 + uvSize);
+            renderer.vertexUV(x + 1, y + ne, z, u0 + uvSize, v0);
+            renderer.vertexUV(x, y + nw, z, u0, v0);
+            renderer.vertexUV(x, y + sw, z + 1, u0, v0 + uvSize);
+        }
+        if (north) {
+            colorWater(renderer, level, x, y, z - 1, 0.8F);
+            renderWaterWall(renderer, x, z, nw, x + 1, z, ne, y, u0, v0, uvSize);
+        }
+        if (south) {
+            colorWater(renderer, level, x, y, z + 1, 0.8F);
+            renderWaterWall(renderer, x + 1, z + 1, se, x, z + 1, sw, y, u0, v0, uvSize);
+        }
+        if (west) {
+            colorWater(renderer, level, x - 1, y, z, 0.6F);
+            renderWaterWall(renderer, x, z + 1, sw, x, z, nw, y, u0, v0, uvSize);
+        }
+        if (east) {
+            colorWater(renderer, level, x + 1, y, z, 0.6F);
+            renderWaterWall(renderer, x + 1, z, ne, x + 1, z + 1, se, y, u0, v0, uvSize);
+        }
+        return true;
+    }
 
-   public final int getRenderPass() {
-      return this.type == LiquidType.WATER?1:0;
-   }
+    private static float cornerWaterHeight(Level level, int x, int y, int z) {
+        float total = 0;
+        int samples = 0;
+        boolean levelled = usesLevelledFlow(level);
+        for (int nx = x - 1; nx <= x; nx++) {
+            for (int nz = z - 1; nz <= z; nz++) {
+                if (level.getLiquid(nx, y, nz) == LiquidType.WATER) {
+                    if (level.getLiquid(nx, y + 1, nz) == LiquidType.WATER) {
+                        return 1.0F;
+                    }
+                    int flow = levelled ? level.getFlowLevel(nx, y, nz) : 0;
+                    int amount = flow == FALLING_WATER ? 8 : 8 - flow;
+                    int weight = amount == 8 ? 10 : 1;
+                    total += amount * weight;
+                    samples += weight;
+                } else if (!level.isSolidTile(nx, y, nz)) {
+                    samples++;
+                }
+            }
+        }
+        return total / (samples * 9.0F);
+    }
 
-	@Override
-	public AABB getCollisionBox(int x, int y, int z)
-	{
-		return null;
-	}
+    private static void colorWater(ShapeRenderer renderer, Level level, int x, int y, int z, float shade) {
+        float light = level.getRenderBrightness(x, y, z) * shade;
+        renderer.color(light, light, light);
+    }
+
+    private static void renderWaterWall(ShapeRenderer renderer, int x0, int z0, float h0, int x1, int z1, float h1,
+            int y, float u, float v, float size) {
+        renderer.vertexUV(x0, y + h0, z0, u, v + (1 - h0) * size);
+        renderer.vertexUV(x1, y + h1, z1, u + size, v + (1 - h1) * size);
+        renderer.vertexUV(x1, y, z1, u + size, v + size);
+        renderer.vertexUV(x0, y, z0, u, v + size);
+    }
+
+    public final void renderInside(ShapeRenderer shapeRenderer, int x, int y, int z, int side) {
+        super.renderInside(shapeRenderer, x, y, z, side);
+    }
+
+    public final boolean isOpaque() {
+        return true;
+    }
+
+    @Override
+    protected final float getBrightness(Level level, int x, int y, int z) {
+        return level.getRenderBrightness(x, y, z);
+    }
+
+    public final boolean isSolid() {
+        return false;
+    }
+
+    public final LiquidType getLiquidType() {
+        return this.type;
+    }
+
+    public void onNeighborChange(Level level, int x, int y, int z, int changedId) {
+        if (reactWithOtherLiquid(level, x, y, z, changedId)) {
+            return;
+        }
+        level.addToTickNextTick(x, y, z, this.movingId);
+    }
+
+    protected final boolean reactWithOtherLiquid(Level level, int x, int y, int z, int changedId) {
+        Block changed = Block.blocks[changedId];
+        if (changed != null) {
+            LiquidType other = changed.getLiquidType();
+            if ((this.type == LiquidType.WATER && other == LiquidType.LAVA)
+                    || (this.type == LiquidType.LAVA && other == LiquidType.WATER)) {
+                return level.setTile(x, y, z, Block.STONE.id);
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public final int getTickDelay() {
+        return 5;
+    }
+
+    public final void dropItems(Level var1, int var2, int var3, int var4, float var5) {
+    }
+
+    public final void onBreak(Level var1, int var2, int var3, int var4) {
+    }
+
+    public final int getDropCount() {
+        return 0;
+    }
+
+    public final int getRenderPass() {
+        return this.type == LiquidType.WATER ? 1 : 0;
+    }
+
+    @Override
+    public AABB getCollisionBox(int x, int y, int z) {
+        return null;
+    }
 }

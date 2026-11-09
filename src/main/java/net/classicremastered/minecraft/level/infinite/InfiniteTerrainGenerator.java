@@ -1,17 +1,17 @@
 package net.classicremastered.minecraft.level.infinite;
 
-import java.util.Random;
-
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.generator.noise.CombinedNoise;
 import net.classicremastered.minecraft.level.generator.noise.OctaveNoise;
 import net.classicremastered.minecraft.level.generator.noise.PerlinNoise;
-import net.classicremastered.minecraft.level.structure.HouseStructure;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Villager;
-import net.classicremastered.minecraft.mob.ai.VillagerAI;
+import net.classicremastered.minecraft.mob.ai.villager.VillagerAI;
+
+import java.util.Random;
 
 public final class InfiniteTerrainGenerator {
+
     public static final int CHUNK = SimpleChunk.SIZE;
 
     private final long seed;
@@ -40,10 +40,9 @@ public final class InfiniteTerrainGenerator {
         nCave = new PerlinNoise(r);
     }
 
-    /**
-     * Main entrypoint. corruptedFlat = true when Mode.FLAT.
-     */
-    public void generateChunk(SimpleChunk c, int worldX, int worldZ, boolean corruptedFlat, Level level) {
+    /** Main entrypoint. corruptedFlat = true when Mode.FLAT. */
+    public void generateChunk(
+            SimpleChunk c, int worldX, int worldZ, boolean corruptedFlat, Level level) {
         if (corruptedFlat) {
             generateCorruptedFlat(c, worldX, worldZ);
         } else {
@@ -53,7 +52,6 @@ public final class InfiniteTerrainGenerator {
 
     /** Normal infinite terrain (classic terrain + ores + houses). */
     private void generateNormal(SimpleChunk c, int worldX, int worldZ, Level level) {
-        final float SCALE = 1.3f;
         Random rand = new Random(seed ^ (worldX * 341873128712L + worldZ * 132897987541L));
         int[] dirtTops = new int[CHUNK * CHUNK];
 
@@ -62,32 +60,15 @@ public final class InfiniteTerrainGenerator {
             for (int lz = 0; lz < CHUNK; lz++) {
                 int gz = worldZ + lz;
 
-                double a = nH1.compute(gx * SCALE, gz * SCALE) / 6.0 - 4.0;
-                double b = nH2.compute(gx * SCALE, gz * SCALE) / 5.0 + 10.0 - 4.0;
-                if (nVar.compute(gx, gz) / 8.0 > 0.0)
-                    b = a;
-                double h = Math.max(a, b) / 2.0;
-                if (h < 0)
-                    h *= 0.8;
-                int base = (int) h;
-
-                double e = nE1.compute(gx * 2, gz * 2) / 8.0;
-                int eFlag = (nE2.compute(gx * 2, gz * 2) > 0.0) ? 1 : 0;
-                if (e > 2.0)
-                    base = (((base - eFlag) / 2) << 1) + eFlag;
-
-                int dirtTop = base + waterLevel;
+                int dirtTop = getDeterministicGroundHeight(gx, gz);
                 dirtTops[lx + lz * CHUNK] = dirtTop;
                 int stoneTop = dirtTop + ((int) (nVar.compute(gx, gz) / 24.0) - 4);
 
                 for (int y = 0; y < height; y++) {
                     byte id = 0;
-                    if (y == 0)
-                        id = (byte) Block.BEDROCK.id;
-                    else if (y <= stoneTop)
-                        id = (byte) Block.STONE.id;
-                    else if (y <= dirtTop)
-                        id = (byte) Block.DIRT.id;
+                    if (y == 0) id = (byte) Block.BEDROCK.id;
+                    else if (y <= stoneTop) id = (byte) Block.STONE.id;
+                    else if (y <= dirtTop) id = (byte) Block.DIRT.id;
                     c.blocks[SimpleChunk.idx(lx, y, lz, c.height)] = id;
                 }
 
@@ -101,7 +82,7 @@ public final class InfiniteTerrainGenerator {
                 for (int y = 1; y <= waterLevel && y < height; y++) {
                     int idx = SimpleChunk.idx(lx, y, lz, c.height);
                     if (c.blocks[idx] == 0) {
-                        c.blocks[idx] = (byte) Block.WATER.id;
+                        c.blocks[idx] = (byte) Block.STATIONARY_WATER.id;
                     }
                 }
 
@@ -115,17 +96,40 @@ public final class InfiniteTerrainGenerator {
             }
         }
 
-        // Carve caves
+        carveCaves(c, worldX, worldZ, dirtTops, waterLevel);
+
+        populateOreVeins(c, worldX, worldZ, Block.COAL_ORE.id, 8, 18, height - 6, dirtTops);
+        populateOreVeins(c, worldX, worldZ, Block.IRON_ORE.id, 6, 12, height - 12, dirtTops);
+        populateOreVeins(c, worldX, worldZ, Block.GOLD_ORE.id, 3, 8, height / 2, dirtTops);
+        populateOreVeins(c, worldX, worldZ, Block.REDSTONE_ORE.id, 4, 8, height / 3, dirtTops);
+
+        decorateChunk(c, worldX, worldZ, rand);
+        if (level != null) {
+            generateHouseIfSpawned(c, worldX, worldZ, level);
+        }
+
+        c.meshed = false;
+    }
+
+    public void carveCaves(SimpleChunk c, int worldX, int worldZ, int[] dirtTops, int seaLevel) {
+
         for (int lx = 0; lx < CHUNK; lx++) {
             int gx = worldX + lx;
             for (int lz = 0; lz < CHUNK; lz++) {
                 int gz = worldZ + lz;
                 int dirtTop = dirtTops[lx + lz * CHUNK];
-                for (int y = 2; y < dirtTop - 4 && y < height; y++) {
+                int cover = dirtTop <= seaLevel + 2 ? 8 : 5;
+                for (int y = 2; y <= dirtTop - cover; y++) {
                     double caveVal = nCave.compute(gx * 0.04D, y * 0.06D, gz * 0.04D);
-                    if (Math.abs(caveVal) < 0.12D) {
+                    if (caveVal > 0.30D) {
                         int idx = SimpleChunk.idx(lx, y, lz, height);
-                        if (c.blocks[idx] == (byte) Block.STONE.id) {
+                        int block = c.blocks[idx] & 255;
+                        if (block == Block.STONE.id
+                                || block == Block.COAL_ORE.id
+                                || block == Block.IRON_ORE.id
+                                || block == Block.GOLD_ORE.id
+                                || block == Block.REDSTONE_ORE.id
+                                || block == Block.DIAMOND_ORE_NEW.id) {
                             if (y < 8) {
                                 c.blocks[idx] = (byte) Block.STATIONARY_LAVA.id;
                             } else {
@@ -136,17 +140,6 @@ public final class InfiniteTerrainGenerator {
                 }
             }
         }
-
-        populateOreVeins(c, worldX, worldZ, Block.COAL_ORE.id, 8, 18, height - 6, dirtTops);
-        populateOreVeins(c, worldX, worldZ, Block.IRON_ORE.id, 6, 12, height - 12, dirtTops);
-        populateOreVeins(c, worldX, worldZ, Block.GOLD_ORE.id, 3, 8, height / 2, dirtTops);
-
-        decorateChunk(c, worldX, worldZ, rand);
-        if (level != null) {
-            generateHouseIfSpawned(c, worldX, worldZ, rand, level);
-        }
-
-        c.meshed = false;
     }
 
     /** Clean flat: flat plains. */
@@ -173,7 +166,7 @@ public final class InfiniteTerrainGenerator {
         c.meshed = false;
     }
 
- // InfiniteTerrainGenerator.java
+    // InfiniteTerrainGenerator.java
 
     private void decorateChunk(SimpleChunk c, int worldX, int worldZ, Random rand) {
         // Tree rarity (lower = fewer trees)
@@ -209,6 +202,8 @@ public final class InfiniteTerrainGenerator {
                 }
 
                 // Leaves
+                net.classicremastered.minecraft.level.GeneratedOccupant.offer(
+                        c.generatedOccupants, seed, true, worldX + lx, gy, worldZ + lz);
                 int topY = gy + trunkH;
                 int leafR = 2;
                 for (int dx = -leafR; dx <= leafR; dx++) {
@@ -235,9 +230,18 @@ public final class InfiniteTerrainGenerator {
         }
     }
 
-
-    private void populateOreVeins(SimpleChunk c, int worldX, int worldZ, int blockId, int attempts, int veinSize, int maxY, int[] dirtTops) {
-        Random rand = new Random(seed ^ (worldX * 341873128712L + worldZ * 132897987541L + blockId * 31L));
+    private void populateOreVeins(
+            SimpleChunk c,
+            int worldX,
+            int worldZ,
+            int blockId,
+            int attempts,
+            int veinSize,
+            int maxY,
+            int[] dirtTops) {
+        Random rand =
+                new Random(
+                        seed ^ (worldX * 341873128712L + worldZ * 132897987541L + blockId * 31L));
 
         for (int i = 0; i < attempts; i++) {
             int lx = rand.nextInt(CHUNK);
@@ -264,23 +268,21 @@ public final class InfiniteTerrainGenerator {
             }
         }
     }
+
     public int getDeterministicGroundHeight(int gx, int gz) {
         final float SCALE = 1.3f;
         double a = nH1.compute(gx * SCALE, gz * SCALE) / 6.0 - 4.0;
         double b = nH2.compute(gx * SCALE, gz * SCALE) / 5.0 + 10.0 - 4.0;
-        if (nVar.compute(gx, gz) / 8.0 > 0.0)
-            b = a;
+        if (nVar.compute(gx, gz) / 8.0 > 0.0) b = a;
         double h = Math.max(a, b) / 2.0;
-        if (h < 0)
-            h *= 0.8;
+        if (h < 0) h *= 0.8;
         int base = (int) h;
 
         double e = nE1.compute(gx * 2, gz * 2) / 8.0;
         int eFlag = (nE2.compute(gx * 2, gz * 2) > 0.0) ? 1 : 0;
-        if (e > 2.0)
-            base = (((base - eFlag) / 2) << 1) + eFlag;
+        if (e > 2.0) base = (((base - eFlag) / 2) << 1) + eFlag;
 
-        return base + waterLevel;
+        return clamp(base + waterLevel, 1, Math.max(1, height - 2));
     }
 
     private int computeDeterministicTargetY(int x, int z) {
@@ -295,7 +297,7 @@ public final class InfiniteTerrainGenerator {
         return ys[ys.length / 2] + 1;
     }
 
-    private void generateHouseIfSpawned(SimpleChunk c, int worldX, int worldZ, Random rand, Level level) {
+    private void generateHouseIfSpawned(SimpleChunk c, int worldX, int worldZ, Level level) {
         int cx = c.cx;
         int cz = c.cz;
         Random chunkRand = new Random(seed ^ (cx * 7919L + cz * 104729L));
@@ -310,6 +312,15 @@ public final class InfiniteTerrainGenerator {
                 int padY = targetY - 1;
                 final int W = 7, D = 7, H = 5;
 
+                for (int dx = 0; dx < W; dx++) {
+                    for (int dz = 0; dz < D; dz++) {
+                        int surface = getDeterministicGroundHeight(hx + dx, hz + dz);
+                        if (surface <= waterLevel || Math.abs(surface - padY) > 2) {
+                            return;
+                        }
+                    }
+                }
+
                 // 1. Terraform: fill upward to pad with cobble, clear house volume
                 for (int dx = 0; dx < W; dx++) {
                     for (int dz = 0; dz < D; dz++) {
@@ -321,7 +332,8 @@ public final class InfiniteTerrainGenerator {
                         int solid = getDeterministicGroundHeight(wx, wz);
                         if (solid >= 0) {
                             for (int y = solid + 1; y <= padY; y++) {
-                                c.blocks[SimpleChunk.idx(lx, y, lz, height)] = (byte) Block.COBBLESTONE.id;
+                                c.blocks[SimpleChunk.idx(lx, y, lz, height)] =
+                                        (byte) Block.COBBLESTONE.id;
                             }
                             for (int y = targetY; y < targetY + H; y++) {
                                 c.blocks[SimpleChunk.idx(lx, y, lz, height)] = 0; // air
@@ -335,7 +347,8 @@ public final class InfiniteTerrainGenerator {
                     for (int dz = 0; dz < D; dz++) {
                         int lx = (hx + dx) & 15;
                         int lz = (hz + dz) & 15;
-                        c.blocks[SimpleChunk.idx(lx, padY, lz, height)] = (byte) Block.COBBLESTONE.id;
+                        c.blocks[SimpleChunk.idx(lx, padY, lz, height)] =
+                                (byte) Block.COBBLESTONE.id;
                     }
                 }
 
@@ -351,7 +364,8 @@ public final class InfiniteTerrainGenerator {
                             int y = padY + dy;
 
                             if (dy == 2 && !(dz == D / 2 && dx == 0)) {
-                                c.blocks[SimpleChunk.idx(lx, y, lz, height)] = (byte) Block.GLASS.id;
+                                c.blocks[SimpleChunk.idx(lx, y, lz, height)] =
+                                        (byte) Block.GLASS.id;
                             } else {
                                 c.blocks[SimpleChunk.idx(lx, y, lz, height)] = (byte) Block.WOOD.id;
                             }
@@ -364,7 +378,8 @@ public final class InfiniteTerrainGenerator {
                     for (int dz = 0; dz < D; dz++) {
                         int lx = (hx + dx) & 15;
                         int lz = (hz + dz) & 15;
-                        c.blocks[SimpleChunk.idx(lx, padY + H - 1, lz, height)] = (byte) Block.WOOD.id;
+                        c.blocks[SimpleChunk.idx(lx, padY + H - 1, lz, height)] =
+                                (byte) Block.WOOD.id;
                     }
                 }
 
@@ -376,6 +391,8 @@ public final class InfiniteTerrainGenerator {
 
                 // 6. Spawn Villagers
                 int baseY = padY + 1;
+                net.classicremastered.minecraft.level.GeneratedOccupant.offer(
+                        c.generatedOccupants, seed, false, hx + W / 2, baseY, hz + D / 2);
                 int minX = hx + 2, maxX = hx + W - 3;
                 int minZ = hz + 2, maxZ = hz + D - 3;
                 int toSpawn = 1 + (chunkRand.nextBoolean() ? (1 + chunkRand.nextInt(2)) : 0);
@@ -385,24 +402,25 @@ public final class InfiniteTerrainGenerator {
                         int lx = sx & 15;
                         int lz = sz & 15;
 
-                        if (c.blocks[SimpleChunk.idx(lx, baseY - 1, lz, height)] == (byte) Block.COBBLESTONE.id &&
-                            c.blocks[SimpleChunk.idx(lx, baseY, lz, height)] == 0 &&
-                            c.blocks[SimpleChunk.idx(lx, baseY + 1, lz, height)] == 0) {
+                        if (c.blocks[SimpleChunk.idx(lx, baseY - 1, lz, height)]
+                                        == (byte) Block.COBBLESTONE.id
+                                && c.blocks[SimpleChunk.idx(lx, baseY, lz, height)] == 0
+                                && c.blocks[SimpleChunk.idx(lx, baseY + 1, lz, height)] == 0) {
 
-                            Villager v = new Villager(level, sx + 0.5F, baseY + 1, sz + 0.5F);
-
-                            float homeX = hx + W * 0.5f;
-                            float homeZ = hz + D * 0.5f;
-                            float homeY = baseY + 1;
-                            float radius = 2.5f;
-
-                            v.setHome(homeX, homeY, homeZ, radius);
-                            VillagerAI vai = new VillagerAI(homeX, homeY, homeZ, radius);
-                            vai.suppressRandomJump = true;
-                            vai.runSpeed = 0.8f;
-                            v.ai = vai;
-
-                            level.addEntity(v);
+                            final int vx = sx, vz = sz;
+                            c.residents.add(
+                                    () -> {
+                                        if (level == null || level.isNetworkMode()) return;
+                                        Villager v =
+                                                new Villager(level, vx + .5f, baseY + 1, vz + .5f);
+                                        v.setHome(hx + W * .5f, baseY + 1, hz + D * .5f, 2.5f);
+                                        v.setHomeDoor(doorX, baseY, doorZ);
+                                        if (v.ai instanceof VillagerAI vai) {
+                                            vai.suppressRandomJump = true;
+                                            vai.runSpeed = .8f;
+                                        }
+                                        level.addEntity(v);
+                                    });
                             toSpawn--;
                         }
                     }

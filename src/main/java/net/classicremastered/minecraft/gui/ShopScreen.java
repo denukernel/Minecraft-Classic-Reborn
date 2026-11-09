@@ -1,169 +1,120 @@
 package net.classicremastered.minecraft.gui;
 
-import net.classicremastered.minecraft.Minecraft;
-import net.classicremastered.minecraft.level.itemstack.Item;
+import java.util.*;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.level.itemstack.*;
 
 public final class ShopScreen extends GuiScreen {
+    private final GuiScreen parent;
+    private record Offer(int raw, int count, int price, String name) {
+    }
+    private final List<Offer> offers = new ArrayList<>();
+    private int page;
+    public ShopScreen() {
+        this(new PauseScreen());
+    }
 
-    private int page = 1; // track current shop page
-
-    // Button IDs
-    private static final int ID_BUY_BOW = 0;
-    private static final int ID_BUY_ARROWS = 1;
-    private static final int ID_BUY_SWORD = 2;
-    private static final int ID_NEXT_PAGE = 3;
-
-    private static final int ID_BUY_APPLE = 4;
-    private static final int ID_BUY_TNT = 5;
-    private static final int ID_BUY_FLINT = 6;
-    private static final int ID_PREV_PAGE = 7;
-
-    private static final int ID_BUY_PHYSICS_GUN = 8; // added
-    private static final int ID_BACK = 9;
+    public ShopScreen(GuiScreen parent) {
+        super(parent);
+        this.parent = parent;
+    }
 
     @Override
     public void onOpen() {
-        // If creative mode, disable shop
-        if (this.minecraft != null && this.minecraft.level != null && this.minecraft.level.creativeMode) {
-            if (this.minecraft.hud != null) {
-                this.minecraft.hud.addChat("&cShop is unavailable in Creative Mode.");
-            }
-            this.minecraft.setCurrentScreen(new PauseScreen()); // bounce back to pause
+        if (minecraft.level.creativeMode) {
+            minecraft.setCurrentScreen(parent);
             return;
         }
-
-        refreshButtons();
+        ItemRegistry.bootstrap();
+        offers.clear();
+        offers.add(new Offer(Item.BOW.id + 256, 1, 20, "Bow"));
+        offers.add(new Offer(Equipment.ARROW.id + 256, 5, 5, "5 Arrows"));
+        for (Equipment.Gear gear : Equipment.GEAR.values())
+            offers.add(new Offer(gear.id + 256, 1, gear.price, gear.name));
+        offers.add(new Offer(Item.APPLE.id + 256, 1, 4, "Apple"));
+        offers.add(new Offer(46, 10, 20, "10 TNT"));
+        offers.add(new Offer(Item.FLINT_AND_STEEL.id + 256, 1, 5, "Flint & Steel"));
+        offers.add(new Offer(Item.PHYSICS_GUN.id + 256, 1, 50, "Physics Gun"));
+        refresh();
     }
 
-
-    private void refreshButtons() {
-        this.buttons.clear();
-        int x = this.width / 2 - 100;
-        int y = this.height / 4;
-
-        if (page == 1) {
-            this.buttons.add(new Button(ID_BUY_BOW, x, y + 0, "Buy Bow (20 coins)"));
-            this.buttons.add(new Button(ID_BUY_ARROWS, x, y + 24, "Buy 5 Arrows (5 coins)"));
-            this.buttons.add(new Button(ID_BUY_SWORD, x, y + 48, "Buy Sword (15 coins)"));
-            this.buttons.add(new Button(ID_NEXT_PAGE, x, y + 72, "Next Page →"));
-            this.buttons.add(new Button(ID_BACK, x, y + 120, "Back"));
-        } else if (page == 2) {
-            this.buttons.add(new Button(ID_BUY_APPLE, x, y + 0, "Buy Apple (4 coins)"));
-            this.buttons.add(new Button(ID_BUY_TNT, x, y + 24, "Buy 10 TNT (20 coins)"));
-            this.buttons.add(new Button(ID_BUY_FLINT, x, y + 48, "Buy Flint & Steel (5 coins)"));
-            this.buttons.add(new Button(ID_BUY_PHYSICS_GUN, x, y + 72, "Buy Physics Gun (50 coins)")); // added
-            this.buttons.add(new Button(ID_PREV_PAGE, x, y + 96, "← Prev Page"));
-            this.buttons.add(new Button(ID_BACK, x, y + 144, "Back"));
+    private void refresh() {
+        buttons.clear();
+        int x = width / 2 - 100, y = height / 2 - 78;
+        for (int i = 0; i < 5; i++) {
+            int n = page * 5 + i;
+            if (n >= offers.size())
+                break;
+            Offer o = offers.get(n);
+            buttons.add(new Button(i, x, y + i * 24, o.name + " (" + o.price + " coins)"));
         }
+        buttons.add(new Button(10, x, height - 51, 96, 20, "Previous"));
+        buttons.add(new Button(11, x + 104, height - 51, 96, 20, "Next"));
+        buttons.add(new Button(12, x, height - 27, "Back"));
+    }
+
+    public static boolean purchase(Player p, int raw, int count, int price) {
+        if (p == null || price < 0 || count <= 0 || p.coins < price)
+            return false;
+        if (raw <= 0 || raw >= 256 && (raw - 256 >= Item.items.length || Item.items[raw - 256] == null))
+            return false;
+        int capacity = 0, cap = raw >= 256 && Item.items[raw - 256] != null ? Item.items[raw - 256].maxStackSize : 99;
+        for (int i = 0; i < p.inventory.totalSize(); i++) {
+            int id = p.inventory.getId(i), n = p.inventory.getCount(i);
+            if (id <= 0 || n <= 0)
+                capacity += cap;
+            else if (id == raw)
+                capacity += Math.max(0, cap - n);
+        }
+        if (capacity < count)
+            return false;
+        for (int i = 0; i < count; i++)
+            p.inventory.addResource(raw);
+        p.coins -= price;
+        return true;
     }
 
     @Override
     protected void onButtonClick(Button b) {
-        Player p = this.minecraft.player;
-        if (p == null) return;
-
-        switch (b.id) {
-        case ID_BUY_BOW:
-            if (p.coins >= 20) {
-                p.coins -= 20;
-                p.inventory.addResource(Item.BOW.id + 256);
-                this.minecraft.hud.addChat("&aPurchased Bow!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_BUY_ARROWS:
-            if (p.coins >= 5) {
-                p.coins -= 5;
-                p.arrows = Math.min(Player.MAX_ARROWS, p.arrows + 5);
-                this.minecraft.hud.addChat("&aPurchased 5 arrows!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_BUY_SWORD:
-            if (p.coins >= 15) {
-                p.coins -= 15;
-                p.inventory.addResource(Item.SWORD.id + 256);
-                this.minecraft.hud.addChat("&aPurchased Sword!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_BUY_APPLE:
-            if (p.coins >= 4) {
-                p.coins -= 4;
-                p.inventory.addResource(Item.APPLE.id + 256);
-                this.minecraft.hud.addChat("&aPurchased Apple!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_BUY_TNT:
-            if (p.coins >= 20) {
-                p.coins -= 20;
-                for (int i = 0; i < 10; i++) {
-                    p.inventory.addResource(net.classicremastered.minecraft.level.tile.Block.TNT.id);
-                }
-                this.minecraft.hud.addChat("&aPurchased 10 TNT!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_BUY_FLINT:
-            if (p.coins >= 5) {
-                p.coins -= 5;
-                p.inventory.addResource(Item.FLINT_AND_STEEL.id + 256);
-                this.minecraft.hud.addChat("&aPurchased Flint & Steel!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_BUY_PHYSICS_GUN: // added
-            if (p.coins >= 50) {
-                p.coins -= 50;
-                p.inventory.addResource(Item.PHYSICS_GUN.id + 256);
-                this.minecraft.hud.addChat("&aPurchased Physics Gun!");
-            } else {
-                this.minecraft.hud.addChat("&cNot enough coins!");
-            }
-            return;
-
-        case ID_NEXT_PAGE:
-            page = 2;
-            refreshButtons();
-            return;
-
-        case ID_PREV_PAGE:
-            page = 1;
-            refreshButtons();
-            return;
-
-        case ID_BACK:
-            this.minecraft.setCurrentScreen(new PauseScreen());
+        int pages = (offers.size() + 4) / 5;
+        if (b.id == 10) {
+            page = (page + pages - 1) % pages;
+            refresh();
             return;
         }
+        if (b.id == 11) {
+            page = (page + 1) % pages;
+            refresh();
+            return;
+        }
+        if (b.id == 12) {
+            minecraft.setCurrentScreen(parent);
+            return;
+        }
+        int n = page * 5 + b.id;
+        if (n < 0 || n >= offers.size())
+            return;
+        Offer o = offers.get(n);
+        minecraft.hud.addChat(purchase(minecraft.player, o.raw, o.count, o.price)
+                ? "&aPurchased " + o.name
+                : "&cNot enough coins or inventory space.");
     }
 
     @Override
     public void render(int mx, int my) {
-        drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA0000000);
-        String title = (page == 1) ? "Marketplace (Page 1)" : "Marketplace (Page 2)";
-        drawCenteredString(this.fontRenderer, title, this.width / 2, 40, 0xFFFFFF);
+        drawFadingBox(0, 0, width, height, 0xA0202020, 0xD0404040);
+        drawCenteredString(fontRenderer,
+                "Marketplace " + (page + 1) + "/" + ((offers.size() + 4) / 5) + "   Coins: " + minecraft.player.coins,
+                width / 2, height / 2 - 99, 0xFFFFFF);
         super.render(mx, my);
-
-        Player p = this.minecraft.player;
-        if (p != null) {
-            String coins = "Coins: " + p.coins;
-            this.fontRenderer.render(coins, this.width / 2 - this.fontRenderer.getWidth(coins) / 2,
-                    this.height - 40, 0xFFFF55);
-        }
+        int y = height / 2 - 78;
+        for (int i = 0; i < 5; i++)
+            if (my >= y + i * 24 && my < y + i * 24 + 20 && mx >= width / 2 - 100 && mx < width / 2 + 100) {
+                int n = page * 5 + i;
+                if (n < offers.size()) {
+                    String detail = Equipment.description(offers.get(n).raw);
+                    drawCenteredString(fontRenderer, detail, width / 2, height - 65, 0xFFFF80);
+                }
+            }
     }
 }

@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.FireBlock;
 import net.classicremastered.minecraft.level.tile.Tile$SoundType;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
@@ -64,6 +65,10 @@ public class GameMode {
         if (this.level == null) return false;
         if (!this.level.isInBounds(x, y, z)) return false;
 
+        if (blockId == Block.FIRE.id) {
+            return FireBlock.canStay(level, x, y, z);
+        }
+
         // Collision check with player AABB
         final float eps = 0.001f;
         AABB blockBox = new AABB(
@@ -74,6 +79,23 @@ public class GameMode {
         return player == null || player.bb == null || !player.bb.intersects(blockBox);
     }
 
+    public boolean tryPlaceBlock(Player player, int x, int y, int z, int blockId, int face) {
+        if (blockId <= 0 || blockId >= Block.blocks.length || Block.blocks[blockId] == null)
+            return false;
+        if (this.level == null) this.level = minecraft.level;
+        if (level == null
+                || !level.isInBounds(x, y, z)
+                || face < 0
+                || face > 5
+                || !Block.blocks[blockId].canPlaceOnFace(level, x, y, z, face)) return false;
+        if (Block.blocks[blockId]
+                        instanceof net.classicremastered.minecraft.level.tile.CircuitBlock circuit
+                && circuit.needsSupport()
+                && level.getTile(x, y, z) != 0) return false;
+        if (!tryPlaceBlock(player, x, y, z, blockId)) return false;
+        Block.blocks[blockId].onPlacedBy(level, x, y, z, player, face);
+        return true;
+    }
 
     public boolean tryPlaceBlock(Player player, int x, int y, int z, int blockId) {
         if (blockId <= 0) return false;

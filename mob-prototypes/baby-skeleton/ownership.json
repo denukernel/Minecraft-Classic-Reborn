@@ -1,0 +1,33 @@
+{
+  "name": "BabySkeleton",
+  "registryId": 43,
+  "modelKey": "skeleton_baby",
+  "command": "/summon BabySkeleton 1",
+  "ownedFiles": [
+    "src/main/java/net/classicremastered/minecraft/mob/BabySkeleton.java",
+    "src/main/java/net/classicremastered/minecraft/model/BabySkeletonModel.java",
+    "mob-prototypes/baby-skeleton/baby-skeleton.mmdl",
+    "mob-prototypes/baby-skeleton/ownership.json",
+    "mob-prototypes/baby-skeleton/skeleton.png"
+  ],
+  "integrationPoints": {
+    "MobRegistry": "bootstrapDefaults registration and canonical displayNames",
+    "ModelManager": "skeleton_baby and skeleton_baby.armor lookups",
+    "EntityRenderBootstrap": "exact BabySkeleton renderer registration",
+    "SkeletonRenderer": "shared adult skeleton texture",
+    "SkeletonModel": "renderBody hook and adult bow hand offsets",
+    "Skeleton": "size-aware baby arrow launch offset",
+    "HumanoidMob": "shared baby zombie armor transforms",
+    "EquipmentRenderer": "shared baby zombie armor and held-item transforms",
+    "MobSpawner": "five percent replacement within skeleton packs"
+  },
+  "sharedAssets": [
+    "src/main/resources/mob/skeleton.png"
+  ],
+  "renderTransform": {
+    "bodyScale": 0.65,
+    "headScale": 1.5,
+    "groundOffset": 24,
+    "implementation": "BabyZombieModel.applyChildTransform and BabyZombieModel.renderHead"
+  }
+}

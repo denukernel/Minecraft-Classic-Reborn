@@ -20,13 +20,6 @@ public class DamageBottleItem extends Item {
         }
 
         // Reduce item stack
-        int slot = player.inventory.selected;
-        if (player.inventory.count[slot] > 0) {
-            player.inventory.count[slot]--;
-            if (player.inventory.count[slot] <= 0) {
-                player.inventory.slots[slot] = -1;
-                player.inventory.count[slot] = 0;
-            }
-        }
+        consumeSelected(player,level);
     }
 }

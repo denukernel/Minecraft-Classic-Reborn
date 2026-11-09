@@ -1,21 +1,68 @@
 // File: src/com/mojang/minecraft/mob/Zombie.java
 package net.classicremastered.minecraft.mob;
 
-import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.mob.ai.goal.zombie.ZombieDifficultyGoal;
+import net.classicremastered.minecraft.mob.ai.goal.zombie.ZombieSunlightGoal;
 import net.classicremastered.util.MathHelper;
 
 public class Zombie extends HumanoidMob {
+
     public static final long serialVersionUID = 0L;
 
-    private int sunBurnTicks = 0;
+    public int sunBurnTicks = 0;
+
+    private int hordeCooldown;
+
+    @Override
+    public void hurt(net.classicremastered.minecraft.Entity source, int damage) {
+        int previousHealth = health;
+        super.hurt(source, damage);
+        if (health >= previousHealth
+                || level == null
+                || level.isNetworkMode()
+                || level.creativeMode
+                || this instanceof Skeleton
+                || hordeCooldown > 0) return;
+        net.classicremastered.minecraft.Difficulty difficulty =
+                net.classicremastered.minecraft.CombatRules.difficulty(level);
+        if (difficulty != net.classicremastered.minecraft.Difficulty.NORMAL
+                && difficulty != net.classicremastered.minecraft.Difficulty.HARD) return;
+        net.classicremastered.minecraft.Entity attacker =
+                source instanceof net.classicremastered.minecraft.entity.Arrow arrow
+                        ? arrow.getOwner()
+                        : source;
+        if (!(attacker instanceof Mob living)
+                || living.health <= 0
+                || attacker.removed
+                || attacker instanceof Zombie && !(attacker instanceof Skeleton)
+                || net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(
+                        attacker)) return;
+        hordeCooldown = 40;
+        float radius = difficulty == net.classicremastered.minecraft.Difficulty.HARD ? 32 : 24;
+        for (Object nearby : level.findEntities(this, bb.grow(radius, 12, radius))) {
+            if (nearby instanceof Zombie zombie
+                    && !(zombie instanceof Skeleton)
+                    && zombie.health > 0
+                    && !zombie.removed
+                    && zombie.ai
+                            instanceof
+                            net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI combat) {
+                combat.bind(level, zombie);
+                combat.attackTarget = attacker;
+                combat.retaliationTicks = 600;
+            }
+        }
+    }
+
+    private transient net.classicremastered.minecraft.mob.ai.goal.GoalSelector traits;
 
     public Zombie(Level level, float x, float y, float z) {
         super(level, x, y, z);
         this.modelName = "zombie";
         this.textureName = "/mob/zombie.png";
         this.heightOffset = 1.62F;
-        this.ai = new net.classicremastered.minecraft.mob.ai.SmartHostileAI();
+        this.ai = new net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI(true, true, true);
         setSize(0.6F, 1.8F);
         this.soundIdle = "mob/zombie/say";
         this.soundHurt = "mob/zombie/hurt";
@@ -24,82 +71,29 @@ public class Zombie extends HumanoidMob {
     }
 
     // Zombie.java — add this method
+    /** Exposes the variant sunlight policy to the sunlight goal. */
+    public final boolean isSunlightVulnerable() {
+        return !isSunImmune();
+    }
+
     protected boolean isSunImmune() {
         return false;
     }
 
-// Zombie.java — replace the entire tick() with this
+    // Zombie.java — replace the entire tick() with this
     @Override
     public void tick() {
+        if (hordeCooldown > 0) hordeCooldown--;
         super.tick();
-        if (this.level == null)
-            return;
-
-        Difficulty diff = (level.minecraft != null && level.minecraft.settings != null)
-                ? level.minecraft.settings.difficulty
-                : Difficulty.NORMAL;
-
-        // --- Sunlight burning (skip if variant is sun-immune; also don't burn in/onto
-        // water) ---
-        if (!isSunImmune() && this.level.shouldUndeadBurnAt(this) && !this.isInWaterOrOnWater()) {
-            // Spawn nice fire & smoke particles as a visual sun-burn illusion
-            if (this.level.particleEngine != null) {
-                if (this.level.random.nextInt(4) == 0) {
-                    float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                    float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
-                    float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                    this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.SmokeParticle(this.level, px, py, pz));
-                }
-                if (this.level.random.nextInt(3) == 0) {
-                    float px = this.x + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                    float py = this.y - this.heightOffset + this.level.random.nextFloat() * this.bbHeight;
-                    float pz = this.z + (this.level.random.nextFloat() - 0.5f) * this.bbWidth;
-                    this.level.particleEngine.spawnParticle(new net.classicremastered.minecraft.particle.TerrainParticle(this.level, px, py, pz, 0f, 0f, 0f, net.classicremastered.minecraft.level.tile.Block.FIRE));
-                }
-            }
-
-            if (++sunBurnTicks >= 20) {
-                this.hurt(null, 2);
-                sunBurnTicks = 0;
-            }
-        } else {
-            sunBurnTicks = 0;
-        }
-
-        // --- AI behavior by difficulty ---
-        if (this.ai instanceof net.classicremastered.minecraft.mob.ai.BasicAttackAI) {
-            net.classicremastered.minecraft.mob.ai.BasicAttackAI a = (net.classicremastered.minecraft.mob.ai.BasicAttackAI) this.ai;
-
-            switch (diff) {
-            case PEACEFUL:
-                a.damage = 0;
-                a.runSpeed = 0.8f;
-                a.attackTarget = null; // no attacking
-                break;
-
-            case EASY:
-                a.damage = 4;
-                a.runSpeed = 0.95f;
-                acquireVillagerTarget(a, 10f);
-                break;
-
-            case NORMAL:
-                a.damage = 6;
-                a.runSpeed = 1.05f;
-                acquireVillagerTarget(a, 12f);
-                break;
-
-            case HARD:
-                a.damage = 9;
-                a.runSpeed = 1.20f;
-                acquireVillagerTarget(a, 14f);
-                break;
-            }
-        }
+        if (traits == null)
+            traits =
+                    new net.classicremastered.minecraft.mob.ai.goal.GoalSelector(
+                            new ZombieSunlightGoal(this), new ZombieDifficultyGoal(this));
+        traits.tick();
     }
 
-// --- Water check helper ---
-    boolean isInWaterOrOnWater() {
+    // --- Water check helper ---
+    public boolean isInWaterOrOnWater() {
         // Submerged or standing in a water block
         int bx = MathHelper.floor(x);
         int by = MathHelper.floor(y);
@@ -115,25 +109,5 @@ public class Zombie extends HumanoidMob {
         int idBelow = level.getTile(bx, by - 1, bz);
         return idBelow == net.classicremastered.minecraft.level.tile.Block.WATER.id
                 || idBelow == net.classicremastered.minecraft.level.tile.Block.STATIONARY_WATER.id;
-    }
-
-    // --- Villager target finder ---
-    private void acquireVillagerTarget(net.classicremastered.minecraft.mob.ai.BasicAttackAI a, float radius) {
-        if (this instanceof net.classicremastered.minecraft.mob.Skeleton) {
-            return;
-        }
-        java.util.List list = level.findEntities(this, this.bb.grow(radius, 4, radius));
-        if (list == null)
-            return;
-        for (Object o : list) {
-            if (o instanceof net.classicremastered.minecraft.mob.Villager) {
-                net.classicremastered.minecraft.mob.Villager v = (net.classicremastered.minecraft.mob.Villager) o;
-                if (!v.removed && v.health > 0) {
-                    a.attackTarget = v;
-                    a.running = true;
-                    return;
-                }
-            }
-        }
     }
 }

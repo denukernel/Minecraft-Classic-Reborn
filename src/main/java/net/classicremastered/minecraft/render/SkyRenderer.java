@@ -13,6 +13,7 @@ public final class SkyRenderer {
     private final Level level;
     private final TextureManager texMgr;
     private int starList = -1;
+    private final CloudRenderer clouds = new CloudRenderer();
     private int ticks = 0; // advance once per frame
 
     public SkyRenderer(Level level, TextureManager texMgr) {
@@ -28,16 +29,14 @@ public final class SkyRenderer {
 
     // === Nightmare fuel switch (25M+ distance) ===
     private boolean isNightmareZone(Player cam) {
-        if (cam == null)
-            return false;
+        if (cam == null) return false;
         long dist = (long) Math.max(Math.abs(cam.x), Math.abs(cam.z));
         return dist >= 25_000_000L;
     }
 
     // ---- stars (infinite dome)
     private void buildStarField() {
-        if (starList != -1)
-            GL11.glDeleteLists(starList, 1);
+        if (starList != -1) GL11.glDeleteLists(starList, 1);
         starList = GL11.glGenLists(1);
 
         float worldMax = Math.max(Math.max(level.width, level.height), level.depth);
@@ -67,16 +66,34 @@ public final class SkyRenderer {
 
     // ---- clouds (infinite sheet)
     public void renderClouds(float partial, float r, float g, float b) {
-        if (level == null || texMgr == null)
-            return;
+        if (level == null || texMgr == null) return;
 
+        if (texMgr.settings.threeDClouds && level.player instanceof Player camera) {
+            float cameraX = camera.xo + (camera.x - camera.xo) * partial;
+            float cameraZ = camera.zo + (camera.z - camera.zo) * partial;
+            float distance =
+                    level.minecraft != null && level.minecraft.renderer != null
+                            ? level.minecraft.renderer.fogEnd
+                            : 256;
+            float time = (ticks + partial) * (isNightmareZone(camera) ? 50 : 1);
+            clouds.render(
+                    texMgr,
+                    cameraX,
+                    cameraZ,
+                    level.depth + 2,
+                    time,
+                    (int) Math.ceil(distance / 12),
+                    r,
+                    g,
+                    b);
+            return;
+        }
         int cloudsTex = texMgr.load("/clouds.png");
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, cloudsTex);
         GL11.glEnable(GL11.GL_TEXTURE_2D);
 
         boolean cullWasEnabled = GL11.glIsEnabled(GL11.GL_CULL_FACE);
-        if (cullWasEnabled)
-            GL11.glDisable(GL11.GL_CULL_FACE);
+        if (cullWasEnabled) GL11.glDisable(GL11.GL_CULL_FACE);
 
         GL11.glColor4f(r, g, b, 1.0f);
 
@@ -132,13 +149,11 @@ public final class SkyRenderer {
         }
         sr.end();
 
-        if (cullWasEnabled)
-            GL11.glEnable(GL11.GL_CULL_FACE);
+        if (cullWasEnabled) GL11.glEnable(GL11.GL_CULL_FACE);
     }
 
     public void renderSunMoon(Player cam, float partial) {
-        if (level == null || texMgr == null || cam == null)
-            return;
+        if (level == null || texMgr == null || cam == null) return;
 
         int sunTex = texMgr.load("/terrain/sun.png");
         int moonTex = texMgr.load("/terrain/moon.png");
@@ -177,7 +192,7 @@ public final class SkyRenderer {
 
         if (isNightmareZone(cam)) {
             // warp: tint red, squish vertically
-            GL11.glScalef(1.0f, 0.4f + 0.2f * (float)Math.sin(ticks * 0.1f), 1.0f);
+            GL11.glScalef(1.0f, 0.4f + 0.2f * (float) Math.sin(ticks * 0.1f), 1.0f);
             GL11.glColor4f(1.0f, 0.3f, 0.3f, 1.0f);
         } else {
             GL11.glColor4f(1, 1, 1, 1);
@@ -212,14 +227,11 @@ public final class SkyRenderer {
     }
 
     public void renderStars(Player cam, float partial) {
-        if (level == null || cam == null)
-            return;
-        if (starList == -1)
-            buildStarField();
+        if (level == null || cam == null) return;
+        if (starList == -1) buildStarField();
 
         float alpha = level.getStarBrightness();
-        if (alpha <= 0.01f)
-            return;
+        if (alpha <= 0.01f) return;
 
         float px = cam.xo + (cam.x - cam.xo) * partial;
         float py = cam.yo + (cam.y - cam.yo) * partial;
@@ -254,8 +266,11 @@ public final class SkyRenderer {
             GL11.glRotatef((ticks % 360) * 3.0f, 1f, 0f, 0f);
             GL11.glTranslatef(jitter, jitter * 0.5f, jitter);
 
-            GL11.glColor4f(0.5f + 0.5f * (float) Math.sin(ticks * 0.01f), 0.2f + 0.3f * (float) Math.cos(ticks * 0.02f),
-                    0.7f, 0.9f);
+            GL11.glColor4f(
+                    0.5f + 0.5f * (float) Math.sin(ticks * 0.01f),
+                    0.2f + 0.3f * (float) Math.cos(ticks * 0.02f),
+                    0.7f,
+                    0.9f);
         } else {
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
             GL11.glPointSize(2.5f);

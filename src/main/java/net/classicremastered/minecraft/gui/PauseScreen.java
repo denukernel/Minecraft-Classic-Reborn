@@ -44,7 +44,7 @@ public final class PauseScreen extends GuiScreen {
             return;
 
         case ID_MARKETPLACE:
-            this.minecraft.setCurrentScreen(new ShopScreen()); // NEW
+            this.minecraft.setCurrentScreen(new ShopScreen(this));
             return;
 
         case ID_BACK:
@@ -59,6 +59,11 @@ public final class PauseScreen extends GuiScreen {
     }
 
     private void quitToMainMenu() {
+        if (!this.minecraft.saveCurrentLevel()) {
+            this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save",
+                    "Could not save the level. The level is still open.", this));
+            return;
+        }
         if (this.minecraft.networkManager != null) {
             try {
                 this.minecraft.networkManager.netHandler.close();
@@ -66,17 +71,6 @@ public final class PauseScreen extends GuiScreen {
             }
             this.minecraft.networkManager = null;
             this.minecraft.online = false;
-        }
-
-        if (this.minecraft.level != null) {
-            try {
-                File levelsDir = new File(Minecraft.getMinecraftDir(), "levels");
-                if (!levelsDir.exists())
-                    levelsDir.mkdirs();
-                File autosave = new File(levelsDir, "autosave.lvl.gz");
-                this.minecraft.levelIo.save(this.minecraft.level, autosave);
-            } catch (Throwable ignored) {
-            }
         }
 
         this.minecraft.setLevel(null);

@@ -17,6 +17,7 @@ public final class LanguageScreen extends GuiScreen {
     private List<String> languages;
 
     public LanguageScreen(GuiScreen parent, LanguageManager langMgr) {
+        super(parent);
         this.parent = parent;
         this.langMgr = langMgr;
     }
@@ -91,13 +92,14 @@ public final class LanguageScreen extends GuiScreen {
         if (b.id >= 0 && b.id < languages.size()) {
             String chosen = b.text;
             langMgr.load(chosen);
-            this.minecraft.hud.addChat("&aLanguage set to: " + chosen);
+            if (this.minecraft.hud != null) this.minecraft.hud.addChat("&aLanguage set to: " + chosen);
             this.minecraft.setCurrentScreen(parent);
         }
     }
 
     @Override
     public void render(int mx, int my) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, width, height, 0x60000000, 0xA0000000);
         drawCenteredString(this.fontRenderer, "Select Language (page " + (page + 1) + ")", this.width / 2, 20, 0xFFFFFF);
         super.render(mx, my);

@@ -37,6 +37,10 @@ public final class SteveFighterScreen extends GuiScreen {
                 keyboard && (down(Keyboard.KEY_SPACE) || down(Keyboard.KEY_W) || down(Keyboard.KEY_UP)),
                 (keyboard && down(Keyboard.KEY_J)) || (Mouse.isCreated() && Mouse.isButtonDown(0)),
                 keyboard && (down(Keyboard.KEY_LSHIFT) || down(Keyboard.KEY_RSHIFT) || down(Keyboard.KEY_K)));
+        boolean audioReady = minecraft.soundPC != null && minecraft.settings != null;
+        game.drainSounds(audioReady && minecraft.settings.sound,
+                audioReady && minecraft.settings.allowMobSounds,
+                cue -> minecraft.soundPC.playSoundClean(cue.key, cue.volume, cue.pitch));
         if (game.dead) updateButtons();
     }
 

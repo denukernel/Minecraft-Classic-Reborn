@@ -25,6 +25,26 @@ public final class EndermanRenderer extends MobRenderer<Enderman> {
         model.setRotationAngles(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
         model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
 
+        // Reuse the body pose and shake transform for the hurt pass.
+        float hurt = mob.hurtDuration > 0 ? (mob.hurtTime - partial) / mob.hurtDuration : 0;
+        if (hurt > 0) {
+            GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT
+                    | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+            try {
+                GL11.glDisable(GL11.GL_TEXTURE_2D);
+                GL11.glDisable(GL11.GL_LIGHTING);
+                GL11.glDisable(GL11.GL_ALPHA_TEST);
+                GL11.glEnable(GL11.GL_BLEND);
+                GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+                GL11.glDepthFunc(GL11.GL_EQUAL);
+                GL11.glDepthMask(false);
+                GL11.glColor4f(1f, .12f, .1f, Math.min(.65f, .65f * hurt * hurt));
+                model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
+            } finally {
+                GL11.glPopAttrib();
+            }
+        }
+
         // eyes overlay
         int eyes = tm.load("/mob/enderman_eyes.png");
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, eyes);

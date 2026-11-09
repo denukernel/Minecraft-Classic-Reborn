@@ -1,12 +1,10 @@
 package net.classicremastered.minecraft.gamemode;
 
 import net.classicremastered.minecraft.Minecraft;
-import net.classicremastered.minecraft.CreativeInventoryBlocks;
 import net.classicremastered.minecraft.gui.BlockSelectScreen;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.MobSpawner;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.level.MobSpawner;
 import net.classicremastered.minecraft.player.Player;
 
 public class CreativeGameMode extends GameMode {
@@ -28,16 +26,9 @@ public class CreativeGameMode extends GameMode {
 
     @Override
     public void apply(Player player) {
-        player.canFly   = true;
+        player.canFly = true;
         player.isFlying = false; // start grounded; user toggles with V
         player.creativeInvulnerable = false;
-
-        for (int slot = 0; slot < 9; slot++) {
-            player.inventory.count[slot] = 1;
-            if (player.inventory.slots[slot] <= 0) {
-                player.inventory.slots[slot] = ((Block) CreativeInventoryBlocks.allowedBlocks.get(slot)).id;
-            }
-        }
     }
 
     @Override
@@ -47,14 +38,21 @@ public class CreativeGameMode extends GameMode {
     }
 
     @Override
-    public boolean isSurvival() { return false; }
+    public boolean isSurvival() {
+        return false;
+    }
 
     // Optional: safe placement helper you referenced
     public boolean useItemOn(Player player, int x, int y, int z, int face) {
         int blockId = player.inventory.getSelected();
-        if (!canPlaceWithoutColliding(player, x, y, z, blockId)) return false;
-        this.level.setTile(x, y, z, blockId);
-        return true;
+        if (blockId
+                == net.classicremastered.minecraft.level.itemstack.Item.REDSTONE_DUST_ID + 256) {
+            blockId = Block.REDSTONE_WIRE.id;
+        }
+        return blockId > 0
+                && blockId < 256
+                && Block.blocks[blockId] != null
+                && tryPlaceBlock(player, x, y, z, blockId, face);
     }
 
     // ---------- NEW: world-gen seeding (passives only) ----------
@@ -72,6 +70,6 @@ public class CreativeGameMode extends GameMode {
     @Override
     public void spawnMob() {
         // handled universally in Level.tick()
-    
-     }
+
+    }
 }

@@ -1,120 +1,68 @@
-// File: src/com/mojang/minecraft/mob/Creeper.java
 package net.classicremastered.minecraft.mob;
 
-import net.classicremastered.minecraft.Difficulty;
+import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.particle.Particle;
+import net.classicremastered.minecraft.mob.ai.*;
+import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.mob.ai.creeper.CreeperAI;
+import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 public class Creeper extends Mob {
-    public static final long serialVersionUID = 0L;
-    // New fields for leaf transformation
-    private boolean isLeafForm = false;
-    private int leafTimer = 0; // counts down while creeper is leaves
-    private int leafCooldown = 0; // delay before it can turn again
-    private String normalTexture = "/mob/creeper.png";
 
+    public static final long serialVersionUID = 0L;
+    public static final int FUSE_LENGTH = 30;
+    public int fuseTicks, previousFuseTicks;
+    public boolean ignited;
     public Creeper(Level level, float x, float y, float z) {
         super(level);
-        this.heightOffset = 1.62F;
-        this.modelName = "creeper";
-        this.textureName = "/mob/creeper.png";
-        this.ai = new net.classicremastered.minecraft.mob.ai.SmartHostileAI();
-        this.deathScore = 200;
-        this.setPos(x, y, z);
-        
-        this.coinDrop = 4;
-        this.footSize = 0.45F;
-
+        heightOffset = 1.62f;
+        modelName = "creeper";
+        textureName = "/mob/creeper.png";
+        ai = new CreeperAI();
+        deathScore = 200;
+        coinDrop = 4;
+        footSize = .45f;
+        setPos(x, y, z);
     }
-
-    private int fuseTicks = 0;
 
     @Override
     public void tick() {
+        // Migrate saved creepers away from the legacy melee AI.
+        if (!(ai instanceof CreeperAI))
+            ai = new CreeperAI();
         super.tick();
-        if (this.level == null || this.health <= 0)
+        previousFuseTicks = fuseTicks;
+        if (health <= 0 || removed || level == null)
             return;
-
-        // === Leaves transform logic (daytime only, one-way) ===
-        if (!isLeafForm && leafCooldown == 0 && this.level.shouldUndeadBurnAt(this)) {
-            // start 5s countdown before becoming leaves
-            isLeafForm = true;
-            leafTimer = 100; // 5s @ 20 TPS
-            leafCooldown = 200; // prevent retriggering loops
+        Entity target = ((BasicAttackAI) ai).attackTarget;
+        boolean valid = target instanceof Mob m && m.health > 0 && !m.removed
+                && !CreativeModeHelper.shouldIgnoreTarget(target) && !level.creativeMode
+                && CombatRules.difficulty(level) != Difficulty.PEACEFUL;
+        float distance = valid ? distanceTo(target) : Float.MAX_VALUE;
+        boolean clear = valid && level.clip(new Vec3D(x, bb.y0 + bbHeight * .85f, z),
+                new Vec3D(target.x, target.bb.y0 + target.bbHeight * .5f, target.z), true) == null;
+        ignited = clear && distance < (ignited ? 6f : 2.5f);
+        if (!valid) {
+            fuseTicks = previousFuseTicks = 0;
+            ignited = false;
+            return;
         }
-
-        if (isLeafForm) {
-            if (--leafTimer <= 0) {
-                // Replace creeper with a leaves block
-                int bx = (int) Math.floor(this.x);
-                int by = (int) Math.floor(this.y);
-                int bz = (int) Math.floor(this.z);
-
-                if (this.level.isInBounds(bx, by, bz)) {
-                    int leafId = net.classicremastered.minecraft.level.tile.Block.LEAVES.id;
-                    if (this.level.setTile(bx, by, bz, leafId)) {
-                        // force decay scheduling
-                        this.level.addToTickNextTick(bx, by, bz, leafId);
-                    }
-                }
-
-                this.remove(); // creeper gone forever
+        if (ignited) {
+            if (fuseTicks == 0)
+                level.playSound("random/fuse", this, 1, .8f);
+            fuseTicks++;
+            xd = zd = 0;
+            if (fuseTicks >= FUSE_LENGTH) {
+                remove();
+                level.playSound("random/explode", this, 1, 1);
+                level.explode(this, x, bb.y0, z, 3f);
             }
-            return; // no AI while in transform countdown
-        }
-
-        if (leafCooldown > 0) {
-            leafCooldown--;
-        }
-
-        // === Explosion fuse logic (disabled in Creative) ===
-        if (this.level.creativeMode)
-            return;
-
-        Difficulty diff = (level.minecraft != null && level.minecraft.settings != null)
-                ? level.minecraft.settings.difficulty
-                : Difficulty.NORMAL;
-
-        boolean trigger = false;
-        float radius = 3.0f;
-
-        switch (diff) {
-        case EASY:
-            trigger = this.hurtTime > 0;
-            radius = 3.0f;
-            break;
-        case NORMAL:
-            trigger = nearPlayer(3.0f);
-            radius = 3.4f;
-            break;
-        case HARD:
-            trigger = nearPlayer(5.0f);
-            radius = 6.0f;
-            break;
-        default:
-            return;
-        }
-
-        if (trigger) {
-            if (++fuseTicks > 40)
-                explode(radius); // ~2s fuse
-        } else {
-            fuseTicks = 0;
-        }
+        } else
+            fuseTicks = Math.max(0, fuseTicks - 1);
     }
 
-    private boolean nearPlayer(float dist) {
-        // In Creative worlds we already early-return in tick(), but keep this safe:
-        if (this.level.creativeMode)
-            return false;
-        net.classicremastered.minecraft.player.Player p = this.level.getNearestPlayer(this.x, this.y, this.z, dist);
-        return p != null && !p.removed && p.health > 0;
-    }
-
-    private void explode(float radius) {
-        if (this.level == null || this.level.creativeMode)
-            return; // guard
-        this.level.explode(this, this.x, this.y, this.z, radius);
-        this.remove();
+    public float fuseProgress(float partial) {
+        return Math.min(1, (previousFuseTicks + (fuseTicks - previousFuseTicks) * partial) / FUSE_LENGTH);
     }
 }

@@ -10,6 +10,32 @@ public final class OptionsScreen extends GuiScreen {
     private final GameSettings settings;
     private final boolean compact; // smaller layout when true
     private String title = "Options";
+    private int sliderX, sliderY, sliderW;
+    private boolean draggingBrightness;
+
+    @Override
+    protected void onMouseClick(int x, int y, int button) {
+        if (button == 0
+                && x >= sliderX
+                && x < sliderX + sliderW
+                && y >= sliderY
+                && y < sliderY + 18) {
+            draggingBrightness = true;
+            updateBrightness(x);
+            return;
+        }
+        super.onMouseClick(x, y, button);
+    }
+
+    private void updateBrightness(int x) {
+        float value = Math.max(0, Math.min(1, (x - sliderX - 4f) / (sliderW - 8f)));
+        if (Math.abs(value - settings.brightness) > .005f) settings.setBrightness(value);
+    }
+
+    @Override
+    public void onClose() {
+        draggingBrightness = false;
+    }
 
     // Back-compat: default compact=false
     public OptionsScreen(GuiScreen parent, GameSettings settings) {
@@ -17,10 +43,12 @@ public final class OptionsScreen extends GuiScreen {
     }
 
     public OptionsScreen(GuiScreen parent, GameSettings settings, boolean compact) {
+        super(parent);
         this.parent = parent;
         this.settings = settings;
         this.compact = compact;
     }
+
     @Override
     public final void onOpen() {
         this.buttons.clear();
@@ -29,6 +57,13 @@ public final class OptionsScreen extends GuiScreen {
         int btnH = compact ? 16 : 18;
         int startY = Math.max(26, this.height / 6 - 12);
         int rowSpacing = 22;
+        boolean developerOptions =
+                minecraft.player != null
+                        && minecraft.player.developerPowers().active(minecraft.player);
+        rowSpacing =
+                Math.min(
+                        rowSpacing,
+                        Math.max(18, (this.height - startY - 22) / (developerOptions ? 11 : 10)));
 
         int leftX = this.width / 2 - 155;
         int rightX = this.width / 2 + 5;
@@ -61,13 +96,25 @@ public final class OptionsScreen extends GuiScreen {
         addOptionButton(10, leftX, startY + rowSpacing * 6, btnW, btnH);
         addOptionButton(13, rightX, startY + rowSpacing * 6, btnW, btnH);
 
-        // Row 7: Controls & Done
-        Button controls = new Button(100, leftX, startY + rowSpacing * 7 + 2, "Controls...");
+        addOptionButton(14, leftX, startY + rowSpacing * 7, btnW, btnH);
+        sliderX = leftX;
+        sliderY = startY + rowSpacing * 8;
+        sliderW = rightX + btnW - leftX;
+        if (developerOptions) {
+            Button developer =
+                    new Button(102, leftX, startY + rowSpacing * 9 + 2, "Developer Options...");
+            developer.width = sliderW;
+            developer.height = btnH;
+            buttons.add(developer);
+        }
+        int bottomRow = developerOptions ? 10 : 9;
+        Button controls =
+                new Button(100, leftX, startY + rowSpacing * bottomRow + 2, "Controls...");
         controls.width = btnW;
         controls.height = btnH;
         this.buttons.add(controls);
 
-        Button done = new Button(200, rightX, startY + rowSpacing * 7 + 2, "Done");
+        Button done = new Button(200, rightX, startY + rowSpacing * bottomRow + 2, "Done");
         done.width = btnW;
         done.height = btnH;
         this.buttons.add(done);
@@ -93,9 +140,15 @@ public final class OptionsScreen extends GuiScreen {
             this.minecraft.setCurrentScreen(new ControlsScreen(this, this.settings));
         }
 
+        if (b.id == 102
+                && minecraft.player != null
+                && minecraft.player.developerPowers().active(minecraft.player)) {
+            minecraft.setCurrentScreen(new DeveloperOptionsScreen(this));
+        }
+
         if (b.id == 101) {
             // Open the language selector
-            LanguageManager langMgr = this.minecraft.lang;            
+            LanguageManager langMgr = this.minecraft.lang;
             this.minecraft.setCurrentScreen(new LanguageScreen(this, langMgr));
         }
 
@@ -106,9 +159,23 @@ public final class OptionsScreen extends GuiScreen {
 
     @Override
     public final void render(int mouseX, int mouseY) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA1000000);
         drawCenteredString(this.fontRenderer, this.title, this.width / 2, 12, 0xFFFFFF);
         super.render(mouseX, mouseY);
+        if (draggingBrightness) {
+            if (org.lwjgl.input.Mouse.isCreated() && org.lwjgl.input.Mouse.isButtonDown(0))
+                updateBrightness(mouseX);
+            else draggingBrightness = false;
+        }
+        drawBox(sliderX, sliderY, sliderX + sliderW, sliderY + 18, 0xff404040);
+        int thumb = sliderX + Math.round(settings.brightness * (sliderW - 8));
+        drawBox(thumb, sliderY, thumb + 8, sliderY + 18, 0xffaaaaaa);
+        drawCenteredString(
+                fontRenderer,
+                "Brightness: " + Math.round(settings.brightness * 100) + "%",
+                sliderX + sliderW / 2,
+                sliderY + 5,
+                0xffffff);
     }
-
 }

@@ -1,18 +1,22 @@
 package net.classicremastered.minecraft.mob.ai;
 
-import java.util.List;
-import java.util.Random;
-
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.mob.ScaryMindZombie;
-import net.classicremastered.minecraft.mob.Zombie;
 import net.classicremastered.minecraft.mob.Skeleton;
-import net.classicremastered.minecraft.mob.Villager;
-import net.classicremastered.minecraft.mob.ai.goal.goal.Goal;
-import net.classicremastered.minecraft.mob.ai.goal.goal.GoalSelector;
+import net.classicremastered.minecraft.mob.Zombie;
+import net.classicremastered.minecraft.mob.ai.goal.Goal;
+import net.classicremastered.minecraft.mob.ai.goal.GoalSelector;
+import net.classicremastered.minecraft.mob.ai.goal.movement.FleeThreatGoal;
+import net.classicremastered.minecraft.mob.ai.goal.movement.MoveToTargetGoal;
+import net.classicremastered.minecraft.mob.ai.goal.movement.PlannedStrollGoal;
+import net.classicremastered.minecraft.mob.ai.goal.movement.RandomStrollGoal;
+import net.classicremastered.minecraft.mob.ai.movement.CrowdMotion;
+import net.classicremastered.minecraft.mob.ai.movement.GroundWander;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
+
+import java.util.List;
+import java.util.Random;
 
 public class BasicAI extends AI {
 
@@ -20,23 +24,26 @@ public class BasicAI extends AI {
     public Random random = new Random();
     public float xxa;
     public float yya;
-    protected float yRotA;
+    public float yRotA;
     public Level level;
     public Mob mob;
     public boolean jumping = false;
-    protected int attackDelay = 0;
+    public int attackDelay = 0;
     public float runSpeed = 0.7F;
-    protected int noActionTime = 0;
+    public int noActionTime = 0;
     public Entity attackTarget = null;
     public boolean running = false;
     public boolean suppressRandomJump = false;
-    public float walkSpeed    = 0.10f; // ground
-    public float airSpeed     = 0.02f; // jumping/falling
-    public float swimSpeed    = 0.02f;
-    public float lavaSpeed    = 0.02f;
-    public float runMultiplier= 1.40f; // applied when running == true
-    public float speedScale   = 1.00f; // global multiplier
-    private final GoalSelector selector = new GoalSelector();
+    public float walkSpeed = 0.10f; // ground
+    public float airSpeed = 0.02f; // jumping/falling
+    public float swimSpeed = 0.02f;
+    public float lavaSpeed = 0.02f;
+    public float runMultiplier = 1.40f; // applied when running == true
+    public float speedScale = 1.00f; // global multiplier
+    private transient GoalSelector selector;
+    private transient GoalSelector movementGoals;
+    private transient FleeThreatGoal fleeGoal;
+    private transient java.util.List<GoalSelector> goalSets;
     private transient net.classicremastered.minecraft.path.PathNavigator navigator;
     private transient Level navigationLevel;
     private transient boolean steeredThisTick;
@@ -46,41 +53,40 @@ public class BasicAI extends AI {
     private transient boolean routeDriven;
     private transient float routeYaw;
     private transient boolean yieldingToCrowd;
-    public final boolean isYieldingToCrowd(){return yieldingToCrowd;}
-    final boolean pursuingRoute(){return routeDriven;}
-    final CrowdMotion crowdMotion() {
-        if(crowdMotion==null)crowdMotion=new CrowdMotion();
+    private transient int crowdWaitTicks;
+
+    public final boolean isYieldingToCrowd() {
+        return yieldingToCrowd;
+    }
+
+    public final boolean pursuingRoute() {
+        return routeDriven;
+    }
+
+    public final CrowdMotion crowdMotion() {
+        if (crowdMotion == null) crowdMotion = new CrowdMotion();
         return crowdMotion;
     }
-    
+
     @Override
     public void tick(Level level, Mob mob) {
+        if (shorePath == null) shorePath = java.util.List.of();
         ++this.noActionTime;
-        Entity player;
-        selector.tick(); // runs active goal
-        if (this.noActionTime > 600 && this.random.nextInt(800) == 0 && (player = level.getPlayer()) != null) {
-            float dx = player.x - mob.x;
-            float dy = player.y - mob.y;
-            float dz = player.z - mob.z;
-            if (dx * dx + dy * dy + dz * dz < 1024.0F) {
-                this.noActionTime = 0;
-            } else {
-                mob.remove();
-            }
-        }
         if (CreativeModeHelper.shouldIgnoreTarget(this.attackTarget)) {
+            if (selector != null) stopAllGoals();
             this.attackTarget = null;
             return;
         }
         this.level = level;
         this.mob = mob;
-        float tickYaw=mob.yRot;
-        yieldingToCrowd=false;
+        float tickYaw = mob.yRot;
+        yieldingToCrowd = false;
         if (this.attackDelay > 0) {
             --this.attackDelay;
         }
 
         if (mob.health <= 0) {
+            if (selector != null) selector.stopAll();
             this.jumping = false;
             this.xxa = 0.0F;
             this.yya = 0.0F;
@@ -89,21 +95,40 @@ public class BasicAI extends AI {
             steeredThisTick = false;
             routeDriven = false;
             float previousYaw = mob.yRot;
-            this.update();
+            if (!escapeFire()) {
+                this.update();
+                goalSelector().tick();
+            } else if (selector != null) {
+                selector.stopAll();
+            }
+            if (shoreAirborne()) steeredThisTick = true;
             if (!steeredThisTick && navigationAllowed() && !mob.isInWater() && !mob.isInLava()) {
                 if (attackTarget != null && !attackTarget.removed) {
                     if (wander != null) wander = null;
                     mob.yRot = previousYaw;
-                    navigateTo(attackTarget.x, attackTarget.bb.y0, attackTarget.z,
-                        runSpeed * (running ? Math.min(1.4f, runMultiplier) : 1f));
+                    navigateTo(
+                            attackTarget.x,
+                            attackTarget.bb.y0,
+                            attackTarget.z,
+                            runSpeed * (running ? Math.min(1.4f, runMultiplier) : 1f));
                 } else if (usesPlannedWandering()) {
-                    if (wander == null || wander.level != level) wander = new GroundWander(level, random);
+                    if (wander == null || wander.level != level)
+                        wander = new GroundWander(level, random);
                     mob.yRot = previousYaw;
                     applyRoute(wander.steer(mob, random), runSpeed * 0.75f, 8f);
-                } else if (usesWanderNavigation() && (wanderRouteTicks > 0 || (mob.onGround && mob.horizontalCollision && yya > 0))) {
+                } else if (usesWanderNavigation()
+                        && (wanderRouteTicks > 0
+                                || (mob.onGround && mob.horizontalCollision && yya > 0))) {
                     if (wanderRouteTicks-- <= 0) {
-                        float angle = (mob.yRot + 70f + random.nextFloat() * 220f) * (float)Math.PI / 180f;
-                        getNavigator().setGoal(mob.x-(float)Math.sin(angle)*5f,mob.bb.y0,mob.z+(float)Math.cos(angle)*5f);
+                        float angle =
+                                (mob.yRot + 70f + random.nextFloat() * 220f)
+                                        * (float) Math.PI
+                                        / 180f;
+                        getNavigator()
+                                .setGoal(
+                                        mob.x - (float) Math.sin(angle) * 5f,
+                                        mob.bb.y0,
+                                        mob.z + (float) Math.cos(angle) * 5f);
                         wanderRouteTicks = 60;
                     }
                     mob.yRot = previousYaw;
@@ -112,12 +137,36 @@ public class BasicAI extends AI {
             }
         }
 
-        if(routeDriven && mob.onGround && yya>0 && navigationAllowed()) {
-            float factor=crowdMotion().forwardFactor(this,routeYaw);
-            yya*=factor;
-            if(factor<0.15f) {
-                yieldingToCrowd=true;jumping=false;mob.xd*=0.6f;mob.zd*=0.6f;mob.yRot=tickYaw;
-            }
+        if (routeDriven && mob.onGround && yya > 0 && navigationAllowed()) {
+            float factor = crowdMotion().forwardFactor(this, routeYaw);
+            if (factor < 0.15f) {
+                // A stationary leader can leave a whole queue suppressing its own jumps.
+                boolean recoverQueue = mob instanceof Zombie && !(mob instanceof Skeleton);
+                if (!recoverQueue || crowdWaitTicks < 20) {
+                    if (recoverQueue) crowdWaitTicks++;
+                    yieldingToCrowd = true;
+                    jumping = false;
+                    mob.xd *= 0.6f;
+                    mob.zd *= 0.6f;
+                    mob.yRot = tickYaw;
+                } else {
+                    factor = 0.35f;
+                }
+            } else crowdWaitTicks = 0;
+            yya *= factor;
+        } else if (!routeDriven || attackTarget == null) {
+            crowdWaitTicks = 0;
+        }
+        if (mob.health > 0
+                && mob.isInWater()
+                && attackTarget != null
+                && !attackTarget.removed
+                && navigationAllowed()
+                && !(mob instanceof net.classicremastered.minecraft.mob.Enderman)) {
+            // Pursuit rotates toward the target during update. Start from the last
+            // swim heading so a shore detour can keep turning away from a wall.
+            mob.yRot = tickYaw;
+            steerInWater();
         }
         boolean inWater = mob.isInWater();
         boolean inLava = mob.isInLava();
@@ -140,23 +189,227 @@ public class BasicAI extends AI {
         if (list != null && list.size() > 0) {
             for (int i = 0; i < list.size(); ++i) {
                 Entity e = (Entity) list.get(i);
-                if (e.isPushable() && (!(e instanceof Mob) || e instanceof net.classicremastered.minecraft.player.Player
-                        || mob instanceof net.classicremastered.minecraft.player.Player)) {
+                if (e.isPushable()
+                        && (!(e instanceof Mob)
+                                || e instanceof net.classicremastered.minecraft.player.Player
+                                || mob instanceof net.classicremastered.minecraft.player.Player)) {
                     e.push(mob);
                 }
             }
-            if(!(mob instanceof net.classicremastered.minecraft.player.Player))crowdMotion().separate(mob,list);
+            if (!(mob instanceof net.classicremastered.minecraft.player.Player))
+                crowdMotion().separate(mob, list);
         }
     }
+
+    private int swimRepath;
+    private transient java.util.List<net.classicremastered.minecraft.path.ShoreNavigator.Step>
+            shorePath = java.util.List.of();
+    private int shoreIndex, shoreRepath, shoreJumpTicks;
+    private transient Entity shoreTarget;
+
+    private boolean shoreAirborne() {
+        if (shoreJumpTicks > 0) shoreJumpTicks--;
+        if (shoreTarget != attackTarget
+                || shorePath.isEmpty()
+                || attackTarget == null
+                || attackTarget.removed) return false;
+        var exit = shorePath.get(shorePath.size() - 1);
+        if (mob.onGround && mob.bb.y0 >= exit.feetY() - .1f) {
+            shorePath = java.util.List.of();
+            shoreRepath = 0;
+            return false;
+        }
+        if (shoreJumpTicks == 0 || mob.isInWater() || mob.onGround) return false;
+        shoreHeading(exit);
+        jumping = false;
+        return true;
+    }
+
+    private void shoreHeading(net.classicremastered.minecraft.path.ShoreNavigator.Step step) {
+        float yaw = (float) Math.toDegrees(Math.atan2(step.z() - mob.z, step.x() - mob.x)) - 90f,
+                d = yaw - mob.yRot;
+        while (d > 180) d -= 360;
+        while (d < -180) d += 360;
+        mob.yRot += Math.max(-20, Math.min(20, d));
+        xxa = 0;
+        yRotA = 0;
+        yya = Math.min(runSpeed, 1.1f);
+        routeDriven = false;
+        yieldingToCrowd = false;
+    }
+
+    private boolean steerToShore() {
+        if (attackTarget.isInWater()
+                || !net.classicremastered.minecraft.path.Pathfinder.supportsSwimming(mob))
+            return false;
+        if (shoreTarget != attackTarget || --shoreRepath <= 0) {
+            shorePath =
+                    net.classicremastered.minecraft.path.ShoreNavigator.find(
+                            level, mob, attackTarget);
+            shoreIndex = shorePath.size() > 1 ? 1 : 0;
+            shoreTarget = attackTarget;
+            shoreRepath = 20;
+        }
+        if (shorePath.isEmpty()) return false;
+        while (shoreIndex < shorePath.size() - 1) {
+            var step = shorePath.get(shoreIndex);
+            float dx = step.x() - mob.x, dz = step.z() - mob.z;
+            if (dx * dx + dz * dz > .25f) break;
+            shoreIndex++;
+        }
+        var step = shorePath.get(shoreIndex);
+        shoreHeading(step);
+        jumping = true;
+        var exit = shorePath.get(shorePath.size() - 1);
+        float dx = exit.x() - mob.x, dz = exit.z() - mob.z;
+        float rise = exit.feetY() - mob.bb.y0;
+        if (shoreIndex == shorePath.size() - 1
+                && dx * dx + dz * dz < 2.56f
+                && rise < 1.6f
+                && shoreJumpTicks == 0) {
+            mob.yd = Math.max(mob.yd, rise > .9f ? .58f : .42f);
+            shoreJumpTicks = 18;
+            jumping = false;
+        }
+        return true;
+    }
+
+    private float swimX, swimZ;
+
+    private boolean swimClear(int x, int y, int z) {
+        if (y < 1 || y >= level.depth - 2) return false;
+        if (level instanceof net.classicremastered.minecraft.level.LevelInfiniteTerrain t
+                && !t.chunks().isChunkLoaded(x >> 4, z >> 4)) return false;
+        if (level instanceof net.classicremastered.minecraft.level.LevelInfiniteFlat t
+                && !t.chunks().isChunkLoaded(x >> 4, z >> 4)) return false;
+        return !level.isSolidTile(x, y, z) && !level.isSolidTile(x, y + 1, z);
+    }
+
+    private void steerInWater() {
+        if (steerToShore()) return;
+        if (--swimRepath <= 0) {
+            swimRepath = 10;
+            swimX = attackTarget.x;
+            swimZ = attackTarget.z;
+            if (mob.horizontalCollision) {
+                int fx = (int) Math.floor(mob.x),
+                        fy = (int) Math.floor(mob.bb.y0),
+                        fz = (int) Math.floor(mob.z);
+                float best = Float.MAX_VALUE;
+                for (int dx = -3; dx <= 3; dx++)
+                    for (int dz = -3; dz <= 3; dz++) {
+                        if (dx == 0 && dz == 0) continue;
+                        int x = fx + dx, z = fz + dz;
+                        if (!swimClear(x, fy, z)
+                                && !(swimClear(x, fy + 1, z) && level.isSolidTile(x, fy, z)))
+                            continue;
+                        // Check the short approach corridor at the swimming height.
+                        boolean clear = true;
+                        for (int i = 1; i <= 3; i++) {
+                            int cx = fx + Math.round(dx * i / 3f),
+                                    cz = fz + Math.round(dz * i / 3f);
+                            if (!swimClear(cx, fy, cz) && !swimClear(cx, fy + 1, cz)) {
+                                clear = false;
+                                break;
+                            }
+                        }
+                        if (!clear) continue;
+                        float tx = x + .5f - attackTarget.x, tz = z + .5f - attackTarget.z;
+                        float score = tx * tx + tz * tz + (dx * dx + dz * dz) * .3f;
+                        if (score < best) {
+                            best = score;
+                            swimX = x + .5f;
+                            swimZ = z + .5f;
+                        }
+                    }
+            }
+        }
+        float dx = swimX - mob.x, dz = swimZ - mob.z;
+        if (dx * dx + dz * dz > .09f) {
+            float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90f, d = yaw - mob.yRot;
+            while (d > 180) d -= 360;
+            while (d < -180) d += 360;
+            mob.yRot += Math.max(-20, Math.min(20, d));
+            xxa = 0;
+            yya = runSpeed;
+        }
+        if (mob instanceof net.classicremastered.minecraft.mob.Skeleton
+                && dx * dx + dz * dz >= 36
+                && dx * dx + dz * dz <= 144
+                && level.clip(
+                                new net.classicremastered.minecraft.model.Vec3D(
+                                        mob.x, mob.bb.y0 + 1.5f, mob.z),
+                                new net.classicremastered.minecraft.model.Vec3D(
+                                        attackTarget.x, attackTarget.bb.y0 + 1f, attackTarget.z))
+                        == null) yya = 0;
+        jumping = !attackTarget.isInWater() || mob.bb.y0 < attackTarget.bb.y0 + .2f;
+        routeDriven = false;
+        yieldingToCrowd = false;
+        // Buoyancy is independent of random-jump suppression and fades at the surface.
+        if (mob.yd > .16f) mob.yd = .16f;
+    }
+
     public void addGoal(Goal g) {
-        selector.addGoal(g);
+        goalSelector().addGoal(g);
+    }
+
+    public void addGoal(int priority, Goal goal) {
+        goalSelector().addGoal(priority, goal);
+    }
+
+    private boolean escapeFire() {
+        if (!navigationAllowed() || mob.remainingFireTicks <= 0 || !mob.overlapsFire(mob.bb))
+            return false;
+
+        float bestDistance = Float.POSITIVE_INFINITY;
+        float bestYaw = mob.yRot;
+        for (int direction = 0; direction < 16; direction++) {
+            float yaw = mob.yRot + direction * 22.5f;
+            double angle = Math.toRadians(yaw);
+            float dx = (float) -Math.sin(angle), dz = (float) Math.cos(angle);
+            for (float distance = .5f; distance <= 5f && distance < bestDistance; distance += .5f) {
+                var next = mob.bb.cloneMove(dx * distance, 0, dz * distance);
+                if (!level.getCubes(next).isEmpty()
+                        || level.getCubes(next.cloneMove(0, -.65f, 0)).isEmpty()) break;
+                if (!mob.overlapsFire(next)) {
+                    bestDistance = distance;
+                    bestYaw = yaw;
+                    break;
+                }
+            }
+        }
+        if (!Float.isFinite(bestDistance)) return false;
+
+        mob.yRot = bestYaw;
+        xxa = yRotA = 0;
+        yya = 1;
+        running = true;
+        jumping = false;
+        steeredThisTick = true;
+        return true;
+    }
+
+    /** Goal-facing view of the controller navigation policy. */
+    public final boolean canNavigate() {
+        return navigationAllowed();
+    }
+
+    /** Goal-facing view of the controller wandering policy. */
+    public final boolean hasPlannedWandering() {
+        return usesPlannedWandering();
     }
 
     protected boolean navigationAllowed() {
         return !(mob instanceof net.classicremastered.minecraft.player.Player);
     }
-    protected boolean usesWanderNavigation() { return true; }
-    protected boolean usesPlannedWandering() { return usesWanderNavigation(); }
+
+    protected boolean usesWanderNavigation() {
+        return true;
+    }
+
+    protected boolean usesPlannedWandering() {
+        return usesWanderNavigation();
+    }
 
     private net.classicremastered.minecraft.path.PathNavigator getNavigator() {
         if (navigator == null || navigationLevel != level) {
@@ -166,35 +419,60 @@ public class BasicAI extends AI {
         return navigator;
     }
 
-    protected final boolean navigateTo(float x, float feetY, float z, float speed) {
+    public final boolean navigateTo(float x, float feetY, float z, float speed) {
         wander = null;
         steeredThisTick = true;
-        if(attackTarget!=null && Math.abs(x-attackTarget.x)<0.01f && Math.abs(z-attackTarget.z)<0.01f) {
-            float[] approach=crowdMotion().approach(this);
-            if(approach!=null){x=approach[0];feetY=approach[1];z=approach[2];}
+        if (attackTarget != null
+                && Math.abs(x - attackTarget.x) < 0.01f
+                && Math.abs(z - attackTarget.z) < 0.01f) {
+            float[] approach = crowdMotion().approach(this);
+            if (approach != null) {
+                x = approach[0];
+                feetY = approach[1];
+                z = approach[2];
+            }
         }
         getNavigator().setGoal(x, feetY, z);
         return applyRoute(getNavigator().steer(mob), speed);
     }
 
     /** For specialized AI that applies acceleration after the normal travel step. */
-    protected final void accelerateTo(Entity target, float acceleration) {
-        getNavigator().setGoal(target.x,target.bb.y0,target.z);
-        applyRoute(getNavigator().steer(mob),1f);
-        mob.moveRelative(xxa,yya,acceleration);
-        if(jumping && mob.onGround)jumpFromGround();
+    public final void accelerateTo(Entity target, float acceleration) {
+        getNavigator().setGoal(target.x, target.bb.y0, target.z);
+        applyRoute(getNavigator().steer(mob), 1f);
+        mob.moveRelative(xxa, yya, acceleration);
+        if (jumping && mob.onGround) jumpFromGround();
     }
 
-    private boolean applyRoute(net.classicremastered.minecraft.path.PathNavigator.Result result, float speed) {
+    private boolean applyRoute(
+            net.classicremastered.minecraft.path.PathNavigator.Result result, float speed) {
         return applyRoute(result, speed, 18f);
     }
-    private boolean applyRoute(net.classicremastered.minecraft.path.PathNavigator.Result result, float speed, float maxTurn) {
-        routeDriven=result.forward;
-        routeYaw=result.targetYaw;
+
+    private boolean applyRoute(
+            net.classicremastered.minecraft.path.PathNavigator.Result result,
+            float speed,
+            float maxTurn) {
+        routeDriven = result.forward;
+        routeYaw = result.targetYaw;
         xxa = yya = yRotA = 0;
         jumping = false;
         if (!result.forward) {
-            mob.xd *= 0.5f; mob.zd *= 0.5f;
+            if (attackTarget != null && !attackTarget.removed) {
+                float face =
+                        (float)
+                                        Math.toDegrees(
+                                                Math.atan2(
+                                                        attackTarget.z - mob.z,
+                                                        attackTarget.x - mob.x))
+                                - 90f
+                                - mob.yRot;
+                while (face < -180) face += 360;
+                while (face >= 180) face -= 360;
+                mob.yRot += Math.max(-maxTurn, Math.min(maxTurn, face));
+            }
+            mob.xd *= 0.5f;
+            mob.zd *= 0.5f;
             return false;
         }
         float turn = result.targetYaw - mob.yRot;
@@ -202,182 +480,77 @@ public class BasicAI extends AI {
         while (turn >= 180f) turn -= 360f;
         mob.yRot += Math.max(-maxTurn, Math.min(maxTurn, turn));
         if (Math.abs(turn) > 35f) {
-            mob.xd *= 0.5f; mob.zd *= 0.5f;
+            mob.xd *= 0.5f;
+            mob.zd *= 0.5f;
             return false;
         }
         yya = Math.min(speed, 1.1f) * result.speedFactor;
-        if (result.speedFactor < 0.5f) { mob.xd *= 0.7f; mob.zd *= 0.7f; }
+        if (result.speedFactor < 0.5f) {
+            mob.xd *= 0.7f;
+            mob.zd *= 0.7f;
+        }
         jumping = result.wantJump && mob.onGround;
         return true;
     }
+
     protected void jumpFromGround() {
         this.mob.yd = 0.42F;
     }
 
     protected boolean checkAndPerformFlee() {
-        if (this.mob instanceof Villager && !((Villager) this.mob).isHostile()) {
-            if (this.level == null) return false;
-            java.util.List near = this.level.findEntities(this.mob, this.mob.bb.grow(8.0F, 4.0F, 8.0F));
-            Entity nearestThreat = null;
-            float nearestDist2 = Float.MAX_VALUE;
-            if (near != null) {
-                for (Object o : near) {
-                    if (o instanceof Zombie || o instanceof Skeleton) {
-                        Entity threat = (Entity) o;
-                        if (!threat.removed) {
-                            float dx = threat.x - this.mob.x;
-                            float dy = threat.y - this.mob.y;
-                            float dz = threat.z - this.mob.z;
-                            float dist2 = dx * dx + dy * dy + dz * dz;
-                            if (dist2 < nearestDist2) {
-                                nearestDist2 = dist2;
-                                nearestThreat = threat;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (nearestThreat != null) {
-                float dx = this.mob.x - nearestThreat.x;
-                float dz = this.mob.z - nearestThreat.z;
-                float targetYaw = (float) (Math.atan2((double) dz, (double) dx) * 180.0D / Math.PI) - 90.0F;
-                float dyaw = targetYaw - this.mob.yRot;
-                while (dyaw < -180.0F) dyaw += 360.0F;
-                while (dyaw >= 180.0F) dyaw -= 360.0F;
-                this.yRotA = dyaw * 0.4F;
-
-                this.running = true;
-                this.yya = this.runSpeed * 1.5F;
-
-                boolean obstacleJump = (this.mob.onGround && this.mob.horizontalCollision);
-                boolean mediumJump = (this.mob.isInWater() || this.mob.isInLava()) && this.random.nextFloat() < 0.8F;
-                this.jumping = obstacleJump || mediumJump;
-
-                this.mob.yRot += this.yRotA;
-                this.mob.xRot = (float) this.defaultLookAngle;
-
-                if (this.yya > this.runSpeed * 1.6F) this.yya = this.runSpeed * 1.6F;
-                if (this.yya < -this.runSpeed * 1.6F) this.yya = -this.runSpeed * 1.6F;
-                this.xxa = 0.0F;
-                this.noActionTime = 0;
-                float distance=(float)Math.sqrt(dx*dx+dz*dz);
-                if(distance>0.001f)navigateTo(mob.x+dx/distance*5f,mob.bb.y0,mob.z+dz/distance*5f,runSpeed*1.5f);
-                return true;
-            }
-        }
-        return false;
+        if (fleeGoal == null) fleeGoal = new FleeThreatGoal(this);
+        if (!fleeGoal.canStart()) return false;
+        fleeGoal.tick();
+        return true;
     }
 
     protected void update() {
-        if (this.level == null || this.mob == null || this.mob.health <= 0) {
-            // Hard stop if invalid
-            this.jumping = false;
-            this.xxa = 0.0F;
-            this.yya = 0.0F;
-            this.yRotA = 0.0F;
-            return;
-        }
-
-        if (checkAndPerformFlee()) {
-            return;
-        }
-
-        final boolean inWater = this.mob.isInWater();
-        final boolean inLava  = this.mob.isInLava();
-
-        if (attackTarget == null && usesPlannedWandering() && navigationAllowed() && !inWater && !inLava) {
-            // The persistent wandering controller owns the continuous walk.
-            xxa = yya = yRotA = 0;
-            jumping = running = false;
-            return;
-        }
-
-        // ===== If we have a target: chase it =====
-        if (this.attackTarget != null && !this.attackTarget.removed) {
-            // Face target smoothly
-            float dx = this.attackTarget.x - this.mob.x;
-            float dz = this.attackTarget.z - this.mob.z;
-            float targetYaw = (float)(Math.atan2((double)dz, (double)dx) * 180.0D / Math.PI) - 90.0F;
-            float dyaw = targetYaw - this.mob.yRot;
-            while (dyaw < -180.0F) dyaw += 360.0F;
-            while (dyaw >= 180.0F) dyaw -= 360.0F;
-            this.yRotA = dyaw * 0.4F; // steer proportionally toward target
-
-            // Forward movement (runSpeed base; boost if running)
-            float fwd = this.runSpeed * (this.running ? 1.4F : 1.0F);
-            this.yya = fwd;
-
-            // Light, occasional strafing to avoid getting stuck
-            if (this.random.nextFloat() < 0.06F) {
-                this.xxa = (this.random.nextFloat() - 0.5F) * this.runSpeed * 0.5F;
-            }
-
-            // Jump logic:
-            // - Never random-jump if suppressRandomJump is set (builder climb mode)
-            // - Do jump if pushing a wall and on ground
-            // - In water/lava, bias to jump for buoyancy unless suppressed
-            boolean wantRandomJump = (!this.suppressRandomJump && this.random.nextFloat() < 0.04F);
-            boolean obstacleJump   = (this.mob.onGround && this.mob.horizontalCollision);
-            boolean mediumJump     = (!this.suppressRandomJump && (inWater || inLava) && this.random.nextFloat() < 0.8F);
-
-            this.jumping = obstacleJump || mediumJump || wantRandomJump;
-
-        } else {
-            // ===== No target: wander =====
-
-            // Occasionally pick a new wander vector
-            if (this.random.nextFloat() < 0.07F) {
-                // Forward between [0..runSpeed], slight strafe
-                this.yya = this.random.nextFloat() * this.runSpeed;
-                this.xxa = (this.random.nextFloat() - 0.5F) * this.runSpeed * 0.5F;
-            } else {
-                // Gentle decay toward zero
-                this.yya *= 0.95F;
-                this.xxa *= 0.95F;
-            }
-
-            // Occasionally adjust heading a bit
-            if (this.random.nextFloat() < 0.04F) {
-                // ±30° nudge
-                this.yRotA = (this.random.nextFloat() - 0.5F) * 60.0F * 0.5F;
-            } else {
-                // decay heading change
-                this.yRotA *= 0.9F;
-            }
-
-            // Jump logic in wander:
-            // - obstacle jump if pushing a wall
-            // - medium-driven jump (water/lava) unless suppressed
-            // - small random chance unless suppressed
-            boolean obstacleJump = (this.mob.onGround && this.mob.horizontalCollision);
-            boolean mediumJump   = (!this.suppressRandomJump && (inWater || inLava) && this.random.nextFloat() < 0.8F);
-            boolean randJump     = (!this.suppressRandomJump && this.random.nextFloat() < 0.01F);
-
-            this.jumping = obstacleJump || mediumJump || randJump;
-        }
-
-        // Apply heading and look
-        this.mob.yRot += this.yRotA;
-        this.mob.xRot  = (float) this.defaultLookAngle;
-
-        // If in fluid, bias toward upward motion when jumping (handled in tick())
-        // (No direct vertical impulse here; BasicAI.tick() calls jumpFromGround()/buoyancy)
-
-        // Clamp/soften inputs a bit
-        if (this.yya >  this.runSpeed * 1.6F) this.yya =  this.runSpeed * 1.6F;
-        if (this.yya < -this.runSpeed * 1.6F) this.yya = -this.runSpeed * 1.6F;
-        if (this.xxa >  this.runSpeed)        this.xxa =  this.runSpeed;
-        if (this.xxa < -this.runSpeed)        this.xxa = -this.runSpeed;
-
-        // Keep noActionTime from drifting when actively moving
-        if (Math.abs(this.yya) > 1e-3F || Math.abs(this.xxa) > 1e-3F || this.jumping) {
-            this.noActionTime = 0;
-        }
+        defaultMovement();
     }
 
+    public final void defaultMovement() {
+        if (level == null || mob == null || mob.health <= 0) {
+            jumping = false;
+            xxa = yya = yRotA = 0;
+            return;
+        }
+        if (movementGoals == null) {
+            if (fleeGoal == null) fleeGoal = new FleeThreatGoal(this);
+            movementGoals =
+                    createGoalSelector(
+                            fleeGoal,
+                            new PlannedStrollGoal(this),
+                            new MoveToTargetGoal(this),
+                            new RandomStrollGoal(this));
+        }
+        movementGoals.tick();
+    }
 
-    public void beforeRemove() {}
+    protected final GoalSelector createGoalSelector(Goal... goals) {
+        GoalSelector created = new GoalSelector(goals);
+        if (goalSets == null) goalSets = new java.util.ArrayList<>();
+        goalSets.add(created);
+        return created;
+    }
+
+    private void stopAllGoals() {
+        if (selector != null) selector.stopAll();
+        if (goalSets != null) for (GoalSelector goals : goalSets) goals.stopAll();
+    }
+
+    protected final GoalSelector goalSelector() {
+        if (selector == null) {
+            selector = new GoalSelector();
+            registerGoals(selector);
+        }
+        return selector;
+    }
+
+    protected void registerGoals(GoalSelector selector) {}
+
+    public void beforeRemove() {
+        stopAllGoals();
+    }
 
     @Override
     public void hurt(Entity src, int dmg) {
@@ -385,8 +558,10 @@ public class BasicAI extends AI {
         this.noActionTime = 0;
     }
 
-    public void bind(net.classicremastered.minecraft.level.Level level, net.classicremastered.minecraft.mob.Mob mob) {
+    public void bind(
+            net.classicremastered.minecraft.level.Level level,
+            net.classicremastered.minecraft.mob.Mob mob) {
         this.level = level;
-        this.mob   = mob;
+        this.mob = mob;
     }
 }

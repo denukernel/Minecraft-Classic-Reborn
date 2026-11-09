@@ -11,10 +11,18 @@ public class Chicken extends Mob {
     private static final float WIDTH = .6F;
     private static final float HEIGHT = .95F;
 
+    @Override
+    public float getRenderBrightness(float partial) {
+        return level.getRenderBrightness(
+                (int) Math.floor(x),
+                (int) Math.floor(bb.y0 + bbHeight * .65f),
+                (int) Math.floor(z));
+    }
+
     // --- Wing physics (Beta 1.8 style) ---
     public float wingRotation = 0.0F; // accumulates rotation
-    public float destPos = 0.0F;      // flap progress target
-    public float wingSpeed = 0.0F;    // flap speed
+    public float destPos = 0.0F; // flap progress target
+    public float wingSpeed = 0.0F; // flap speed
     private static final java.util.Random random = new java.util.Random();
 
     public Chicken(Level level, float x, float y, float z) {
@@ -26,7 +34,8 @@ public class Chicken extends Mob {
         this.health = 4;
     }
 
-    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+    private void readObject(java.io.ObjectInputStream in)
+            throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
         setSize(WIDTH, HEIGHT);
     }
@@ -60,20 +69,21 @@ public class Chicken extends Mob {
 
     @Override
     public void die(Entity killer) {
+        if (dead || removed) return;
         super.die(killer);
 
-        if (level == null || level.isNetworkMode()) return;
+        if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
 
         // Drop 1–2 feathers
         int count = 1 + random.nextInt(2);
         for (int i = 0; i < count; i++) {
-            DroppedItem feather = new DroppedItem(
-                level,
-                this.x + (random.nextFloat() - 0.5F), // random offset
-                this.y + 0.5F,
-                this.z + (random.nextFloat() - 0.5F),
-                Item.FEATHER.id
-            );
+            DroppedItem feather =
+                    new DroppedItem(
+                            level,
+                            this.x + (random.nextFloat() - 0.5F), // random offset
+                            this.y + 0.5F,
+                            this.z + (random.nextFloat() - 0.5F),
+                            Item.FEATHER.id);
             level.addEntity(feather);
         }
     }

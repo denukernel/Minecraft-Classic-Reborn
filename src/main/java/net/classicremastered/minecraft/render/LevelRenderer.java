@@ -1,13 +1,16 @@
 package net.classicremastered.minecraft.render;
 
-import org.lwjgl.BufferUtils;
-import org.lwjgl.opengl.GL11;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.LevelInfiniteFlat;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.player.Player;
+
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL11;
+
 import java.nio.IntBuffer;
 import java.util.*;
 
@@ -71,7 +74,8 @@ public final class LevelRenderer {
                     Chunk candidate = chunks.get(i), previous = chunks.get(best);
                     if ((candidate.visible && !previous.visible)
                             || (candidate.visible == previous.visible
-                            && candidate.distanceSquared(player) < previous.distanceSquared(player))) best = i;
+                                    && candidate.distanceSquared(player)
+                                            < previous.distanceSquared(player))) best = i;
                 }
             }
             Chunk c = chunks.get(best);
@@ -108,7 +112,8 @@ public final class LevelRenderer {
         waterReady = false;
         buffer.clear().limit(0);
         lastLoadX = lastLoadY = lastLoadZ = -9999;
-        if (isInfiniteLevel()) return;
+        xChunks = yChunks = zChunks = 0;
+        if (level == null || isInfiniteLevel()) return;
         xChunks = (level.width + 15) / 16;
         yChunks = (level.depth + 15) / 16;
         zChunks = (level.height + 15) / 16;
@@ -117,21 +122,33 @@ public final class LevelRenderer {
         if (baseListCount > 0) baseListId = GL11.glGenLists(baseListCount);
         chunkCache = new Chunk[count];
         loadQueue = new Chunk[count];
-        for (int cx = 0; cx < xChunks; cx++) for (int cy = 0; cy < yChunks; cy++)
-            for (int cz = 0; cz < zChunks; cz++) {
-                int idx = (cz * yChunks + cy) * xChunks + cx;
-                Chunk c = new Chunk(level, cx << 4, cy << 4, cz << 4, 16, baseListId + idx * 2);
-                chunkCache[idx] = loadQueue[idx] = c;
-                markDirty(c);
-            }
+        for (int cx = 0; cx < xChunks; cx++)
+            for (int cy = 0; cy < yChunks; cy++)
+                for (int cz = 0; cz < zChunks; cz++) {
+                    int idx = (cz * yChunks + cy) * xChunks + cx;
+                    Chunk c = new Chunk(level, cx << 4, cy << 4, cz << 4, 16, baseListId + idx * 2);
+                    chunkCache[idx] = loadQueue[idx] = c;
+                    markDirty(c);
+                }
     }
 
     private void prepareInfiniteWindow(Player player) {
         int cx = (int) Math.floor(player.x / 16.0), cz = (int) Math.floor(player.z / 16.0);
-        int distance = minecraft != null && minecraft.settings != null ? minecraft.settings.viewDistance : 0;
-        int view = switch (distance) { case 0 -> 8; case 1 -> 6; case 2 -> 4; default -> 2; };
+        int distance =
+                minecraft != null && minecraft.settings != null
+                        ? minecraft.settings.viewDistance
+                        : 0;
+        int view =
+                switch (distance) {
+                    case 0 -> 8;
+                    case 1 -> 6;
+                    case 2 -> 4;
+                    default -> 2;
+                };
         if (cx == windowX && cz == windowZ && view == windowView) return;
-        windowX = cx; windowZ = cz; windowView = view;
+        windowX = cx;
+        windowZ = cz;
+        windowView = view;
         // Keep a small reuse margin while bounding GPU meshes during long journeys.
         Set<Chunk> removed = new HashSet<>();
         Iterator<Chunk> iterator = infiniteCache.values().iterator();
@@ -146,36 +163,49 @@ public final class LevelRenderer {
         chunks.removeIf(removed::contains);
         renderWindow.clear();
         if (minecraft != null && minecraft.settings != null && minecraft.settings.multithreaded) {
-            if (level instanceof LevelInfiniteTerrain terrain) terrain.chunks().prefetch(cx, cz, view);
+            if (level instanceof LevelInfiniteTerrain terrain)
+                terrain.chunks().prefetch(cx, cz, view);
             else if (level instanceof LevelInfiniteFlat flat) flat.chunks.prefetch(cx, cz, view);
         }
         int slices = (level.depth + 15) >> 4;
-        for (int ring = 0; ring <= view; ring++) for (int dx = -ring; dx <= ring; dx++)
-            for (int dz = -ring; dz <= ring; dz++) {
-                if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
-                for (int sy = 0; sy < slices; sy++) {
-                    long key = key3(cx + dx, sy, cz + dz);
-                    Chunk c = infiniteCache.get(key);
-                    if (c == null) {
-                        c = new Chunk(level, (cx + dx) << 4, sy << 4, (cz + dz) << 4, 16, GL11.glGenLists(2));
-                        infiniteCache.put(key, c);
-                        markDirty(c);
+        for (int ring = 0; ring <= view; ring++)
+            for (int dx = -ring; dx <= ring; dx++)
+                for (int dz = -ring; dz <= ring; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                    for (int sy = 0; sy < slices; sy++) {
+                        long key = key3(cx + dx, sy, cz + dz);
+                        Chunk c = infiniteCache.get(key);
+                        if (c == null) {
+                            c =
+                                    new Chunk(
+                                            level,
+                                            (cx + dx) << 4,
+                                            sy << 4,
+                                            (cz + dz) << 4,
+                                            16,
+                                            GL11.glGenLists(2));
+                            infiniteCache.put(key, c);
+                            markDirty(c);
+                        }
+                        renderWindow.add(c);
                     }
-                    renderWindow.add(c);
                 }
-            }
     }
 
-    public final int sortChunks(Player player, int pass) {
+    public final int sortChunks(Player player, int pass, float partial) {
         long start = System.nanoTime();
         try {
             boolean infinite = isInfiniteLevel();
             if (pass == 0) {
                 if (infinite) prepareInfiniteWindow(player);
                 else {
-                    float dx = player.x - lastLoadX, dy = player.y - lastLoadY, dz = player.z - lastLoadZ;
+                    float dx = player.x - lastLoadX,
+                            dy = player.y - lastLoadY,
+                            dz = player.z - lastLoadZ;
                     if (dx * dx + dy * dy + dz * dz > 64) {
-                        lastLoadX = player.x; lastLoadY = player.y; lastLoadZ = player.z;
+                        lastLoadX = player.x;
+                        lastLoadY = player.y;
+                        lastLoadZ = player.z;
                         Arrays.sort(loadQueue, new ChunkDistanceComparator(player));
                     }
                 }
@@ -187,21 +217,69 @@ public final class LevelRenderer {
             int len = 0;
             if (infinite) {
                 ensureDrawCapacity(renderWindow.size());
-                for (Chunk c : renderWindow) if (c.visible) len = c.appendLists(chunkDataCache, len, pass);
+                for (Chunk c : renderWindow)
+                    if (c.visible) len = c.appendLists(chunkDataCache, len, pass);
             } else if (loadQueue != null) {
                 ensureDrawCapacity(loadQueue.length);
-                for (Chunk c : loadQueue) if (c.visible) len = c.appendLists(chunkDataCache, len, pass);
+                for (Chunk c : loadQueue)
+                    if (c.visible) len = c.appendLists(chunkDataCache, len, pass);
             }
             buffer.clear();
             if (len > 0) {
                 buffer.put(chunkDataCache, 0, len).flip();
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-                        textureManager.load(infinite && pass == 1 ? "/water.png" : "/terrain.png"));
+                GL11.glBindTexture(
+                        GL11.GL_TEXTURE_2D,
+                        textureManager.load(
+                                infinite && pass == 1
+                                        ? "/water.png"
+                                        : net.classicremastered.minecraft.render.BlockTextureAtlas
+                                                .RESOURCE));
                 GL11.glCallLists(buffer);
             }
+            if (pass == 0) renderPistonMotion(partial);
+            if (pass == 0)
+                net.classicremastered.minecraft.level.ChestController.render(
+                        level, textureManager, FrustrumImpl.update());
             return len;
         } finally {
             net.classicremastered.minecraft.util.Debug.recordSortChunks(System.nanoTime() - start);
+        }
+    }
+
+    private void renderPistonMotion(float partial) {
+        var motions = level.redstone().motions();
+        if (motions.isEmpty()) return;
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureManager.load(BlockTextureAtlas.RESOURCE));
+        ShapeRenderer shape = ShapeRenderer.instance;
+        for (var motion : motions) {
+            var a = motion.from();
+            var b = motion.to();
+            float remain = 1 - Math.min(1, (level.tickCount - motion.started() + partial) / 2);
+            GL11.glPushMatrix();
+            try {
+                GL11.glTranslatef(
+                        (a.x() - b.x()) * remain,
+                        (a.y() - b.y()) * remain,
+                        (a.z() - b.z()) * remain);
+                shape.begin();
+                if (motion.block() == Block.PISTON_HEAD.id) {
+                    net.classicremastered.minecraft.level.tile.BlockModels.piston(
+                            shape,
+                            b.x(),
+                            b.y(),
+                            b.z(),
+                            motion.facing(),
+                            true,
+                            true,
+                            motion.sticky(),
+                            level.getRenderBrightness(b.x(), b.y(), b.z()));
+                } else {
+                    Block.blocks[motion.block()].render(level, b.x(), b.y(), b.z(), shape);
+                }
+                shape.end();
+            } finally {
+                GL11.glPopMatrix();
+            }
         }
     }
 
@@ -213,21 +291,29 @@ public final class LevelRenderer {
     }
 
     public final void queueChunks(int x0, int y0, int z0, int x1, int y1, int z1) {
-        int cx0 = Math.floorDiv(x0, 16), cy0 = Math.max(0, Math.floorDiv(y0, 16)), cz0 = Math.floorDiv(z0, 16);
-        int cx1 = Math.floorDiv(x1, 16), cy1 = Math.min((level.depth - 1) / 16, Math.floorDiv(y1, 16)), cz1 = Math.floorDiv(z1, 16);
+        int cx0 = Math.floorDiv(x0, 16),
+                cy0 = Math.max(0, Math.floorDiv(y0, 16)),
+                cz0 = Math.floorDiv(z0, 16);
+        int cx1 = Math.floorDiv(x1, 16),
+                cy1 = Math.min((level.depth - 1) / 16, Math.floorDiv(y1, 16)),
+                cz1 = Math.floorDiv(z1, 16);
         boolean infinite = isInfiniteLevel();
         if (!infinite) {
-            cx0 = Math.max(0, cx0); cz0 = Math.max(0, cz0);
-            cx1 = Math.min(xChunks - 1, cx1); cz1 = Math.min(zChunks - 1, cz1);
+            cx0 = Math.max(0, cx0);
+            cz0 = Math.max(0, cz0);
+            cx1 = Math.min(xChunks - 1, cx1);
+            cz1 = Math.min(zChunks - 1, cz1);
         }
-        for (int cx = cx0; cx <= cx1; cx++) for (int cy = cy0; cy <= cy1; cy++)
-            for (int cz = cz0; cz <= cz1; cz++) {
-                if (infinite) markDirty(cx, cy, cz);
-                else markDirty(chunkCache[(cz * yChunks + cy) * xChunks + cx]);
-            }
+        for (int cx = cx0; cx <= cx1; cx++)
+            for (int cy = cy0; cy <= cy1; cy++)
+                for (int cz = cz0; cz <= cz1; cz++) {
+                    if (infinite) markDirty(cx, cy, cz);
+                    else markDirty(chunkCache[(cz * yChunks + cy) * xChunks + cx]);
+                }
     }
 
-    public void onTimeOfDayMaybeChanged() { }
+    public void onTimeOfDayMaybeChanged() {}
+
     public void renderEntities(float partial) {
         if (level == null) return;
         for (Entity e : level.entityList) {
@@ -241,20 +327,24 @@ public final class LevelRenderer {
                 HeldItemRenderer.renderWorld(p, partial);
                 int selId = p.inventory.getSelected();
                 if (selId >= 256 && (selId - 256) == 11) {
-                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.GravityGunItem.getGrabbedMob(p);
+                    net.classicremastered.minecraft.mob.Mob grabbed =
+                            net.classicremastered.minecraft.level.itemstack.GravityGunItem
+                                    .getGrabbedMob(p);
                     if (grabbed != null && !grabbed.removed) {
-                        net.classicremastered.minecraft.level.itemstack.GravityGunItem.renderMobBeam(p, grabbed, textureManager, partial);
+                        net.classicremastered.minecraft.level.itemstack.GravityGunItem
+                                .renderMobBeam(p, grabbed, textureManager, partial);
                     }
                 }
                 if (selId >= 256 && (selId - 256) == 10) {
-                    net.classicremastered.minecraft.mob.Mob grabbed = net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.getGrabbed(p);
+                    net.classicremastered.minecraft.mob.Mob grabbed =
+                            net.classicremastered.minecraft.level.itemstack.PhysicsGunItem
+                                    .getGrabbed(p);
                     if (grabbed != null && !grabbed.removed) {
-                        net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.renderMobBeam(p, grabbed, textureManager, partial);
+                        net.classicremastered.minecraft.level.itemstack.PhysicsGunItem
+                                .renderMobBeam(p, grabbed, textureManager, partial);
                     }
                 }
             }
         }
     }
 }
-
-

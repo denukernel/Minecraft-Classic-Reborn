@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
@@ -75,37 +76,47 @@ public class BucketItem extends ToolItem {
         if (bucketType == 0) {
             // Scoop up liquid
             int tile = level.getTile(x, y, z);
-            if (tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id) {
+            if ((tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)
+                    && (!LiquidBlock.usesLevelledFlow(level) || level.getFlowLevel(x, y, z) == 0)) {
                 level.setTile(x, y, z, 0); // Remove water
                 level.playSound("random/pop", player, 0.5f, 1.0f);
-                player.inventory.slots[slot] = Item.BUCKET_WATER.id + 256;
+                if (!level.creativeMode)
+                    player.inventory.slots[slot] = Item.BUCKET_WATER.id + 256;
             } else if (tile == Block.LAVA.id || tile == Block.STATIONARY_LAVA.id) {
                 level.setTile(x, y, z, 0); // Remove lava
                 level.playSound("random/pop", player, 0.5f, 0.8f);
-                player.inventory.slots[slot] = Item.BUCKET_LAVA.id + 256;
+                if (!level.creativeMode)
+                    player.inventory.slots[slot] = Item.BUCKET_LAVA.id + 256;
             }
         } else {
             // Place liquid
             int nx = x;
             int ny = y;
             int nz = z;
-            if (side == 0) ny--;
-            if (side == 1) ny++;
-            if (side == 2) nz--;
-            if (side == 3) nz++;
-            if (side == 4) nx--;
-            if (side == 5) nx++;
+            if (side == 0)
+                ny--;
+            if (side == 1)
+                ny++;
+            if (side == 2)
+                nz--;
+            if (side == 3)
+                nz++;
+            if (side == 4)
+                nx--;
+            if (side == 5)
+                nx++;
 
             if (level.isInBounds(nx, ny, nz) && level.getTile(nx, ny, nz) == 0) {
-                int placeTile = (bucketType == 1) ? Block.WATER.id : Block.LAVA.id;
-                level.setTile(nx, ny, nz, placeTile);
-                
-                // Add to flowLevels map as level 0 (source) so it flows properly
-                level.flowLevels.put(Level.getCoordKey(nx, ny, nz), (byte) 0);
-                Block.blocks[placeTile].onPlace(level, nx, ny, nz);
+                int placeTile = bucketType == 1
+                        ? (LiquidBlock.usesLevelledFlow(level) ? Block.STATIONARY_WATER.id : Block.WATER.id)
+                        : Block.LAVA.id;
+                if (!level.setTile(nx, ny, nz, placeTile)) {
+                    return;
+                }
 
                 level.playSound("random/pop", player, 0.5f, 1.0f);
-                player.inventory.slots[slot] = Item.BUCKET_EMPTY.id + 256;
+                if (!level.creativeMode)
+                    player.inventory.slots[slot] = Item.BUCKET_EMPTY.id + 256;
             }
         }
     }

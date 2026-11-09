@@ -5,20 +5,24 @@ import net.classicremastered.minecraft.model.Model;
 import net.classicremastered.minecraft.render.TextureManager;
 
 public final class BabyZombieRenderer extends MobRenderer<BabyZombie> {
-    public BabyZombieRenderer(Model babyZombieModel) { super(babyZombieModel, "/mob/zombie.png"); }
+    public BabyZombieRenderer(Model babyZombieModel) {
+        super(babyZombieModel, "/mob/zombie.png");
+    }
 
     @Override
     public void render(BabyZombie mob, TextureManager tm, float partial) {
         AnimInputs a = animInputs(mob, partial);
-        bind(tm, texture);
-
-        model.preAnimate(mob);
-        model.setRotationAngles(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
-        model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
-
-        // Armor overlay (armor model already has its own scale)
-        mob.renderArmorLayer(tm, a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
+        renderPose(mob, tm, a, a.yaw, a.pitch);
     }
 
+    public void render(BabyZombie mob, TextureManager tm, float partial, float yaw, float pitch) {
+        renderPose(mob, tm, animInputs(mob, partial), yaw, pitch);
+    }
 
+    private void renderPose(BabyZombie mob, TextureManager tm, AnimInputs a, float yaw, float pitch) {
+        bind(tm, texture);
+        model.preAnimate(mob);
+        model.render(a.anim, a.runAmt, a.age, yaw, pitch, MODEL_SCALE);
+        mob.renderArmorLayer(tm, a.anim, a.runAmt, a.age, yaw, pitch, MODEL_SCALE);
+    }
 }

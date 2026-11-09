@@ -11,6 +11,7 @@ final class PlayerNbtCodec {
 
     static void save(CompoundTag tag, Entity entity) {
         if (!(entity instanceof Player player)) return;
+        net.classicremastered.minecraft.level.itemstack.Equipment.save(player,tag);
         tag.putInt("Health", player.health);
         tag.putInt("Coins", player.coins);
         var inventory = player.inventory;
@@ -29,22 +30,37 @@ final class PlayerNbtCodec {
     }
 
     static void load(CompoundTag tag, Entity entity) {
-        if (!(entity instanceof Player player)) return;
+        if (!(entity instanceof Player player))
+            return;
+        net.classicremastered.minecraft.level.itemstack.Equipment.load(player, tag);
         // Older saves have only position and rotation. Keep their player defaults.
-        if (tag.hasKey("Health")) player.health = tag.getInt("Health");
-        if (tag.hasKey("Coins")) player.coins = tag.getInt("Coins");
+        if (tag.hasKey("Health"))
+            player.health = tag.getInt("Health");
+        if (tag.hasKey("Coins"))
+            player.coins = tag.getInt("Coins");
         if (tag.hasKey("Inventory")) {
             var inventory = new Inventory();
-            if (tag.hasKey("InventorySize")) {
-                inventory.resizeGrid(Math.max(0, tag.getInt("InventorySize") - Inventory.HOTBAR_SIZE));
-            }
             ListTag stacks = tag.getList("Inventory");
+            int size = Math.max(Inventory.HOTBAR_SIZE,
+                    tag.hasKey("InventorySize")
+                            ? tag.getInt("InventorySize")
+                            : inventory.totalSize());
+            for (int i = 0; i < stacks.size(); i++) {
+                int slot = ((CompoundTag) stacks.get(i)).getInt("Slot");
+                if (slot < 0 || slot == Integer.MAX_VALUE) {
+                    throw new IllegalArgumentException("Invalid saved inventory slot: " + slot);
+                }
+                size = Math.max(size, slot + 1);
+            }
+            inventory.resizeGrid(size - Inventory.HOTBAR_SIZE);
             for (int i = 0; i < stacks.size(); i++) {
                 CompoundTag stack = (CompoundTag) stacks.get(i);
-                inventory.setIdCount(stack.getInt("Slot"), stack.getInt("Id"), stack.getInt("Count"));
+                inventory.setIdCount(stack.getInt("Slot"), stack.getInt("Id"),
+                        stack.getInt("Count"));
             }
             if (tag.hasKey("SelectedSlot")) {
-                inventory.selected = Math.max(0, Math.min(Inventory.HOTBAR_SIZE - 1, tag.getInt("SelectedSlot")));
+                inventory.selected = Math.max(0,
+                        Math.min(Inventory.HOTBAR_SIZE - 1, tag.getInt("SelectedSlot")));
             }
             player.inventory = inventory;
         }

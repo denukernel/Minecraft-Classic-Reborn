@@ -87,6 +87,16 @@ public class Arrow extends Entity {
         zo = z;
 
         if (!hasHit && level != null && bb != null) {
+            for (Object object : new ArrayList(
+                    level.findEntities(this, bb.expand(xd * 6, yd * 6, zd * 6).grow(1, 1, 1))))
+                if (object instanceof net.classicremastered.minecraft.mob.StickFigure stick && stick.health > 0
+                        && !stick.removed) {
+                    net.classicremastered.minecraft.model.Vec3D start = new net.classicremastered.minecraft.model.Vec3D(
+                            x, y, z);
+                    var end = start.add(xd * 6, yd * 6, zd * 6);
+                    if (stick.bb.grow(.2f, .2f, .2f).clip(start, end) != null)
+                        stick.evadeArrow(this);
+                }
             tryInstantEndermanDodge();
         }
 
@@ -117,13 +127,15 @@ public class Arrow extends Entity {
 
                 if (level.getCubes(unknown5).size() > 0) {
                     collision = true;
+                    break;
                 }
 
                 List blockMapEntitiesList = level.blockMap.getEntities(this, unknown5);
                 for (int currentEntity = 0; currentEntity < blockMapEntitiesList.size(); currentEntity++) {
                     Entity entity = (Entity) blockMapEntitiesList.get(currentEntity);
-                    if (entity.isShootable() && (entity != owner || time > 5)) {
+                    if (!entity.removed && entity.isShootable() && (entity != owner || time > 5)) {
                         entity.hurt(this, damage);
+                        level.playSound("random/bowhit", this, .7f, 1f);
                         collision = true;
                         remove();
                         return;
@@ -140,6 +152,7 @@ public class Arrow extends Entity {
             }
 
             if (collision) {
+                level.playSound("random/bowhit", this, .7f, 1f);
                 hasHit = true;
                 xd = yd = zd = 0.0F;
             }
@@ -301,7 +314,7 @@ public class Arrow extends Entity {
 
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureId);
 
-        float brightness = level.getBrightness((int) x, (int) y, (int) z);
+        float brightness = level.getRenderBrightness((int) x, (int) y, (int) z);
 
         GL11.glPushMatrix();
         GL11.glColor4f(brightness, brightness, brightness, 1.0F);
@@ -313,14 +326,14 @@ public class Arrow extends Entity {
 
         ShapeRenderer shapeRenderer = ShapeRenderer.instance;
 
-        unknown0 = 0.5F;
+        float shaftU = 24.0F / 32.0F;
 
-        float unknown1 = (float) (0 + type * 10) / 32.0F;
-        float unknown2 = (float) (5 + type * 10) / 32.0F;
+        float unknown1 = 0;
+        float unknown2 = 5 / 32f;
         float unknown3 = 0.15625F;
 
-        float unknown4 = (float) (5 + type * 10) / 32.0F;
-        float unknown5 = (float) (10 + type * 10) / 32.0F;
+        float unknown4 = 5 / 32f;
+        float unknown5 = 10 / 32f;
         float unknown6 = 0.05625F;
 
         GL11.glScalef(0.05625F, unknown6, unknown6);
@@ -348,9 +361,10 @@ public class Arrow extends Entity {
 
             GL11.glNormal3f(0.0F, -unknown6, 0.0F);
 
+            shapeRenderer.begin();
             shapeRenderer.vertexUV(-8.0F, -2.0F, 0.0F, 0.0F, unknown1);
-            shapeRenderer.vertexUV(8.0F, -2.0F, 0.0F, unknown0, unknown1);
-            shapeRenderer.vertexUV(8.0F, 2.0F, 0.0F, unknown0, unknown2);
+            shapeRenderer.vertexUV(8.0F, -2.0F, 0.0F, shaftU, unknown1);
+            shapeRenderer.vertexUV(8.0F, 2.0F, 0.0F, shaftU, unknown2);
             shapeRenderer.vertexUV(-8.0F, 2.0F, 0.0F, 0.0F, unknown2);
             shapeRenderer.end();
         }
@@ -369,17 +383,18 @@ public class Arrow extends Entity {
         if (player.level != null && player.level.creativeMode)
             return;
 
-        if (hasHit && owner != player && player.arrows < Player.MAX_ARROWS) {
+        if (!removed && hasHit && player.inventory
+                .addResource(net.classicremastered.minecraft.level.itemstack.Equipment.ARROW.id + 256)) {
             TakeEntityAnim takeEntityAnim = new TakeEntityAnim(level, this, player);
             level.addEntity(takeEntityAnim);
-            player.arrows++;
             remove();
         }
     }
 
     @Override
     public void awardKillScore(Entity entity, int score) {
-        owner.awardKillScore(entity, score);
+        if (owner != null)
+            owner.awardKillScore(entity, score);
     }
 
     public static final long serialVersionUID = 0L;
@@ -394,7 +409,17 @@ public class Arrow extends Entity {
     private float xRotO;
 
     private boolean hasHit = false;
-    public boolean isEmbedded() { return hasHit; }
+    public boolean isEmbedded() {
+        return hasHit;
+    }
+
+    public void releaseFromBlock() {
+        hasHit = false;
+        collision = false;
+        onGround = false;
+        time = 0;
+        stickTime = 0;
+    }
 
     private int stickTime = 0;
 

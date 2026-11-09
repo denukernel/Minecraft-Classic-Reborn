@@ -12,7 +12,6 @@ import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
@@ -39,6 +38,7 @@ public final class HUDScreen extends Screen {
     public final void render(float partial, boolean mouseOver, int mx, int my) {
         FontRenderer font = this.mc.fontRenderer;
         this.mc.renderer.enableGuiMode();
+        renderBossBar(font);
 
         TextureManager tm = this.mc.textureManager;
         ShapeRenderer sr = ShapeRenderer.instance;
@@ -46,7 +46,8 @@ public final class HUDScreen extends Screen {
         // cache texture ids once per frame
         final int TEX_GUI = tm.load("/gui/gui.png");
         final int TEX_ICONS = tm.load("/gui/icons.png");
-        final int TEX_TERR = tm.load("/terrain.png");
+        final int TEX_TERR =
+                tm.load(net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE);
 
         GL11.glColor4f(1, 1, 1, 1);
         GL11.glEnable(GL11.GL_BLEND);
@@ -67,7 +68,8 @@ public final class HUDScreen extends Screen {
             final int U_BUBBLE_FULL = 16, V_BUBBLE_FULL = 18;
             final int U_BUBBLE_PART = 25, V_BUBBLE_PART = 18;
 
-            boolean hurtFlash = (player.invulnerableTime / 3 % 2 == 1) && player.invulnerableTime >= 10;
+            boolean hurtFlash =
+                    (player.invulnerableTime / 3 % 2 == 1) && player.invulnerableTime >= 10;
             int health = Math.max(0, Math.min(20, player.health)); // 0..20 half-hearts
             int lastHealth = Math.max(0, Math.min(20, player.lastHealth));
 
@@ -123,7 +125,8 @@ public final class HUDScreen extends Screen {
         this.imgZ = -90.0F;
 
         this.drawImage(this.width / 2 - 91, this.height - 22, 0, 0, 182, 22);
-        this.drawImage(this.width / 2 - 91 - 1 + inv.selected * 20, this.height - 22 - 1, 0, 22, 24, 22);
+        this.drawImage(
+                this.width / 2 - 91 - 1 + inv.selected * 20, this.height - 22 - 1, 0, 22, 24, 22);
 
         // --------------------------------------------------------------------
         // Crosshair ==> icons.png
@@ -137,26 +140,23 @@ public final class HUDScreen extends Screen {
         int hotbar = Math.min(9, inv.slots.length);
         for (int slot = 0; slot < hotbar; ++slot) {
             int id = inv.slots[slot];
-            if (id <= 0)
-                continue;
+            if (id <= 0) continue;
 
             int x = this.width / 2 - 90 + slot * 20;
             int y = this.height - 16;
+            float pop = (inv.popTime[slot] - partial) / Inventory.POP_TIME_DURATION;
 
+            GL11.glPushMatrix();
+            GL11.glTranslatef(x, y, -50);
+            if (pop > 0) {
+                float bounce = MathHelper.sin(pop * pop * (float) Math.PI);
+                GL11.glTranslatef(10, 10 - bounce * 8.0F, 0);
+                GL11.glScalef(1.0F + bounce, 1.0F + MathHelper.sin(pop * (float) Math.PI), 1.0F);
+                GL11.glTranslatef(-10, -10, 0);
+            }
+
+            id = net.classicremastered.minecraft.level.itemstack.Item.iconId(id);
             if (id < 256 && Block.blocks[id] != null) {
-                GL11.glPushMatrix();
-                GL11.glTranslatef(x, y, -50);
-
-                if (inv.popTime[slot] > 0) {
-                    float t = ((float) inv.popTime[slot]) / 5.0F;
-                    float s1 = -MathHelper.sin(t * t * (float) Math.PI) * 8.0F;
-                    float s2 = MathHelper.sin(t * t * (float) Math.PI) + 1.0F;
-                    float s3 = MathHelper.sin(t * (float) Math.PI) + 1.0F;
-                    GL11.glTranslatef(10, s1 + 10, 0);
-                    GL11.glScalef(s2, s3, 1.0F);
-                    GL11.glTranslatef(-10, -10, 0);
-                }
-
                 GL11.glScalef(10, 10, 10);
                 GL11.glTranslatef(1.0F, 0.5F, 0.0F);
                 GL11.glRotatef(-30, 1, 0, 0);
@@ -168,7 +168,6 @@ public final class HUDScreen extends Screen {
                 sr.begin();
                 Block.blocks[id].renderFullbright(sr);
                 sr.end();
-                GL11.glPopMatrix();
 
                 // restore icons for subsequent 2D HUD draws if any
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
@@ -177,22 +176,12 @@ public final class HUDScreen extends Screen {
                 if (itemId >= 0 && itemId < Item.items.length) {
                     Item it = Item.items[itemId];
                     if (it != null) {
-                        GL11.glPushMatrix();
-
-                        if (inv.popTime[slot] > 0) {
-                            float t = ((float) inv.popTime[slot]) / 5.0F;
-                            float s = 1.0F + 0.15F * MathHelper.sin(t * t * (float) Math.PI);
-                            GL11.glTranslatef(x + 10, y + 10, -50);
-                            GL11.glScalef(s, s, 1.0F);
-                            GL11.glTranslatef(-(x + 10), -(y + 10), 0);
-                        }
-
-                        GL11.glTranslatef(x + 2, y - 4, -50);
+                        GL11.glTranslatef(2, -4, 0);
                         it.renderIcon(this.mc.textureManager, sr);
-                        GL11.glPopMatrix();
                     }
                 }
             }
+            GL11.glPopMatrix();
 
             if (inv.count[slot] > 1) {
                 String countStr = "" + inv.count[slot];
@@ -200,46 +189,52 @@ public final class HUDScreen extends Screen {
             }
         }
 
-     // --------------------------------------------------------------------
-     // Text overlays (debug, score, chat)
-     // --------------------------------------------------------------------
-     GL11.glEnable(GL11.GL_TEXTURE_2D);
-     GL11.glColor4f(1, 1, 1, 1);
+        // --------------------------------------------------------------------
+        // Text overlays (debug, score, chat)
+        // --------------------------------------------------------------------
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glColor4f(1, 1, 1, 1);
 
-     // Title string with colored segments
-     if (this.mc != null && this.mc.settings != null && this.mc.settings.showFrameRate) {
-         String diff = "&7Difficulty: &e" + this.mc.settings.difficulty.getLabel();
-         font.render(diff, 2, 12, 0xFFFFFF);
-     }
-     long totalMem = Runtime.getRuntime().maxMemory() / (1024L * 1024L);
-     if (totalMem < 4000) {
-         String warn = "WARNING: Your PC has less than 4 GB RAM. Expect performance issues.";
-         int color = (ticks / 20 % 2 == 0) ? 0xFF4444 : 0xFF8888;
-         drawCenteredString(this.mc.fontRenderer, warn, this.width / 2, 2, color);
-     }
-     if (this.mc.settings.showFrameRate) {
-         font.render("&7Minecraft &6Classic &bRCT Year Anniversary", 2, 2, 0xFFFFFF);
-         font.render(this.mc.debug, 2, 22, 0xFFFFFF);
-     }
-     if(this.mc.settings.showFrameRate) {
-         font.render(this.mc.debug, 2, 22, 16777215);
-     }
-     if (this.mc.gamemode instanceof SurvivalGameMode) {
-         String score = "Score: &e" + this.mc.player.getScore();
-         font.render(score, this.width - font.getWidth(score) - 2, 2, 0xFFFFFF);
+        if (this.mc.player != null && this.mc.gamemode.isSurvival())
+            font.render(
+                    "Armor: "
+                            + net.classicremastered.minecraft.level.itemstack.Equipment.points(
+                                    this.mc.player),
+                    this.width / 2 - 90,
+                    this.height - 51,
+                    0xD0D0D0);
+        // Title string with colored segments
+        if (this.mc != null && this.mc.settings != null && this.mc.settings.showFrameRate) {
+            String diff = "&7Difficulty: &e" + this.mc.settings.difficulty.getLabel();
+            font.render(diff, 2, 12, 0xFFFFFF);
+        }
+        long totalMem = Runtime.getRuntime().maxMemory() / (1024L * 1024L);
+        if (totalMem < 4000) {
+            String warn = "WARNING: Your PC has less than 4 GB RAM. Expect performance issues.";
+            int color = (ticks / 20 % 2 == 0) ? 0xFF4444 : 0xFF8888;
+            drawCenteredString(this.mc.fontRenderer, warn, this.width / 2, 2, color);
+        }
+        if (this.mc.settings.showFrameRate) {
+            font.render("&7Minecraft &6Classic &b0.30", 2, 2, 0xFFFFFF);
+            font.render(this.mc.debug, 2, 22, 0xFFFFFF);
+        }
+        if (this.mc.settings.showFrameRate) {
+            font.render(this.mc.debug, 2, 22, 16777215);
+        }
+        if (this.mc.gamemode instanceof SurvivalGameMode) {
+            String score = "Score: &e" + this.mc.player.getScore();
+            font.render(score, this.width - font.getWidth(score) - 2, 2, 0xFFFFFF);
 
-         String coins = "MineCoins: &6" + this.mc.player.coins;
-         font.render(coins, this.width - font.getWidth(coins) - 2, 12, 0xFFFFFF);
+            String coins = "MineCoins: &6" + this.mc.player.coins;
+            font.render(coins, this.width - font.getWidth(coins) - 2, 12, 0xFFFFFF);
 
-         String rep = "Reputation: " + this.mc.player.villagerReputation;
-         int repColor = this.mc.player.villagerReputation < 0 ? 0xFF5555 : 0x55FF55; // red if bad, green if good
-         font.render(rep, this.width - font.getWidth(rep) - 2, 22, repColor);
-
-         font.render("Arrows: " + this.mc.player.arrows, this.width / 2 + 8, this.height - 33, 0xFFFFFF);
-     }
-
-
-
+            String rep = "Reputation: " + this.mc.player.villagerReputation;
+            int repColor =
+                    this.mc.player.villagerReputation < 0
+                            ? 0xFF5555
+                            : 0x55FF55; // red if bad, green if good
+            font.render(rep, this.width - font.getWidth(rep) - 2, 22, repColor);
+        }
 
         int maxLines = (this.mc.currentScreen instanceof ChatInputScreen) ? 20 : 10;
         boolean forceShow = this.mc.currentScreen instanceof ChatInputScreen;
@@ -262,8 +257,11 @@ public final class HUDScreen extends Screen {
                     // detect hover
                     int mouseX = Mouse.getX() * this.width / this.mc.width;
                     int mouseY = this.height - (Mouse.getY() * this.height / this.mc.height) - 1;
-                    boolean hovering = mouseX >= x && mouseX <= x + font.getWidth(clickable)
-                            && mouseY >= yPos - 1 && mouseY <= yPos + 9;
+                    boolean hovering =
+                            mouseX >= x
+                                    && mouseX <= x + font.getWidth(clickable)
+                                    && mouseY >= yPos - 1
+                                    && mouseY <= yPos + 9;
 
                     // render clickable text (hover = underline + brighter color)
                     int color = hovering ? 0x88FFFF : 0x55FFFF;
@@ -286,16 +284,67 @@ public final class HUDScreen extends Screen {
             }
         }
     }
+
+    public void renderBossBar(FontRenderer font) {
+        net.classicremastered.minecraft.mob.StickFigure boss =
+                net.classicremastered.minecraft.mob.StickFigure.nearestBoss(mc.level, mc.player);
+        if (boss == null) return;
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        try {
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glDisable(GL11.GL_FOG);
+            int barWidth = Math.min(182, width - 20), left = (width - barWidth) / 2;
+            drawBox(left - 1, 14, left + barWidth + 1, 22, 0xff111111);
+            drawBox(left, 15, left + barWidth, 21, 0xff402030);
+            drawBox(
+                    left,
+                    15,
+                    left
+                            + Math.round(
+                                    barWidth
+                                            * Math.max(
+                                                    0,
+                                                    Math.min(
+                                                            1,
+                                                            boss.health
+                                                                    / (float)
+                                                                            net.classicremastered
+                                                                                    .minecraft.mob
+                                                                                    .StickFigure
+                                                                                    .MAX_HEALTH))),
+                    21,
+                    0xffc82c4c);
+            String name = "Stick Figure";
+            if (boss.isEnraged()) name += " - RAGE";
+            if (boss.ai
+                    instanceof
+                    net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI ai) {
+                if (ai.powers.phase
+                        != net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers
+                                .Phase.IDLE) name += " - " + ai.powers.phase.name();
+                else if (ai.powers.rushTicks > 0) name += " - RUSH";
+            }
+            drawCenteredString(font, name, width / 2, 4, 0xffffff);
+        } finally {
+            GL11.glPopAttrib();
+        }
+    }
+
     public void onMouseClick(int x, int y, int button) {
         if (button != 0) return;
 
         // Convert from full window → HUD logical scale
-        int scaledX = (int)((x / (float)this.mc.width) * this.width);
-        int scaledY = (int)((y / (float)this.mc.height) * this.height);
+        int scaledX = (int) ((x / (float) this.mc.width) * this.width);
+        int scaledY = (int) ((y / (float) this.mc.height) * this.height);
 
         int lineHeight = 9;
         int baseY = this.height - 8 - 20;
-        int maxLines = (this.mc.currentScreen instanceof net.classicremastered.minecraft.chat.ChatInputScreen) ? 20 : 10;
+        int maxLines =
+                (this.mc.currentScreen
+                                instanceof net.classicremastered.minecraft.chat.ChatInputScreen)
+                        ? 20
+                        : 10;
 
         for (int i = 0; i < this.chat.size() && i < maxLines; ++i) {
             ChatLine line = this.chat.get(i);
@@ -314,7 +363,9 @@ public final class HUDScreen extends Screen {
 
                 // now compare using scaledX (not raw x)
                 if (scaledX >= openStart && scaledX <= openEnd) {
-                    java.io.File dir = new java.io.File(net.classicremastered.minecraft.Minecraft.mcDir, "screenshots");
+                    java.io.File dir =
+                            new java.io.File(
+                                    net.classicremastered.minecraft.Minecraft.mcDir, "screenshots");
                     net.classicremastered.minecraft.util.FileOpener.openDirectory(dir);
                     this.mc.hud.addChat("&7Opening screenshots folder...");
                     System.out.println("[HUD] Clicked Open folder → " + dir.getAbsolutePath());
@@ -324,13 +375,10 @@ public final class HUDScreen extends Screen {
         }
     }
 
-
-
     public final void addChat(String msg) {
         this.chat.add(0, new ChatLine(msg));
         while (this.chat.size() > 50) {
             this.chat.remove(this.chat.size() - 1);
         }
-        
     }
 }

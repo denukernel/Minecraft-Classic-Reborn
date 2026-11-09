@@ -3,61 +3,65 @@ package net.classicremastered.minecraft.entity;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.render.TextureManager;
+import org.lwjgl.opengl.GL11;
 
-public class TakeEntityAnim extends Entity
-{
-	public TakeEntityAnim(Level level1, Entity item, Entity player)
-	{
-		super(level1);
+public class TakeEntityAnim extends Entity {
+    private static final long serialVersionUID = 1L;
+    private static final int DURATION = 3;
 
-		this.item = item;
-		this.player = player;
+    private int time;
+    private final Entity item;
+    private final Entity player;
+    private final float xorg, yorg, zorg;
 
-		setSize(1.0F, 1.0F);
+    public TakeEntityAnim(Level level, Entity item, Entity player) {
+        super(level);
+        this.item = item;
+        this.player = player;
+        xorg = item.x;
+        yorg = item.y;
+        zorg = item.z;
+        setSize(1, 1);
+        setPos(xorg, yorg, zorg);
+    }
 
-		xorg = item.x;
-		yorg = item.y;
-		zorg = item.z;
-	}
+    @Override
+    public void tick() {
+        if (++time >= DURATION || player.removed) {
+            remove();
+            return;
+        }
+        float progress = progress(0);
+        setPos(lerp(xorg, player.x, progress),
+                lerp(yorg, player.y - player.heightOffset / 2, progress),
+                lerp(zorg, player.z, progress));
+    }
 
-	@Override
-	public void tick()
-	{
-		time++;
+    @Override
+    public void render(TextureManager textures, float partial) {
+        float progress = progress(partial);
+        float x = lerp(xorg, lerp(player.xo, player.x, partial), progress);
+        float y = lerp(yorg, lerp(player.yo, player.y, partial) - player.heightOffset / 2, progress);
+        float z = lerp(zorg, lerp(player.zo, player.z, partial), progress);
 
-		if(time >= 3)
-		{
-			remove();
-		}
+        GL11.glPushMatrix();
+        try {
+            // Move the rendered mesh without changing the collected entity.
+            GL11.glTranslatef(x - lerp(item.xo, item.x, partial),
+                    y - lerp(item.yo, item.y, partial),
+                    z - lerp(item.zo, item.z, partial));
+            item.render(textures, partial);
+        } finally {
+            GL11.glPopMatrix();
+        }
+    }
 
-		// TODO: Is this right?
-		float distance = (distance = (float)time / 3.0F) * distance;
+    private float progress(float partial) {
+        float elapsed = (time + partial) / DURATION;
+        return elapsed * elapsed;
+    }
 
-		xo = item.xo = item.x;
-		yo = item.yo = item.y;
-		zo = item.zo = item.z;
-
-		x = item.x = xorg + (player.x - xorg) * distance;
-		y = item.y = yorg + (player.y - 1.0F - yorg) * distance;
-		z = item.z = zorg + (player.z - zorg) * distance;
-
-		setPos(x, y, z);
-	}
-
-	@Override
-	public void render(TextureManager textureManager, float unknown0)
-	{
-		item.render(textureManager, unknown0);
-	}
-
-	private static final long serialVersionUID = 1L;
-
-	private int time = 0;
-
-	private Entity item;
-	private Entity player;
-
-	private float xorg;
-	private float yorg;
-	private float zorg;
+    private static float lerp(float from, float to, float partial) {
+        return from + (to - from) * partial;
+    }
 }

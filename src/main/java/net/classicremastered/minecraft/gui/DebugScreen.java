@@ -10,6 +10,12 @@ public final class DebugScreen extends GuiScreen {
     private static final int ID_CLEAR_SHOTS = 1;
     private static final int ID_BACK = 2;
 
+    public DebugScreen() { this(new MainMenuScreen()); }
+
+    public DebugScreen(GuiScreen parent) { super(parent); this.parent = parent; }
+
+    private final GuiScreen parent;
+
     @Override
     public void onOpen() {
         this.buttons.clear();
@@ -53,7 +59,7 @@ public final class DebugScreen extends GuiScreen {
             return;
 
         case ID_BACK:
-            this.minecraft.setCurrentScreen(new MainMenuScreen());
+            this.minecraft.setCurrentScreen(this.parent);
             return;
         }
     }
@@ -68,6 +74,7 @@ public final class DebugScreen extends GuiScreen {
 
     @Override
     public void render(int mx, int my) {
+        if (this.minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, this.width, this.height, 0x80000000, 0xA0000000);
         drawCenteredString(this.fontRenderer, "Debug Utilities", this.width / 2, 40, 0xFFFFFF);
         super.render(mx, my);

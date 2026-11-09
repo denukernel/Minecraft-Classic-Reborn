@@ -1,9 +1,5 @@
 package net.classicremastered.minecraft;
 
-import org.lwjgl.input.Keyboard;
-import java.io.File;
-
-import net.classicremastered.minecraft.chat.ChatInputScreen;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
 import net.classicremastered.minecraft.gamemode.GameMode;
 import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
@@ -12,13 +8,13 @@ import net.classicremastered.minecraft.lang.LanguageManager;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.LevelIO;
 import net.classicremastered.minecraft.level.generator.LevelGenerator;
+import net.classicremastered.minecraft.level.itemstack.BowItem;
+import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.FakeHerobrine;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.mob.MobRegistry;
 import net.classicremastered.minecraft.model.HumanoidModel;
 import net.classicremastered.minecraft.net.NetworkManager;
-import net.classicremastered.minecraft.particle.Particle;
 import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.particle.WaterDropParticle;
 import net.classicremastered.minecraft.phys.AABB;
@@ -30,20 +26,20 @@ import net.classicremastered.minecraft.render.texture.TextureFX;
 import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
 import net.classicremastered.minecraft.sound.SoundManager;
 import net.classicremastered.minecraft.sound.SoundPlayer;
-import net.classicremastered.minecraft.util.Screenshot;
 
 import org.lwjgl.LWJGLException;
-import org.lwjgl.input.Controllers;
 import org.lwjgl.input.Cursor;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.glu.GLU;
 
-import javax.swing.*;
 import java.awt.*;
 import java.io.*;
-import java.util.List;
+import java.io.File;
+
+import javax.swing.*;
 
 public final class Minecraft implements Runnable {
 
@@ -143,10 +139,10 @@ public final class Minecraft implements Runnable {
                 var8.printStackTrace();
             }
         }
-
     }
 
     public final void setCurrentScreen(GuiScreen next) {
+        if (next == null && this.level == null) next = new MainMenuScreen();
         if (this.currentScreen instanceof ErrorScreen) {
             ErrorScreen err = (ErrorScreen) this.currentScreen;
             if (!err.hasParent()) {
@@ -154,8 +150,7 @@ public final class Minecraft implements Runnable {
             }
         }
 
-        if (this.currentScreen != null)
-            this.currentScreen.onClose();
+        if (this.currentScreen != null) this.currentScreen.onClose();
         if (next instanceof MainMenuScreen && this.soundPC != null) {
             this.soundPC.resetAudioState();
         }
@@ -165,15 +160,13 @@ public final class Minecraft implements Runnable {
 
         this.currentScreen = next;
         if (next != null) {
+            BowItem.cancelDraw(this.player);
             if (this.hasMouse) {
-                if (this.player != null)
-                    this.player.releaseAllKeys();
+                if (this.player != null) this.player.releaseAllKeys();
                 this.hasMouse = false;
                 try {
-                    if (this.levelLoaded)
-                        Mouse.setNativeCursor(null);
-                    else
-                        Mouse.setGrabbed(false);
+                    if (this.levelLoaded) Mouse.setNativeCursor(null);
+                    else Mouse.setGrabbed(false);
                 } catch (LWJGLException e) {
                     e.printStackTrace();
                 }
@@ -196,7 +189,6 @@ public final class Minecraft implements Runnable {
             System.out.println(var1 + ": " + var2);
             System.exit(0);
         }
-
     }
 
     // REMOVE calls to this if possible. If you must keep it:
@@ -270,13 +262,7 @@ public final class Minecraft implements Runnable {
         // 4) Save singleplayer world if present (non-fatal)
         // 4) Save singleplayer world if present (non-fatal)
         try {
-            if (this.level != null) {
-                File dir = new File(mcDir, "levels");
-                if (!dir.exists())
-                    dir.mkdirs();
-                File autos = new File(dir, "slot1.lvl.gz");
-                this.levelIo.save(this.level, autos);
-            }
+            saveCurrentLevel();
         } catch (Throwable ignored) {
         }
 
@@ -289,25 +275,21 @@ public final class Minecraft implements Runnable {
 
         // 6) Tear down LWJGL input safely
         try {
-            if (org.lwjgl.input.Mouse.isCreated())
-                org.lwjgl.input.Mouse.destroy();
+            if (org.lwjgl.input.Mouse.isCreated()) org.lwjgl.input.Mouse.destroy();
         } catch (Throwable ignored) {
         }
         try {
-            if (org.lwjgl.input.Keyboard.isCreated())
-                org.lwjgl.input.Keyboard.destroy();
+            if (org.lwjgl.input.Keyboard.isCreated()) org.lwjgl.input.Keyboard.destroy();
         } catch (Throwable ignored) {
         }
         try {
-            if (org.lwjgl.input.Controllers.isCreated())
-                org.lwjgl.input.Controllers.destroy();
+            if (org.lwjgl.input.Controllers.isCreated()) org.lwjgl.input.Controllers.destroy();
         } catch (Throwable ignored) {
         }
 
         // 7) Tear down display safely
         try {
-            if (org.lwjgl.opengl.Display.isCreated())
-                org.lwjgl.opengl.Display.destroy();
+            if (org.lwjgl.opengl.Display.isCreated()) org.lwjgl.opengl.Display.destroy();
         } catch (Throwable ignored) {
         }
 
@@ -316,8 +298,7 @@ public final class Minecraft implements Runnable {
         try {
             if (this.canvas != null) {
                 java.awt.Window w = javax.swing.SwingUtilities.getWindowAncestor(this.canvas);
-                if (w != null)
-                    w.dispose();
+                if (w != null) w.dispose();
             }
         } catch (Throwable ignored) {
         }
@@ -344,13 +325,11 @@ public final class Minecraft implements Runnable {
 
         // stop background helpers so loop doesn't keep scheduling work
         try {
-            if (soundPlayer != null)
-                soundPlayer.running = false;
+            if (soundPlayer != null) soundPlayer.running = false;
         } catch (Throwable ignored) {
         }
         try {
-            if (resourceThread != null)
-                resourceThread.running = false;
+            if (resourceThread != null) resourceThread.running = false;
         } catch (Throwable ignored) {
         }
         // If you have any custom non-daemon threads, interrupt them here.
@@ -391,7 +370,8 @@ public final class Minecraft implements Runnable {
             ClientBootstrap.initialize(this, minecraftFolder);
         } catch (Exception bootError) {
             bootError.printStackTrace();
-            JOptionPane.showMessageDialog((Component) null, bootError.toString(), "Failed to start Minecraft", 0);
+            JOptionPane.showMessageDialog(
+                    (Component) null, bootError.toString(), "Failed to start Minecraft", 0);
             return;
         }
 
@@ -426,8 +406,7 @@ public final class Minecraft implements Runnable {
                         if (this.canvas == null && Display.isCloseRequested()) {
                             this.running = false;
                         }
-                        if (quitRequested)
-                            break;
+                        if (quitRequested) break;
                         if (this.canvas != null && !Display.isFullscreen()) {
                             final int cw = this.canvas.getWidth();
                             final int ch = this.canvas.getHeight();
@@ -456,18 +435,21 @@ public final class Minecraft implements Runnable {
                             }
 
                             double hrNowS;
-                            frameDelta = ((hrNowS = (double) hrNowMs / 1000.0D) - t.lastHR) * t.adjustment;
+                            frameDelta =
+                                    ((hrNowS = (double) hrNowMs / 1000.0D) - t.lastHR)
+                                            * t.adjustment;
                             t.lastHR = hrNowS;
-                            if (frameDelta < 0.0D)
-                                frameDelta = 0.0D;
-                            if (frameDelta > 1.0D)
-                                frameDelta = 1.0D;
+                            if (frameDelta < 0.0D) frameDelta = 0.0D;
+                            if (frameDelta > 1.0D) frameDelta = 1.0D;
 
-                            t.elapsedDelta = (float) ((double) t.elapsedDelta
-                                    + frameDelta * (double) t.speed * (double) t.tps);
+                            t.elapsedDelta =
+                                    (float)
+                                            ((double) t.elapsedDelta
+                                                    + frameDelta
+                                                            * (double) t.speed
+                                                            * (double) t.tps);
                             t.elapsedTicks = (int) t.elapsedDelta;
-                            if (t.elapsedTicks > 100)
-                                t.elapsedTicks = 100;
+                            if (t.elapsedTicks > 100) t.elapsedTicks = 100;
 
                             t.elapsedDelta -= (float) t.elapsedTicks;
                             t.delta = t.elapsedDelta;
@@ -483,7 +465,11 @@ public final class Minecraft implements Runnable {
                                 this.soundPC.setListener(this.player, this.timer.delta);
 
                                 // Update distance for Far Lands checks
-                                long dist = (long) Math.max(Math.abs(this.player.x), Math.abs(this.player.z));
+                                long dist =
+                                        (long)
+                                                Math.max(
+                                                        Math.abs(this.player.x),
+                                                        Math.abs(this.player.z));
                                 this.soundPC.playerDist = dist;
                                 this.soundPC.farlandsActive = (dist >= 1_000_000);
 
@@ -494,7 +480,8 @@ public final class Minecraft implements Runnable {
                                     this.hud.addChat(msg);
                                 }
                             }
-                            if (this.soundPC.shouldSpawnHerobrineFigure() && this.level != null
+                            if (this.soundPC.shouldSpawnHerobrineFigure()
+                                    && this.level != null
                                     && this.player != null) {
                                 FakeHerobrine ghost = new FakeHerobrine(this.level);
 
@@ -507,7 +494,6 @@ public final class Minecraft implements Runnable {
 
                                 ghost.setPos(x, y, z);
                                 this.level.addEntity(ghost);
-
                             }
                             ClientFrameRenderer.render(this);
 
@@ -518,8 +504,13 @@ public final class Minecraft implements Runnable {
                             checkGLError("Post render");
                             ++framesThisSecond;
                             while (System.currentTimeMillis() >= fpsTimerStartMs + 1000L) {
-                                net.classicremastered.minecraft.util.Debug.flushProfiler(framesThisSecond);
-                                this.debug = framesThisSecond + " fps, " + Chunk.chunkUpdates + " chunk updates";
+                                net.classicremastered.minecraft.util.Debug.flushProfiler(
+                                        framesThisSecond);
+                                this.debug =
+                                        framesThisSecond
+                                                + " fps, "
+                                                + Chunk.chunkUpdates
+                                                + " chunk updates";
                                 Chunk.chunkUpdates = 0;
                                 fpsTimerStartMs += 1000L;
                                 framesThisSecond = 0;
@@ -560,10 +551,7 @@ public final class Minecraft implements Runnable {
 
         // Save world if present
         try {
-            if (level != null) {
-                java.io.File out = new java.io.File(mcDir, level.creativeMode ? "levelc.dat" : "levels.dat");
-                this.levelIo.save(level, out);
-            }
+            saveCurrentLevel();
         } catch (Throwable ignored) {
         }
 
@@ -589,30 +577,25 @@ public final class Minecraft implements Runnable {
         } catch (Throwable ignored) {
         }
         try {
-            if (resourceThread != null)
-                resourceThread.running = false;
+            if (resourceThread != null) resourceThread.running = false;
         } catch (Throwable ignored) {
         }
 
         // Input/Window — only from this thread
         try {
-            if (org.lwjgl.input.Mouse.isCreated())
-                org.lwjgl.input.Mouse.destroy();
+            if (org.lwjgl.input.Mouse.isCreated()) org.lwjgl.input.Mouse.destroy();
         } catch (Throwable ignored) {
         }
         try {
-            if (org.lwjgl.input.Keyboard.isCreated())
-                org.lwjgl.input.Keyboard.destroy();
+            if (org.lwjgl.input.Keyboard.isCreated()) org.lwjgl.input.Keyboard.destroy();
         } catch (Throwable ignored) {
         }
         try {
-            if (org.lwjgl.input.Controllers.isCreated())
-                org.lwjgl.input.Controllers.destroy();
+            if (org.lwjgl.input.Controllers.isCreated()) org.lwjgl.input.Controllers.destroy();
         } catch (Throwable ignored) {
         }
         try {
-            if (org.lwjgl.opengl.Display.isCreated())
-                org.lwjgl.opengl.Display.destroy();
+            if (org.lwjgl.opengl.Display.isCreated()) org.lwjgl.opengl.Display.destroy();
         } catch (Throwable ignored) {
         }
 
@@ -621,14 +604,17 @@ public final class Minecraft implements Runnable {
             if (this.canvas != null) {
                 this.canvas.setIgnoreRepaint(true);
                 java.awt.Window w = javax.swing.SwingUtilities.getWindowAncestor(this.canvas);
-                if (w instanceof java.awt.Frame)
-                    ((java.awt.Frame) w).setIgnoreRepaint(true);
+                if (w instanceof java.awt.Frame) ((java.awt.Frame) w).setIgnoreRepaint(true);
             }
         } catch (Throwable ignored) {
         }
     }
 
     public final void grabMouse() {
+        if (this.level == null || this.player == null) {
+            if (this.currentScreen == null) this.setCurrentScreen(new MainMenuScreen());
+            return;
+        }
         if (!this.hasMouse) {
             this.hasMouse = true;
             if (this.levelLoaded) {
@@ -653,13 +639,12 @@ public final class Minecraft implements Runnable {
 
     public final void pause() {
         if (this.currentScreen == null) {
-            this.setCurrentScreen(new PauseScreen());
+            this.setCurrentScreen(this.level == null ? new MainMenuScreen() : new PauseScreen());
         }
     }
 
     private void waitForCanvasPeer() {
-        if (this.canvas == null)
-            return;
+        if (this.canvas == null) return;
         // Wait until AWT has created the native peer and the component is showing
         int spins = 0;
         while (!this.canvas.isDisplayable() || !this.canvas.isShowing()) {
@@ -667,8 +652,7 @@ public final class Minecraft implements Runnable {
                 Thread.sleep(10);
             } catch (InterruptedException ignored) {
             }
-            if (++spins > 500)
-                break; // ~5s safety
+            if (++spins > 500) break; // ~5s safety
         }
     }
 
@@ -684,13 +668,13 @@ public final class Minecraft implements Runnable {
     private volatile boolean crashLatched = false;
 
     private void handleCrash(Throwable loopError) {
-        if (crashLatched)
-            return;
+        if (crashLatched) return;
         crashLatched = true;
 
         if (!(loopError instanceof net.classicremastered.minecraft.errors.CrashReportException)) {
-            loopError = new net.classicremastered.minecraft.errors.CrashReportException(
-                    "Unhandled exception in main loop", loopError);
+            loopError =
+                    new net.classicremastered.minecraft.errors.CrashReportException(
+                            "Unhandled exception in main loop", loopError);
         }
 
         loopError.printStackTrace();
@@ -725,52 +709,21 @@ public final class Minecraft implements Runnable {
 
         try {
             if (this.gamemode == null
-                    || !(this.gamemode instanceof net.classicremastered.minecraft.gamemode.CreativeGameMode)) {
+                    || !(this.gamemode
+                            instanceof net.classicremastered.minecraft.gamemode.CreativeGameMode)) {
                 this.gamemode = new net.classicremastered.minecraft.gamemode.CreativeGameMode(this);
             }
         } catch (Throwable ignored) {
         }
 
         try {
-            if (this.soundPlayer != null)
-                this.soundPlayer.running = false;
-            if (this.soundPC != null)
+            if (this.soundPlayer != null) this.soundPlayer.running = false;
+            if (this.soundPC != null) {
+                this.soundPC.stopFarLandsSoundtrack();
                 this.soundPC.stopMusic();
+            }
         } catch (Throwable ignored) {
         }
-    }
-
-    // Fire attachment check mirroring FireBlock.canStay (side support or solid
-    // below)
-    boolean fireCanStayAt(int x, int y, int z) {
-        if (!this.level.isInBounds(x, y, z))
-            return false;
-        // solid or flammable below
-        if (this.level.isSolidTile(x, y - 1, z) || isFlammable(this.level.getTile(x, y - 1, z)))
-            return true;
-        // side attachments (solid or flammable)
-        if (this.level.isSolidTile(x + 1, y, z) || isFlammable(this.level.getTile(x + 1, y, z)))
-            return true;
-        if (this.level.isSolidTile(x - 1, y, z) || isFlammable(this.level.getTile(x - 1, y, z)))
-            return true;
-        if (this.level.isSolidTile(x, y, z + 1) || isFlammable(this.level.getTile(x, y, z + 1)))
-            return true;
-        if (this.level.isSolidTile(x, y, z - 1) || isFlammable(this.level.getTile(x, y, z - 1)))
-            return true;
-        return false;
-    }
-
-    // Minimal flammability test for placement (matches your fire block’s burnables)
-    private static boolean isFlammable(int id) {
-        if (id <= 0 || id >= Block.blocks.length)
-            return false;
-        Block b = Block.blocks[id];
-        if (b == null)
-            return false;
-
-        return b == Block.WOOD || b == Block.LOG || b == Block.LEAVES || b == Block.BOOKSHELF || b == Block.TNT
-        // wool shades 21..36 in your Classic registry
-                || (id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id);
     }
 
     boolean wouldCollideWithMob(int x, int y, int z) {
@@ -779,13 +732,11 @@ public final class Minecraft implements Runnable {
 
         // Exclude the player by passing them as the "except" entity
         java.util.List list = this.level.findEntities(this.player, blockBox);
-        if (list == null || list.isEmpty())
-            return false;
+        if (list == null || list.isEmpty()) return false;
 
         for (int i = 0; i < list.size(); i++) {
             Object o = list.get(i);
-            if (!(o instanceof Mob))
-                continue; // only care about mobs
+            if (!(o instanceof Mob)) continue; // only care about mobs
             Entity e = (Entity) o;
             if (e.bb != null && e.bb.intersects(blockBox)) {
                 return true;
@@ -793,33 +744,26 @@ public final class Minecraft implements Runnable {
         }
         return false;
     }
+
     // --- SAFE PLACEMENT HELPERS ---
 
-    /**
-     * True if placing a unit block at (x,y,z) would intersect the player's AABB.
-     */
+    /** True if placing a unit block at (x,y,z) would intersect the player's AABB. */
     boolean wouldCollideWithPlayer(int x, int y, int z) {
-        if (this.player == null || this.player.bb == null)
-            return false;
+        if (this.player == null || this.player.bb == null) return false;
         final float eps = 0.001f; // allow face-touching
         AABB blockBox = new AABB(x + eps, y + eps, z + eps, x + 1 - eps, y + 1 - eps, z + 1 - eps);
         return this.player.bb.intersects(blockBox);
     }
 
-    /**
-     * Returns true only if a block was actually placed into empty space without
-     * colliding.
-     */
+    /** Returns true only if a block was actually placed into empty space without colliding. */
     private boolean placeBlockSafely(Level level, int x, int y, int z, int blockId) {
         if (x < 0 || y < 0 || z < 0 || x >= level.width || y >= level.height || z >= level.depth)
             return false;
 
         // Only place into air (0). If you support replaceables, expand this check.
-        if (level.getTile(x, y, z) != 0)
-            return false;
+        if (level.getTile(x, y, z) != 0) return false;
 
-        if (wouldCollideWithPlayer(x, y, z))
-            return false;
+        if (wouldCollideWithPlayer(x, y, z)) return false;
 
         level.setTile(x, y, z, blockId);
         return true;
@@ -829,7 +773,6 @@ public final class Minecraft implements Runnable {
         if (this.soundPlayer != null) {
             SoundPlayer var1 = this.soundPlayer;
             SoundManager var2 = this.sound;
-
         }
 
         this.gamemode.spawnMob();
@@ -841,7 +784,10 @@ public final class Minecraft implements Runnable {
             ++((ChatLine) var17.chat.get(var16)).time;
         }
 
-        GL11.glBindTexture(3553, this.textureManager.load("/terrain.png"));
+        GL11.glBindTexture(
+                3553,
+                this.textureManager.load(
+                        net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE));
         TextureManager var19 = this.textureManager;
 
         for (var16 = 0; var16 < var19.animations.size(); ++var16) {
@@ -851,7 +797,15 @@ public final class Minecraft implements Runnable {
             var19.textureBuffer.clear();
             var19.textureBuffer.put(var3.textureData);
             var19.textureBuffer.position(0).limit(var3.textureData.length);
-            GL11.glTexSubImage2D(3553, 0, var3.textureId % 16 << 4, var3.textureId / 16 << 4, 16, 16, 6408, 5121,
+            GL11.glTexSubImage2D(
+                    3553,
+                    0,
+                    var3.textureId % 16 << 4,
+                    var3.textureId / 16 << 4,
+                    16,
+                    16,
+                    6408,
+                    5121,
                     var19.textureBuffer);
         }
 
@@ -871,6 +825,7 @@ public final class Minecraft implements Runnable {
             while (Mouse.next()) {
                 if ((var25 = Mouse.getEventDWheel()) != 0) {
                     this.player.inventory.swapPaint(var25);
+                    BowItem.cancelIfNotSelected(this.player);
                 }
 
                 if (this.currentScreen == null) {
@@ -882,21 +837,45 @@ public final class Minecraft implements Runnable {
                             this.lastClick = this.ticks;
                         }
 
-                        if (Mouse.getEventButton() == 1 && Mouse.getEventButtonState()) {
-                            this.onMouseClick(1);
-                            this.lastClick = this.ticks;
+                        if (Mouse.getEventButton() == 1) {
+                            boolean pressed = Mouse.getEventButtonState();
+                            if (pressed) {
+                                this.onMouseClick(1);
+                                this.lastClick = this.ticks;
+                            }
+                            if (this.hasMouse
+                                    && this.currentScreen == null
+                                    && this.player.inventory.getSelected() == Item.BOW.id + 256) {
+                                if (pressed) Item.BOW.use(this.player, this.level);
+                                else Item.BOW.releaseUse(this.player, this.level);
+                            }
                         }
-                        if (this.hud != null && (this.currentScreen == null
-                                || this.currentScreen instanceof net.classicremastered.minecraft.chat.ChatInputScreen)) {
+                        if (this.hud != null
+                                && (this.currentScreen == null
+                                        || this.currentScreen
+                                                instanceof
+                                                net.classicremastered.minecraft.chat
+                                                        .ChatInputScreen)) {
                             if (Mouse.getEventButtonState()) {
                                 int mouseX = Mouse.getEventX() * this.width / Display.getWidth();
-                                int mouseY = this.height - Mouse.getEventY() * this.height / Display.getHeight() - 1;
+                                int mouseY =
+                                        this.height
+                                                - Mouse.getEventY()
+                                                        * this.height
+                                                        / Display.getHeight()
+                                                - 1;
                                 this.hud.onMouseClick(mouseX, mouseY, Mouse.getEventButton());
                             }
                         }
-                        if (Mouse.getEventButton() == 2 && Mouse.getEventButtonState() && this.selected != null) {
-                            if ((var16 = this.level.getTile(this.selected.x, this.selected.y,
-                                    this.selected.z)) == Block.GRASS.id) {
+                        if (Mouse.getEventButton() == 2
+                                && Mouse.getEventButtonState()
+                                && this.selected != null) {
+                            if ((var16 =
+                                            this.level.getTile(
+                                                    this.selected.x,
+                                                    this.selected.y,
+                                                    this.selected.z))
+                                    == Block.GRASS.id) {
                                 var16 = Block.DIRT.id;
                             }
 
@@ -908,7 +887,8 @@ public final class Minecraft implements Runnable {
                                 var16 = Block.STONE.id;
                             }
 
-                            this.player.inventory.grabTexture(var16, this.gamemode instanceof CreativeGameMode);
+                            this.player.inventory.grabTexture(
+                                    var16, this.gamemode instanceof CreativeGameMode);
                         }
                     }
                 }
@@ -927,7 +907,15 @@ public final class Minecraft implements Runnable {
             }
 
             if (this.currentScreen == null) {
-                if (Mouse.isButtonDown(0) && (float) (this.ticks - this.lastClick) >= this.timer.tps / 4.0F
+                if (Mouse.isButtonDown(0)
+                        && (float) (this.ticks - this.lastClick)
+                                >= (this.selected != null
+                                                && this.selected.entityPos == 1
+                                                && this.player
+                                                        .developerPowers()
+                                                        .fastPunch(this.player)
+                                        ? 3
+                                        : this.timer.tps / 4.0F)
                         && this.hasMouse) {
                     this.onMouseClick(0);
                     this.lastClick = this.ticks;
@@ -936,40 +924,56 @@ public final class Minecraft implements Runnable {
                 boolean rightDown = Mouse.isButtonDown(1);
 
                 if (this.hasMouse) {
-                    net.classicremastered.minecraft.level.itemstack.BowItem.cancelIfNotSelected(this.player);
+                    net.classicremastered.minecraft.level.itemstack.BowItem.cancelIfNotSelected(
+                            this.player);
                     int selId = this.player.inventory.getSelected();
                     net.classicremastered.minecraft.level.itemstack.Item held = null;
                     if (selId >= 256) {
                         int itemId = selId - 256;
-                        if (itemId >= 0 && itemId < net.classicremastered.minecraft.level.itemstack.Item.items.length) {
-                            held = net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
+                        if (itemId >= 0
+                                && itemId
+                                        < net.classicremastered.minecraft.level.itemstack.Item.items
+                                                .length) {
+                            held =
+                                    net.classicremastered.minecraft.level.itemstack.Item.items[
+                                            itemId];
                         }
                     }
 
-                    if (rightDown && !wasRightDown && held != null) {
+                    if (rightDown && !wasRightDown && held != null && !(held instanceof BowItem)) {
                         // Just pressed → start using
                         held.use(this.player, this.level);
                     }
                     if (rightDown && held != null) {
                         // Held → tick
                         held.tick(this.player, this.level);
-                    } else if (held instanceof net.classicremastered.minecraft.level.itemstack.GravityGunItem
-                            || held instanceof net.classicremastered.minecraft.level.itemstack.PhysicsGunItem
-                            || held instanceof net.classicremastered.minecraft.level.itemstack.GrapplingHookItem) {
+                    } else if (held
+                                    instanceof
+                                    net.classicremastered.minecraft.level.itemstack.GravityGunItem
+                            || held
+                                    instanceof
+                                    net.classicremastered.minecraft.level.itemstack.PhysicsGunItem
+                            || held
+                                    instanceof
+                                    net.classicremastered.minecraft.level.itemstack
+                                            .GrapplingHookItem) {
                         held.tick(this.player, this.level);
                     }
-                    if (!rightDown && wasRightDown && held != null) {
+                    if (!rightDown && wasRightDown && held != null && !(held instanceof BowItem)) {
                         // Just released → releaseUse
                         held.releaseUse(this.player, this.level);
                     }
                 }
 
                 wasRightDown = rightDown;
-
             }
 
-            boolean var26 = this.currentScreen == null && Mouse.isButtonDown(0) && this.hasMouse
-                    && this.player.inventory.getSelected() != 266;
+            boolean var26 =
+                    this.currentScreen == null
+                            && Mouse.isButtonDown(0)
+                            && this.hasMouse
+                            && this.player.inventory.getSelected() != 266
+                            && this.player.inventory.getSelected() != 267;
             boolean var35 = false;
             if (!this.gamemode.instantBreak && this.blockHitTime <= 0) {
                 if (var26 && this.selected != null && this.selected.entityPos == 0) {
@@ -1024,31 +1028,39 @@ public final class Minecraft implements Runnable {
                     int var60 = var40 + var39.random.nextInt(9) - 4;
                     int var52 = var45 + var39.random.nextInt(9) - 4;
                     int var57;
-                    if ((var57 = var32.getHighestTile(var60, var52)) <= var46 + 4 && var57 >= var46 - 4) {
+                    if ((var57 = var32.getHighestTile(var60, var52)) <= var46 + 4
+                            && var57 >= var46 - 4) {
                         float var56 = var39.random.nextFloat();
                         float var62 = var39.random.nextFloat();
-                        var39.minecraft.particleManager.spawnParticle(new WaterDropParticle(var32,
-                                (float) var60 + var56, (float) var57 + 0.1F, (float) var52 + var62));
+                        var39.minecraft.particleManager.spawnParticle(
+                                new WaterDropParticle(
+                                        var32,
+                                        (float) var60 + var56,
+                                        (float) var57 + 0.1F,
+                                        (float) var52 + var62));
                     }
                 }
             }
 
             LevelRenderer var31 = this.levelRenderer;
             ++this.levelRenderer.ticks;
-            if (skyRenderer != null)
-                skyRenderer.tick();
+            if (skyRenderer != null) skyRenderer.tick();
             this.level.tickEntities();
-            net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.processArmedImpacts(this.level); // added
+            net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.processArmedImpacts(
+                    this.level);
+            net.classicremastered.minecraft.level.itemstack.GravityGunItem.cleanup(
+                    this.level); // added
             if (this.player != null && (this.player.inventory.getSelected() - 256 != 11)) {
-                if (net.classicremastered.minecraft.level.itemstack.GravityGunItem.grabbedMobs.containsKey(this.player)) {
-                    net.classicremastered.minecraft.level.itemstack.GravityGunItem.dropGently(this.player);
+                if (net.classicremastered.minecraft.level.itemstack.GravityGunItem.grabbedMobs
+                        .containsKey(this.player)) {
+                    net.classicremastered.minecraft.level.itemstack.GravityGunItem.dropGently(
+                            this.player);
                 }
             }
             tickLevel();
 
             this.particleManager.tick();
         }
-
     }
 
     /** Advance the world clock exactly once per game tick. */
@@ -1056,6 +1068,13 @@ public final class Minecraft implements Runnable {
         if (this.level == null) return;
         if (!this.isOnline()) this.level.tick();
         else this.level.tickDayNightCycle();
+        if (this.soundPC != null && this.player != null) {
+            boolean atWorldEdge =
+                    this.level instanceof net.classicremastered.minecraft.level.LevelInfiniteTerrain
+                            && Math.max(Math.abs(this.player.x), Math.abs(this.player.z))
+                                    >= 30_000_000;
+            this.soundPC.tickFarLandsSoundtrack(atWorldEdge);
+        }
     }
 
     public final boolean isOnline() {
@@ -1064,7 +1083,8 @@ public final class Minecraft implements Runnable {
 
     public final void generateLevel(int var1) {
         String var2 = this.session != null ? this.session.username : "anonymous";
-        Level var4 = (new LevelGenerator(this.progressBar)).generate(var2, 128 << var1, 128 << var1, 64);
+        Level var4 =
+                (new LevelGenerator(this.progressBar)).generate(var2, 128 << var1, 128 << var1, 64);
         this.gamemode.prepareLevel(var4);
         this.setLevel(var4);
     }
@@ -1081,9 +1101,9 @@ public final class Minecraft implements Runnable {
 
     static boolean isDebugger() {
         try {
-            for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-                if (a.startsWith("-agentlib:jdwp"))
-                    return true;
+            for (String a :
+                    java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+                if (a.startsWith("-agentlib:jdwp")) return true;
             }
         } catch (Throwable ignored) {
         }
@@ -1093,18 +1113,21 @@ public final class Minecraft implements Runnable {
     private static boolean isSupportedAppletBase(java.net.URL base) {
         if (base == null) return false;
         String host = base.getHost();
-        return host.equalsIgnoreCase("minecraft.net") || host.equalsIgnoreCase("www.minecraft.net")
+        return host.equalsIgnoreCase("minecraft.net")
+                || host.equalsIgnoreCase("www.minecraft.net")
                 || host.equalsIgnoreCase("classicremastered.net")
                 || host.equalsIgnoreCase("www.classicremastered.net");
     }
 
     public final void setLevel(Level var1) {
-        if (isDebugger())
-            System.out.println("[setLevel] JDWP detected (debugger).");
+        BowItem.cancelDraw(this.player);
+        if (this.soundPC != null) this.soundPC.stopFarLandsSoundtrack();
+        if (isDebugger()) System.out.println("[setLevel] JDWP detected (debugger).");
 
         // Both desktop launchers use an applet with the project website as its base.
-        if (this.applet != null && (!isSupportedAppletBase(this.applet.getDocumentBase())
-                || !isSupportedAppletBase(this.applet.getCodeBase()))) {
+        if (this.applet != null
+                && (!isSupportedAppletBase(this.applet.getDocumentBase())
+                        || !isSupportedAppletBase(this.applet.getCodeBase()))) {
             var1 = null;
         }
 
@@ -1151,8 +1174,7 @@ public final class Minecraft implements Runnable {
             this.player = new Player(var1);
             this.player.resetPos();
             this.gamemode.preparePlayer(this.player);
-            if (var1 != null)
-                var1.player = this.player;
+            if (var1 != null) var1.player = this.player;
         } else {
             if (var1 != null) {
                 var1.player = this.player;
@@ -1166,12 +1188,10 @@ public final class Minecraft implements Runnable {
         if (this.levelRenderer != null) {
             LevelRenderer lr = this.levelRenderer;
 
-            if (lr.level != null)
-                lr.level.removeListener(lr);
+            if (lr.level != null) lr.level.removeListener(lr);
 
             try {
-                if (lr.listId != 0)
-                    org.lwjgl.opengl.GL11.glDeleteLists(lr.listId, 2);
+                if (lr.listId != 0) org.lwjgl.opengl.GL11.glDeleteLists(lr.listId, 2);
             } catch (Throwable ignored) {
             }
 
@@ -1212,10 +1232,8 @@ public final class Minecraft implements Runnable {
 
         // --- Clear particles and rebind ---
         if (this.particleManager != null) {
-            if (var1 != null)
-                var1.particleEngine = this.particleManager;
-            for (int i = 0; i < 2; ++i)
-                this.particleManager.particles[i].clear();
+            if (var1 != null) var1.particleEngine = this.particleManager;
+            for (int i = 0; i < 2; ++i) this.particleManager.particles[i].clear();
         }
 
         // === Restore serialized mobs after renderer is ready ===
@@ -1225,12 +1243,13 @@ public final class Minecraft implements Runnable {
                 for (Object o : var1.pendingEntities) {
                     if (!(o instanceof net.classicremastered.minecraft.level.Level.SavedMob))
                         continue;
-                    net.classicremastered.minecraft.level.Level.SavedMob s = (net.classicremastered.minecraft.level.Level.SavedMob) o;
+                    net.classicremastered.minecraft.level.Level.SavedMob s =
+                            (net.classicremastered.minecraft.level.Level.SavedMob) o;
 
-                    net.classicremastered.minecraft.mob.Mob mob = net.classicremastered.minecraft.mob.MobRegistry
-                            .create(s.id, var1, s.x, s.y, s.z);
-                    if (mob == null)
-                        continue;
+                    net.classicremastered.minecraft.mob.Mob mob =
+                            net.classicremastered.minecraft.mob.MobRegistry.create(
+                                    s.id, var1, s.x, s.y, s.z);
+                    if (mob == null) continue;
 
                     mob.yRot = s.yRot;
                     mob.xRot = s.xRot;
@@ -1246,10 +1265,23 @@ public final class Minecraft implements Runnable {
         System.gc();
     }
 
+    public boolean saveCurrentLevel() {
+        if (level == null || isOnline() || level.isNetworkMode() || level.saveFile == null) {
+            return true;
+        }
+        returnInventoryBeforeSave();
+        return levelIo.save(level, level.saveFile);
+    }
+
+    private void returnInventoryBeforeSave() {
+        if (currentScreen instanceof InventoryScreen || currentScreen instanceof GuiCrafting) {
+            currentScreen.onClose();
+        }
+    }
+
     /** True if the target entity is within attack reach of the player. */
     boolean entityWithinReach(Entity e) {
-        if (e == null || this.player == null)
-            return false;
+        if (e == null || this.player == null) return false;
 
         // Distance from player position to entity position
         float dx = (float) (e.x - this.player.x);
@@ -1294,11 +1326,6 @@ public final class Minecraft implements Runnable {
             w = Display.getWidth();
             h = Display.getHeight();
         }
-        if (w > 0 && h > 0)
-            resizeTo(w, h);
+        if (w > 0 && h > 0) resizeTo(w, h);
     }
-
 }
-
-
-

@@ -20,6 +20,22 @@ public class Item {
     public static Item BEETROOT;
     public static Item BOW;
     public static Item FLINT_AND_STEEL;
+    public static final int REDSTONE_DUST_ID = 44;
+    public static final int COAL_ID = 45;
+
+    public static final int LEVER_ICON_ID = 46;
+
+    public static int iconId(int id) {
+        return id == net.classicremastered.minecraft.level.tile.Block.LEVER.id
+                ? LEVER_ICON_ID + 256
+                : inventoryId(id);
+    }
+
+    public static int inventoryId(int id) {
+        return id == net.classicremastered.minecraft.level.tile.Block.REDSTONE_WIRE.id
+                ? REDSTONE_DUST_ID + 256
+                : id;
+    }
 
 	public static FeatherItem FEATHER;
 
@@ -58,6 +74,15 @@ public class Item {
     // --- Behavior hooks ---
     /** Right-click action (food, bow draw, etc). */
     public void use(Player player, Level level) {}
+
+    protected final void consumeSelected(Player player,Level level) {
+        if(player==null || level==null || level.creativeMode || level.isNetworkMode())return;
+        int slot=player.inventory.selected;
+        if(player.inventory.getId(slot)==id+256 && player.inventory.getCount(slot)>0) {
+            int count=player.inventory.getCount(slot)-1;
+            player.inventory.setIdCount(slot,count>0?id+256:-1,count);
+        }
+    }
 
     /** Called every tick while item is being held. */
     public void tick(Player player, Level level) {}

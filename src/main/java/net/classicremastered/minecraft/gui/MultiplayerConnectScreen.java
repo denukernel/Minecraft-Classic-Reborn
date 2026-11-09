@@ -180,36 +180,7 @@ public final class MultiplayerConnectScreen extends GuiScreen {
 
     @Override
     public void render(int mx, int my) {
-        // Always start with a clean screen
-        GL11.glClearColor(0f, 0f, 0f, 1f);
-        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
-        // --- Dirt background ---
-        int tex = this.minecraft.textureManager.load("/dirt.png");
-        if (tex != 0) {
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
-            GL11.glEnable(GL11.GL_TEXTURE_2D);
-            GL11.glDisable(GL11.GL_BLEND);
-
-            float mult = (this.minecraft.settings != null ? this.minecraft.settings.menuLighting : 0.6f);
-            GL11.glColor4f(mult, mult, mult, 1f);
-
-            long sysTime = System.currentTimeMillis();
-            float scroll = (sysTime % 20000L) / 1000.0F;
-
-            float u = this.width / 32.0F;
-            float v = this.height / 32.0F;
-
-            GL11.glBegin(GL11.GL_QUADS);
-            GL11.glTexCoord2f(scroll, v + scroll); GL11.glVertex2f(0, height);
-            GL11.glTexCoord2f(u + scroll, v + scroll); GL11.glVertex2f(width, height);
-            GL11.glTexCoord2f(u + scroll, scroll); GL11.glVertex2f(width, 0);
-            GL11.glTexCoord2f(scroll, scroll); GL11.glVertex2f(0, 0);
-            GL11.glEnd();
-        }
-
-        // Reset color for text
-        GL11.glColor4f(1f, 1f, 1f, 1f);
+        drawMenuBackground();
 
         // Draw darker screen overlay
         drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA0000000);

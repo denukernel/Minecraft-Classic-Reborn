@@ -1,15 +1,14 @@
 package net.classicremastered.minecraft.mob;
 
-import static net.classicremastered.minecraft.mob.ai.BossAttackAI.*;
-
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.player.Player;
+import static net.classicremastered.minecraft.mob.ai.combat.BossAttackAI.*;
 
 public final class IllusionumBoss extends BossZombieBase {
 
-    private int vanishTimer = 0;  // away/invisible window
-    private int flurryTimer = 0;  // rapid hits window
-    private int glitchTimer = 0;  // mischief timer (HUD/hotbar)
+    private int vanishTimer = 0; // away/invisible window
+    private int flurryTimer = 0; // rapid hits window
+    private int glitchTimer = 0; // mischief timer (HUD/hotbar)
     private int cloneCD = 0;
 
     private float parkX, parkY, parkZ;
@@ -17,28 +16,37 @@ public final class IllusionumBoss extends BossZombieBase {
     public IllusionumBoss(Level l, float x, float y, float z) {
         super(l, x, y, z);
         this.health = 250;
-        try { ((net.classicremastered.minecraft.mob.ai.BasicAttackAI)this.ai).runSpeed = 1.05f; } catch (Throwable ignored){}
+        try {
+            ((net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) this.ai).runSpeed = 1.05f;
+        } catch (Throwable ignored) {
+        }
     }
 
-    @Override protected void onEnrage() {
+    @Override
+    protected void onEnrage() {
         cloneCD = 0;
         if (level != null && level.minecraft != null)
             level.minecraft.hud.addChat("&5Illusionum fractures reality!");
     }
 
-    @Override protected void bossTick() {
+    @Override
+    protected void bossTick() {
         Player p = target(this, 20f);
-        if (p == null) return;
+        if (p == null)
+            return;
 
-        if (!enraged && this.health <= 125) { enraged = true; onEnrage(); }
+        if (!enraged && this.health <= 125) {
+            enraged = true;
+            onEnrage();
+        }
 
         // Handle vanish / reappear cycle
         if (vanishTimer > 0) {
             vanishTimer--;
             if (vanishTimer == 0) {
                 // reappear near target, start flurry
-                float dx = (level.random.nextFloat()-0.5f)*4f;
-                float dz = (level.random.nextFloat()-0.5f)*4f;
+                float dx = (level.random.nextFloat() - 0.5f) * 4f;
+                float dz = (level.random.nextFloat() - 0.5f) * 4f;
                 teleport(p.x + dx, p.y, p.z + dz);
                 flurryTimer = enraged ? 100 : 80; // 5s/4s of rapid hits
                 if (level.minecraft != null)
@@ -56,24 +64,28 @@ public final class IllusionumBoss extends BossZombieBase {
                 p.hurt(this, 2);
                 jitterCamera(p);
             }
-            if (flurryTimer == 0) glitchTimer = 0;
+            if (flurryTimer == 0)
+                glitchTimer = 0;
             return;
         }
 
         // Normal cadence: illusions + sometimes vanish
         if (cloneCD <= 0) {
-            spawnIllusions( enraged ? 4 : 3 );
+            spawnIllusions(enraged ? 4 : 3);
             cloneCD = enraged ? 120 : 160;
-        } else cloneCD--;
+        } else
+            cloneCD--;
 
         if (abilityCD <= 0) {
-            vanishFor( enraged ? 120 : 100 ); // 6s/5s
+            vanishFor(enraged ? 120 : 100); // 6s/5s
             abilityCD = enraged ? 220 : 260;
-        } else abilityCD--;
+        } else
+            abilityCD--;
     }
 
     private void spawnIllusions(int n) {
-        if (level == null) return;
+        if (level == null)
+            return;
         for (int i = 0; i < n; i++) {
             float ox = (level.random.nextFloat() - 0.5f) * 6.0f;
             float oz = (level.random.nextFloat() - 0.5f) * 6.0f;
@@ -84,8 +96,11 @@ public final class IllusionumBoss extends BossZombieBase {
     }
 
     private void vanishFor(int ticks) {
-        if (level == null) return;
-        parkX = this.x; parkY = this.y; parkZ = this.z;
+        if (level == null)
+            return;
+        parkX = this.x;
+        parkY = this.y;
+        parkZ = this.z;
         teleport(this.x + 1024f, -64f, this.z + 1024f);
         vanishTimer = ticks;
         ensureGlitch(40);
@@ -93,9 +108,11 @@ public final class IllusionumBoss extends BossZombieBase {
             level.minecraft.hud.addChat("&7Illusionum vanishes...");
     }
 
-    private void teleport(float x,float y,float z) {
+    private void teleport(float x, float y, float z) {
         this.setPos(x, y, z);
-        this.xo = x; this.yo = y; this.zo = z;
+        this.xo = x;
+        this.yo = y;
+        this.zo = z;
     }
 
     private void ensureGlitch(int extendTicks) {
@@ -109,15 +126,20 @@ public final class IllusionumBoss extends BossZombieBase {
                 Player p = (Player) level.player;
                 if (p.inventory != null && p.inventory.slots != null && p.inventory.slots.length >= 9) {
                     int a = level.random.nextInt(9), b = level.random.nextInt(9);
-                    int tmp = p.inventory.slots[a]; p.inventory.slots[a] = p.inventory.slots[b]; p.inventory.slots[b] = tmp;
-                    int t2 = p.inventory.count[a];  p.inventory.count[a]  = p.inventory.count[b];  p.inventory.count[b]  = t2;
+                    int tmp = p.inventory.slots[a];
+                    p.inventory.slots[a] = p.inventory.slots[b];
+                    p.inventory.slots[b] = tmp;
+                    int t2 = p.inventory.count[a];
+                    p.inventory.count[a] = p.inventory.count[b];
+                    p.inventory.count[b] = t2;
                 }
             }
-        } catch (Throwable ignored){}
+        } catch (Throwable ignored) {
+        }
     }
 
     private void jitterCamera(Player p) {
-        p.yRot += (level.random.nextFloat()-0.5f) * 6f;
-        p.xRot += (level.random.nextFloat()-0.5f) * 3f;
+        p.yRot += (level.random.nextFloat() - 0.5f) * 6f;
+        p.xRot += (level.random.nextFloat() - 0.5f) * 3f;
     }
 }

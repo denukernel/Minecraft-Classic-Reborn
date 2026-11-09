@@ -3,12 +3,9 @@ package net.classicremastered.minecraft.render;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.model.HumanoidModel;
 import net.classicremastered.minecraft.model.Vec3D;
-import net.classicremastered.minecraft.player.Inventory;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.util.MathHelper;
 
@@ -46,23 +43,25 @@ public final class Renderer {
         return new Vec3D(x, y, z);
     }
 
-    private boolean localPlayerVisible=true;
-    public float thirdPersonDistance=4;
+    private boolean localPlayerVisible = true;
+    public float thirdPersonDistance = 4;
 
     public boolean shouldRenderLocalPlayer() {
-        return minecraft.cameraMode!=0 && localPlayerVisible;
+        return minecraft.cameraMode != 0 && localPlayerVisible;
     }
 
     public void setupCamera(float partial) {
-        Player player=minecraft.player;
-        if(player==null)return;
-        CameraView view=CameraView.resolve(player,minecraft.cameraMode,partial);
-        thirdPersonDistance=view.distance();
-        localPlayerVisible=minecraft.cameraMode!=0 && view.outsidePlayer(player);
-        if(minecraft.cameraMode!=0)GL11.glTranslatef(0,0,-view.distance());
-        GL11.glRotatef(view.pitch(),1,0,0);GL11.glRotatef(view.yaw(),0,1,0);
-        GL11.glTranslatef(-view.focus().x,-view.focus().y,-view.focus().z);
+        Player player = minecraft.player;
+        if (player == null) return;
+        CameraView view = CameraView.resolve(player, minecraft.cameraMode, partial);
+        thirdPersonDistance = view.distance();
+        localPlayerVisible = minecraft.cameraMode != 0 && view.outsidePlayer(player);
+        if (minecraft.cameraMode != 0) GL11.glTranslatef(0, 0, -view.distance());
+        GL11.glRotatef(view.pitch(), 1, 0, 0);
+        GL11.glRotatef(view.yaw(), 0, 1, 0);
+        GL11.glTranslatef(-view.focus().x, -view.focus().y, -view.focus().z);
     }
+
     public void hurtEffect(float partial) {
         Player pl = this.minecraft.player;
         float t = (float) pl.hurtTime - partial;
@@ -102,26 +101,26 @@ public final class Renderer {
         walk = p.walkDist + walk * partial;
         float bob = p.oBob + (p.bob - p.oBob) * partial;
         float tilt = p.oTilt + (p.tilt - p.oTilt) * partial;
-        GL11.glTranslatef(MathHelper.sin(walk * 3.1415927F) * bob * 0.5F,
-                -Math.abs(MathHelper.cos(walk * 3.1415927F) * bob), 0.0F);
+        GL11.glTranslatef(
+                MathHelper.sin(walk * 3.1415927F) * bob * 0.5F,
+                -Math.abs(MathHelper.cos(walk * 3.1415927F) * bob),
+                0.0F);
         GL11.glRotatef(MathHelper.sin(walk * 3.1415927F) * bob * 3.0F, 0.0F, 0.0F, 1.0F);
-        GL11.glRotatef(Math.abs(MathHelper.cos(walk * 3.1415927F + 0.2F) * bob) * 5.0F, 1.0F, 0.0F, 0.0F);
+        GL11.glRotatef(
+                Math.abs(MathHelper.cos(walk * 3.1415927F + 0.2F) * bob) * 5.0F, 1.0F, 0.0F, 0.0F);
         GL11.glRotatef(tilt, 1.0F, 0.0F, 0.0F);
     }
 
     public void renderUnderwaterOverlay(float partial) {
         Player pl = this.minecraft.player;
         Level lvl = this.minecraft.level;
-        if (pl == null || lvl == null)
-            return;
+        if (pl == null || lvl == null) return;
 
         Block b = Block.blocks[lvl.getTile((int) pl.x, (int) (pl.y + 0.12F), (int) pl.z)];
-        if (b == null)
-            return;
+        if (b == null) return;
 
         LiquidType l = b.getLiquidType();
-        if (l == LiquidType.NOT_LIQUID)
-            return;
+        if (l == LiquidType.NOT_LIQUID) return;
 
         // === Setup ortho projection ===
         GL11.glMatrixMode(GL11.GL_PROJECTION);
@@ -141,7 +140,9 @@ public final class Renderer {
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
         // Use the actual animated atlas texture
-        int texId = minecraft.textureManager.load("/terrain.png");
+        int texId =
+                minecraft.textureManager.load(
+                        net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
 
         // Lookup the animated tile position
@@ -231,11 +232,15 @@ public final class Renderer {
                 if (l == LiquidType.WATER) {
                     // Vision capped at ~8 blocks
                     GL11.glFogf(GL11.GL_FOG_DENSITY, 0.35F);
-                    GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
+                    GL11.glLightModel(
+                            GL11.GL_LIGHT_MODEL_AMBIENT,
+                            this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
                 } else if (l == LiquidType.LAVA) {
                     // Vision capped at ~3 blocks
                     GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
-                    GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
+                    GL11.glLightModel(
+                            GL11.GL_LIGHT_MODEL_AMBIENT,
+                            this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
                 }
                 GL11.glEnable(GL11.GL_COLOR_MATERIAL);
                 GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);
@@ -261,15 +266,14 @@ public final class Renderer {
     }
 
     /**
-     * Render the held item (non-block) with swing animation. Special-case swords
-     * (SwordItem): arc slash + wrist twist + slight lunge.
+     * Render the held item (non-block) with swing animation. Special-case swords (SwordItem): arc
+     * slash + wrist twist + slight lunge.
      */
     public void renderHeldItem() {
         renderHeldItem(minecraft.timer.delta);
     }
 
     public void renderHeldItem(float partial) {
-        HeldItemRenderer.render(this,partial);
+        HeldItemRenderer.render(this, partial);
     }
 }
-

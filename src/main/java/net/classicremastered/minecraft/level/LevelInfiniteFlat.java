@@ -1,14 +1,14 @@
 package net.classicremastered.minecraft.level;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.phys.AABB;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public final class LevelInfiniteFlat extends Level {
     public final SimpleChunkManager chunks;
@@ -29,7 +29,8 @@ public final class LevelInfiniteFlat extends Level {
             java.lang.reflect.Field f = this.blockMap.getClass().getDeclaredField("infiniteMode");
             f.setAccessible(true);
             f.setBoolean(this.blockMap, true);
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
 
         this.entityList = new Entity[0];
         this.blockers = new int[this.width * this.height];
@@ -57,45 +58,34 @@ public final class LevelInfiniteFlat extends Level {
     }
 
     private void markSliceAndNeighbors(int x, int y, int z) {
-        if (this.minecraft == null || this.minecraft.levelRenderer == null)
-            return;
+        if (this.minecraft == null || this.minecraft.levelRenderer == null) return;
         final int cx = x >> 4, sy = y >> 4, cz = z >> 4;
         final var lr = this.minecraft.levelRenderer;
         lr.markDirty(cx, sy, cz);
         int lx = x & 15, ly = y & 15, lz = z & 15;
-        if (lx == 0)
-            lr.markDirty(cx - 1, sy, cz);
-        if (lx == 15)
-            lr.markDirty(cx + 1, sy, cz);
-        if (lz == 0)
-            lr.markDirty(cx, sy, cz - 1);
-        if (lz == 15)
-            lr.markDirty(cx, sy, cz + 1);
-        if (ly == 0)
-            lr.markDirty(cx, sy - 1, cz);
-        if (ly == 15)
-            lr.markDirty(cx, sy + 1, cz);
+        if (lx == 0) lr.markDirty(cx - 1, sy, cz);
+        if (lx == 15) lr.markDirty(cx + 1, sy, cz);
+        if (lz == 0) lr.markDirty(cx, sy, cz - 1);
+        if (lz == 15) lr.markDirty(cx, sy, cz + 1);
+        if (ly == 0) lr.markDirty(cx, sy - 1, cz);
+        if (ly == 15) lr.markDirty(cx, sy + 1, cz);
     }
 
     @Override
     public boolean setTile(int x, int y, int z, int id) {
-        if (y < 0 || y >= this.depth)
-            return false;
+        if (y < 0 || y >= this.depth) return false;
 
         // Survival: block any modification to the bedrock floor
-        if (y == 0 && !this.creativeMode)
-            return false;
+        if (y == 0 && !this.creativeMode) return false;
 
         int old = getTile(x, y, z);
-        if (old == id)
-            return false;
+        if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
+        updateFlowLevelMap(x, y, z, id);
 
-        if (old > 0 && Block.blocks[old] != null)
-            Block.blocks[old].onRemoved(this, x, y, z);
-        if (id > 0 && Block.blocks[id] != null)
-            Block.blocks[id].onAdded(this, x, y, z);
+        if (old > 0 && Block.blocks[old] != null) Block.blocks[old].onRemoved(this, x, y, z);
+        if (id > 0 && Block.blocks[id] != null) Block.blocks[id].onAdded(this, x, y, z);
 
         updateNeighborsAt(x, y, z, id);
         markSliceAndNeighbors(x, y, z);
@@ -104,21 +94,17 @@ public final class LevelInfiniteFlat extends Level {
 
     @Override
     public boolean setTileNoNeighborChange(int x, int y, int z, int id) {
-        if (y < 0 || y >= this.depth)
-            return false;
-        if (y == 0 && !this.creativeMode)
-            return false;
+        if (y < 0 || y >= this.depth) return false;
+        if (y == 0 && !this.creativeMode) return false;
 
         int old = getTile(x, y, z);
-        if (old == id)
-            return false;
+        if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
+        updateFlowLevelMap(x, y, z, id);
 
-        if (old > 0 && Block.blocks[old] != null)
-            Block.blocks[old].onRemoved(this, x, y, z);
-        if (id > 0 && Block.blocks[id] != null)
-            Block.blocks[id].onAdded(this, x, y, z);
+        if (old > 0 && Block.blocks[old] != null) Block.blocks[old].onRemoved(this, x, y, z);
+        if (id > 0 && Block.blocks[id] != null) Block.blocks[id].onAdded(this, x, y, z);
 
         markSliceAndNeighbors(x, y, z);
         return true;
@@ -126,12 +112,11 @@ public final class LevelInfiniteFlat extends Level {
 
     @Override
     public boolean setTileNoUpdate(int x, int y, int z, int id) {
-        if (y < 0 || y >= this.depth)
-            return false;
-        if (y == 0 && !this.creativeMode)
-            return false;
+        if (y < 0 || y >= this.depth) return false;
+        if (y == 0 && !this.creativeMode) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
+        updateFlowLevelMap(x, y, z, id);
         markSliceAndNeighbors(x, y, z);
         return true;
     }
@@ -181,27 +166,22 @@ public final class LevelInfiniteFlat extends Level {
     public int getHighestTile(int x, int z) {
         for (int y = this.depth - 1; y >= 0; --y) {
             int id = getTile(x, y, z);
-            if (id == 0)
-                continue;
+            if (id == 0) continue;
             Block b = Block.blocks[id];
-            if (b != null && b.getLiquidType() == LiquidType.NOT_LIQUID)
-                return y + 1;
+            if (b != null && b.getLiquidType() == LiquidType.NOT_LIQUID) return y + 1;
         }
         return 0;
     }
 
     @Override
     public boolean isLit(int x, int y, int z) {
-        if (y < 0)
-            return false;
-        if (y >= this.depth)
-            return true;
+        if (y < 0) return false;
+        if (y >= this.depth) return true;
         for (int yy = y + 1; yy < this.depth; yy++) {
             int id = getTile(x, yy, z);
             if (id > 0) {
                 Block b = Block.blocks[id];
-                if (b != null && b.isOpaque())
-                    return false;
+                if (b != null && b.isOpaque()) return false;
             }
         }
         return true;
@@ -212,34 +192,44 @@ public final class LevelInfiniteFlat extends Level {
         return lightEngine.getBrightness(x, y, z);
     }
 
-    // === Block ticks (fire spread, sand, liquids, etc.) ===
-    private java.util.ArrayList<NextTickListEntry> tickList = new java.util.ArrayList<>();
+    @Override
+    public boolean containsAnyLiquid(AABB box) {
+        return containsFluid(box, null);
+    }
+
+    @Override
+    public boolean containsLiquid(AABB box, LiquidType type) {
+        return containsFluid(box, type);
+    }
+
+    private boolean containsFluid(AABB box, LiquidType type) {
+        // Infinite worlds must not clamp horizontal queries to the 16-block placeholder array.
+        int y0 = Math.max(0, (int) Math.floor(box.y0)),
+                y1 = Math.min(depth, (int) Math.floor(box.y1) + 1);
+        for (int x = (int) Math.floor(box.x0); x <= (int) Math.floor(box.x1); x++)
+            for (int z = (int) Math.floor(box.z0); z <= (int) Math.floor(box.z1); z++)
+                for (int y = y0; y < y1; y++) {
+                    int id = getTile(x, y, z);
+                    LiquidType liquid =
+                            id > 0 && Block.blocks[id] != null
+                                    ? Block.blocks[id].getLiquidType()
+                                    : LiquidType.NOT_LIQUID;
+                    if (type == null ? liquid != LiquidType.NOT_LIQUID : liquid == type)
+                        return true;
+                }
+        return false;
+    }
 
     @Override
     public void tick() {
         tickCount++;
         tickDayNightCycle();
 
-        // --- scheduled updates (fire, fluids, TNT, etc.) ---
-        int processed = 0;
-        int maxPerTick = 100; // cap
-        for (int i = 0; i < tickList.size() && processed < maxPerTick; i++) {
-            NextTickListEntry e = tickList.remove(0);
-            if (e.ticks > 0) {
-                e.ticks--;
-                tickList.add(e);
-            } else {
-                int id = getTile(e.x, e.y, e.z);
-                if (id == e.block && id > 0 && Block.blocks[id] != null) {
-                    Block.blocks[id].update(this, e.x, e.y, e.z, random);
-                }
-            }
-            processed++;
-        }
+        tickScheduledBlocks(100);
 
         despawnDistantMobs();
         if (!isNetworkMode() && tickCount % 20 == 0) {
-            new MobSpawner(this).spawn(4, player, null, true);
+            new MobSpawner(this).spawn(6, player, null, true);
         }
 
         // --- random block updates around player ---
@@ -252,34 +242,24 @@ public final class LevelInfiniteFlat extends Level {
                 int y = random.nextInt(this.depth);
 
                 int id = getTile(x, y, z);
-                if (id > 0 && Block.physics[id]) {
+                if (shouldRandomTick(id, x, y, z)) {
                     Block.blocks[id].update(this, x, y, z, random);
                 }
             }
         }
     }
 
-    // allow FireBlock.addToTickNextTick to work
-    @Override
-    public void addToTickNextTick(int x, int y, int z, int blockId) {
-        if (blockId <= 0)
-            return;
-        NextTickListEntry e = new NextTickListEntry(x, y, z, blockId);
-        e.ticks = Block.blocks[blockId].getTickDelay();
-        tickList.add(e);
-    }
-
     // === Explosions (TNT chain fix) ===
     @Override
-    public void explode(Entity src, float fx, float fy, float fz, float radius) {
+    public void explode(
+            Entity src, float fx, float fy, float fz, float radius, boolean dropBlocks) {
         int minX = (int) (fx - radius - 1), maxX = (int) (fx + radius + 1);
         int minY = (int) (fy - radius - 1), maxY = (int) (fy + radius + 1);
         int minZ = (int) (fz - radius - 1), maxZ = (int) (fz + radius + 1);
 
         for (int x = minX; x < maxX; x++) {
             for (int y = minY; y < maxY; y++) {
-                if (y < 0 || y >= this.depth)
-                    continue;
+                if (y < 0 || y >= this.depth) continue;
                 for (int z = minZ; z < maxZ; z++) {
                     float dx = x + 0.5f - fx, dy = y + 0.5f - fy, dz = z + 0.5f - fz;
                     if (dx * dx + dy * dy + dz * dz < radius * radius) {
@@ -288,9 +268,10 @@ public final class LevelInfiniteFlat extends Level {
                             Block b = Block.blocks[id];
                             if (b != null && b.canExplode()) {
                                 if (id == Block.TNT.id) {
-                                    net.classicremastered.minecraft.level.tile.TNTBlock.ignite(this, x, y, z);
+                                    net.classicremastered.minecraft.level.tile.TNTBlock.ignite(
+                                            this, x, y, z);
                                 } else {
-                                    b.dropItems(this, x, y, z, 0.3F);
+                                    if (dropBlocks) b.dropItems(this, x, y, z, 0.3F);
                                     setTile(x, y, z, 0);
                                     b.explode(this, x, y, z);
                                 }
@@ -303,8 +284,7 @@ public final class LevelInfiniteFlat extends Level {
 
         List list = this.blockMap.getEntities(src, minX, minY, minZ, maxX, maxY, maxZ);
         for (Object o : list) {
-            if (!(o instanceof Entity))
-                continue;
+            if (!(o instanceof Entity)) continue;
             Entity e = (Entity) o;
             float dist = e.distanceTo(fx, fy, fz) / radius;
             if (dist <= 1.0f) {
@@ -329,18 +309,13 @@ public final class LevelInfiniteFlat extends Level {
 
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
-                if (y < 0 || y >= this.depth)
-                    continue;
+                if (y < 0 || y >= this.depth) continue;
                 for (int z = z0; z <= z1; z++) {
                     int id = getTile(x, y, z);
-                    if (id == 0)
-                        continue;
+                    if (id == 0) continue;
                     Block b = Block.blocks[id];
-                    if (b == null)
-                        continue;
-                    AABB bb = b.getCollisionBox(x, y, z);
-                    if (bb != null && box.intersectsInner(bb))
-                        out.add(bb);
+                    if (b == null) continue;
+                    b.addCollisionBoxes(this, x, y, z, box, out);
                 }
             }
         }

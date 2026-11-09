@@ -1,1399 +1,1019 @@
 package net.classicremastered.toolkit.mapedit3d;
 
-import net.classicremastered.minecraft.MovingObjectPosition;
-import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.LevelIO;
+import net.classicremastered.minecraft.*;
+import net.classicremastered.minecraft.level.*;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.model.Vec3D;
-import net.classicremastered.util.MathHelper;
+import net.classicremastered.minecraft.mob.*;
+import net.classicremastered.minecraft.model.*;
+import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.render.*;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.Display;
-import org.lwjgl.opengl.DisplayMode;
-import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.*;
 import org.lwjgl.util.glu.GLU;
 
-import javax.swing.*;
-import javax.swing.border.TitledBorder;
 import java.awt.*;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.util.Arrays;
+import java.awt.event.*;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
 
-/**
- * Classic3DMapEditorApp — 3D view on the left, “classic” sidebar on the right.
- *
- * Major additions:
- *  • Right sidebar with “Block Types” grid (selects block id)
- *  • Tabs: Brush • View • Selection • Load/Save
- *  • Brush size + 2D (disc) / 3D (cube) paint, continuous right-drag place
- *  • Plane (XZ/XY/YZ) + layer spinner for top-down workflows
- *  • Export Top-Down PNG (simple height render)
- */
+import javax.swing.*;
+
+/** A single-document, 3D-first editor. All world mutations belong to the render thread. */
 public final class Classic3DMapEditorApp {
-
-    // ---------- Paths ----------
-    private static File appDir() {
-        String appdata = System.getenv("APPDATA");
-        if (appdata == null || appdata.isEmpty()) appdata = System.getProperty("user.home");
-        File dir = new File(appdata, ".minecraftclassicreborn/client");
-        if (!dir.exists()) dir.mkdirs();
-        return dir;
-    }
-    private static File creativeFile() { return new File(appDir(), "levelc.dat"); }
-    private static File survivalFile() { return new File(appDir(), "levels.dat"); }
-
-    // ---------- State ----------
-    private Level levelCreative;
-    private Level levelSurvival;
-    private Level active;
-    private boolean editingCreative = true;
-
-    // selection / painting
-    private int selectedBlockId = 1;     // stone
-    private int skyboxColor = 0x202531;
-
-    // camera
-    private float camX = 16, camY = 40, camZ = 16;
-    private float yaw = 180, pitch = -25;
-    private float fov = 70f;
-
-    // render tuning
-    private int drawRadiusXZ = 64;
-    private int drawRadiusY  = 48;
-
-    // UI
-    private Frame frame;
+    private final WorldEditorDocument document = new WorldEditorDocument();
+    private final Queue<Runnable> commands = new ConcurrentLinkedQueue<>();
+    private JFrame frame;
     private Canvas canvas;
-    private JPanel rightPanel;
-    private JLabel lblActive, lblSelected, lblPos;
-
-    // Brush UI state
-    private int brushSize = 1;         // radius (1 = single cell)
-    private boolean brush3D = false;   // false = 2D disc in plane, true = 3D cube
-    private enum Plane { XZ, XY, YZ }
-    private Plane plane = Plane.XZ;
-    private int layerIndex = 16;       // used by XY/YZ views & 2D brush
-    private boolean topDownSnap = false;
-
-    // mouse down edge tracking
-    private boolean leftPrev = false;
-    private boolean rightPrev = false;
-
-    // I/O helper
-    private final LevelIO io = new LevelIO(null);
+    private JPanel slice;
+    private JLabel status;
+    private final DefaultListModel<String> palette = new DefaultListModel<>();
+    private final DefaultListModel<Mob> mobList = new DefaultListModel<>();
+    private JList<Mob> entities;
+    private JSpinner mx, my, mz, rotation, health, layer;
+    private volatile int block = Block.STONE.id, brush = 1, viewLayer = 16;
+    private volatile String tool = "Place";
+    private volatile boolean running = true;
+    private float x = 32, y = 28, z = 48, yaw = 0, pitch = 30;
+    private int mouseX, mouseY;
+    private boolean dialogOpen;
+    private volatile boolean viewportInputEnabled;
+    private boolean painting, selectionStarted;
+    private int[] first, last;
+    private Mob selected;
+    private boolean updatingList;
+    private TextureManager textures;
+    private int opaqueList, translucentList, regionX = Integer.MIN_VALUE, regionZ;
+    private boolean rebuild = true;
+    private long nextTick;
 
     public static void main(String[] args) throws Exception {
-        configureNativesFromClient();
-        new Classic3DMapEditorApp().run();
+        net.classicremastered.toolkit.debugmodel.LWJGLNatives.useMCraftClientNatives();
+        new Classic3DMapEditorApp().run(args);
     }
 
-    private static void configureNativesFromClient() {
-        String appdata = System.getenv("APPDATA");
-        if (appdata == null || appdata.isEmpty()) appdata = System.getProperty("user.home");
-        File dir = new File(appdata, ".minecraftclassicreborn\\client\\native//windows");
-        String path = dir.getAbsolutePath();
-        System.setProperty("org.lwjgl.librarypath", path);
-        System.setProperty("net.java.games.input.librarypath", path);
+    private void run(String[] args) throws Exception {
+        MobRegistry.bootstrapDefaults();
+        SwingUtilities.invokeAndWait(this::buildUi);
         try {
-            String jlp = System.getProperty("java.library.path", "");
-            if (!jlp.contains(path)) {
-                System.setProperty("java.library.path", jlp + File.pathSeparator + path);
-                java.lang.reflect.Field sysPaths = ClassLoader.class.getDeclaredField("sys_paths");
-                sysPaths.setAccessible(true);
-                sysPaths.set(null, null);
-            }
-        } catch (Throwable ignored) {}
-        System.out.println("[natives] org.lwjgl.librarypath=" + System.getProperty("org.lwjgl.librarypath"));
-    }
-
-    // --- tiny HUD text helper (unchanged) ---
-    private static final class GLText {
-        private int texId = 0; private int w = 0, h = 0; private String cached = null;
-        void draw(int x, int y, String text) {
-            if (text == null) return;
-            if (!text.equals(cached)) {
-                cached = text;
-                java.awt.Font font = new java.awt.Font("Dialog", java.awt.Font.PLAIN, 14);
-                BufferedImage tmp = new BufferedImage(1,1, BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g2 = tmp.createGraphics();
-                g2.setFont(font);
-                int tw = Math.max(1, g2.getFontMetrics().stringWidth(text) + 8);
-                int th = Math.max(1, g2.getFontMetrics().getHeight() + 6);
-                g2.dispose();
-
-                BufferedImage img = new BufferedImage(tw, th, BufferedImage.TYPE_INT_ARGB);
-                g2 = img.createGraphics();
-                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                g2.setColor(new Color(0,0,0,120));
-                g2.fillRect(0,0,tw,th);
-                g2.setColor(Color.WHITE);
-                int baseY = (th - g2.getFontMetrics().getHeight())/2 + g2.getFontMetrics().getAscent();
-                g2.drawString(text, 6, baseY);
-                g2.dispose();
-
-                int[] argb = img.getRGB(0,0,tw,th,null,0,tw);
-                java.nio.ByteBuffer buf = org.lwjgl.BufferUtils.createByteBuffer(tw*th*4);
-                for (int p : argb) {
-                    buf.put((byte)((p>>16)&255)); buf.put((byte)((p>>8)&255));
-                    buf.put((byte)((p)&255));     buf.put((byte)((p>>24)&255));
+            Display.setParent(canvas);
+            Display.create(new PixelFormat());
+            if (!Keyboard.isCreated()) Keyboard.create();
+            if (!Mouse.isCreated()) Mouse.create();
+            Minecraft.mcDir = appDir();
+            textures = new TextureManager(new GameSettings(null, appDir()));
+            Mob.modelCache = new ModelManager();
+            opaqueList = GL11.glGenLists(2);
+            translucentList = opaqueList + 1;
+            if (args.length > 0) document.open(new File(args[0]));
+            else createWorld("Finite");
+            resetCamera();
+            refresh();
+            nextTick = System.nanoTime();
+            while (running) {
+                for (Runnable command; (command = commands.poll()) != null; ) command.run();
+                pollInput();
+                moveCamera();
+                if (document.simulating() && System.nanoTime() >= nextTick) {
+                    document.view().tickEntities();
+                    document.view().tick();
+                    nextTick = System.nanoTime() + 50_000_000;
+                    rebuild = true;
                 }
-                buf.flip();
-                if (texId == 0) texId = GL11.glGenTextures();
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-                GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, tw, th, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buf);
-                w = tw; h = th;
+                if (canvas.isShowing()) render();
+                Display.update();
+                Display.sync(30);
             }
-            GL11.glEnable(GL11.GL_TEXTURE_2D);
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
-            GL11.glColor4f(1,1,1,1);
-            GL11.glBegin(GL11.GL_QUADS);
-            GL11.glTexCoord2f(0,0); GL11.glVertex2f(x,     y);
-            GL11.glTexCoord2f(1,0); GL11.glVertex2f(x + w, y);
-            GL11.glTexCoord2f(1,1); GL11.glVertex2f(x + w, y + h);
-            GL11.glTexCoord2f(0,1); GL11.glVertex2f(x,     y + h);
-            GL11.glEnd();
-            GL11.glDisable(GL11.GL_TEXTURE_2D);
+        } finally {
+            document.close();
+            if (Display.isCreated()) Display.destroy();
+            SwingUtilities.invokeLater(frame::dispose);
         }
-        void dispose(){ if (texId != 0){ GL11.glDeleteTextures(texId); texId = 0; } }
     }
 
-    private void run() throws Exception {
-        setupAwtWindow();
-        createDisplayOn(canvas);
-        reloadBoth();
-        loop();
-        Display.destroy();
-        frame.dispose();
-        System.exit(0);
+    private static File appDir() {
+        String root = System.getenv("APPDATA");
+        File dir =
+                new File(
+                        root == null ? System.getProperty("user.home") : root,
+                        ".minecraftclassicreborn/client");
+        dir.mkdirs();
+        return dir;
     }
-    private final class Map2DPanel extends JPanel {
-        Map2DPanel() { setPreferredSize(new Dimension(980, 800));
-            // mouse paint
-            addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override public void mousePressed(java.awt.event.MouseEvent e) { paintAt(e); }
-            });
-            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                @Override public void mouseDragged(java.awt.event.MouseEvent e) { paintAt(e); }
-            });
-        }
 
-        void relayout() { revalidate(); repaint(); }
-
-        private void paintAt(java.awt.event.MouseEvent e) {
-            if (active == null) return;
-            Point p = e.getPoint();
-            int bx, by, bz;  // target cell from mouse (plane-aware)
-            int cell = viewZoom;
-
-            switch (viewPlane) {
-                case XY: {
-                    bx = p.x / cell; by = p.y / cell; bz = viewLayer;
-                    break;
-                }
-                case XZ: {
-                    bx = p.x / cell; by = viewLayer;  bz = active.depth - 1 - (p.y / cell);
-                    break;
-                }
-                default: { // YZ
-                    bx = viewLayer; by = p.y / cell;  bz = active.depth - 1 - (p.x / cell);
-                }
-            }
-            if (!active.isInBounds(bx, by, bz)) return;
-
-            boolean place = SwingUtilities.isLeftMouseButton(e);
-            int id = place ? selectedBlockId : 0;
-            // 2D/3D + shape brush
-            int r = Math.max(1, brushSize);
-            if (mode2D) {
-                for (int dy=-r+1; dy<=r-1; dy++)
-                    for (int dx=-r+1; dx<=r-1; dx++) {
-                        int x=bx, y=by, z=bz;
-                        if (viewPlane==ViewPlane.XY) { x=bx+dx; y=by+dy; }
-                        if (viewPlane==ViewPlane.XZ) { x=bx+dx; z=bz+dy; }
-                        if (viewPlane==ViewPlane.YZ) { y=by+dy; z=bz+dx; }
-                        if (!active.isInBounds(x,y,z)) continue;
-                        if (brushRound && (dx*dx + dy*dy) > (r-1)*(r-1)) continue;
-                        active.setTile(x,y,z,id);
+    private void submit(Action action) {
+        commands.add(
+                () -> {
+                    try {
+                        action.run();
+                        rebuild = true;
+                        refresh();
+                    } catch (Exception error) {
+                        SwingUtilities.invokeLater(
+                                () ->
+                                        JOptionPane.showMessageDialog(
+                                                frame,
+                                                error.getMessage(),
+                                                "Editor error",
+                                                JOptionPane.ERROR_MESSAGE));
                     }
-            } else {
-                // 3D cube centered on (bx,by,bz)
-                for (int z=bz-r+1; z<=bz+r-1; z++)
-                    for (int y=by-r+1; y<=by+r-1; y++)
-                        for (int x=bx-r+1; x<=bx+r-1; x++)
-                            if (active.isInBounds(x,y,z)) active.setTile(x,y,z,id);
-            }
-            repaint();
-        }
-
-        @Override protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            if (active == null) { g.drawString("No level loaded.", 10, 20); return; }
-
-            int cell = viewZoom;
-            int W = (viewPlane==ViewPlane.YZ) ? active.depth : active.width;
-            int H = (viewPlane==ViewPlane.XZ) ? active.depth : active.height;
-            setPreferredSize(new Dimension(W*cell, H*cell));
-
-            for (int y=0; y<H; y++) for (int x=0; x<W; x++) {
-                int id, rx=x, ry=y, rz=viewLayer;
-                switch (viewPlane) {
-                    case XY: rx=x; ry=y; rz=viewLayer; break;
-                    case XZ: rx=x; ry=viewLayer; rz=active.depth-1-y; break;
-                    default: rx=viewLayer; ry=y; rz=active.depth-1-x; break;
-                }
-                id = active.isInBounds(rx,ry,rz) ? active.getTile(rx,ry,rz) : 0;
-
-                int rgb = (id==0?0x202531:(0xFF000000|colorFor(id)));
-                g.setColor(new Color(rgb, true));
-                g.fillRect(x*cell, y*cell, cell, cell);
-            }
-
-            // overlay “viewing layer …” label like Omen
-            g.setColor(new Color(0,0,0,160));
-            g.fillRect(6,6, 680, 18);
-            g.setColor(Color.WHITE);
-            g.drawString(String.format("Viewing layer %s = %d in the %s plane.   Selected Tool: Brush - %s mode, %s, size %d",
-                    (viewPlane==ViewPlane.XY?"Z":viewPlane==ViewPlane.XZ?"Y":"X"),
-                    viewLayer,
-                    viewPlane.name().replace('_','-'),
-                    (mode2D?"2d":"3d"),
-                    (brushSquare?"Square Brush":"Round Brush"),
-                    brushSize),
-                10, 20);
-        }
+                });
     }
 
-    // ---------- AWT + LWJGL bootstrap ----------
-    private void setupAwtWindow() {
-        frame = new Frame("Classic 3D Map Editor (Omen-ish)");
-        frame.setLayout(new BorderLayout());
+    @FunctionalInterface
+    private interface Action {
+        void run() throws Exception;
+    }
 
-        // Top hint row
-        frame.add(buildTopBar(), BorderLayout.NORTH);
+    private JButton button(String text, Action action) {
+        JButton button = new JButton(text);
+        button.addActionListener(e -> submit(action));
+        return button;
+    }
 
-        // ----- CENTER: 2D and 3D views in tabs -----
-        map2D = new Map2DPanel();
-        JPanel twoD = new JPanel(new BorderLayout());
-        twoD.add(new JScrollPane(map2D), BorderLayout.CENTER);
-        twoD.add(buildOmenBottomBar(), BorderLayout.SOUTH);
-
+    private void buildUi() {
+        frame = new JFrame("Classic World Editor");
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.addWindowListener(
+                new WindowAdapter() {
+                    public void windowClosing(WindowEvent e) {
+                        submit(
+                                () -> {
+                                    if (confirmDiscard()) running = false;
+                                });
+                    }
+                });
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        bar.add(button("New", this::newWorld));
+        bar.add(button("Open", this::open));
+        bar.add(button("Save", () -> save(false)));
+        bar.add(button("Save as", () -> save(true)));
+        bar.add(button("Undo", document::undo));
+        bar.add(button("Redo", document::redo));
+        bar.add(button("Test / Stop", this::toggleSimulation));
+        bar.add(
+                button(
+                        "Reset test",
+                        () -> {
+                            document.stopSimulation();
+                            toggleSimulation();
+                        }));
+        bar.add(button("Frame spawn", this::resetCamera));
+        frame.add(bar, BorderLayout.NORTH);
         canvas = new Canvas();
-        canvas.setPreferredSize(new Dimension(980, 800));
-        JPanel threeD = new JPanel(new BorderLayout());
-        threeD.add(canvas, BorderLayout.CENTER);
-
+        canvas.setPreferredSize(new Dimension(920, 660));
+        installInput();
+        slice =
+                new JPanel() {
+                    protected void paintComponent(Graphics graphics) {
+                        super.paintComponent(graphics);
+                        // The slice image is produced on the world-owning thread.
+                        if (sliceImage != null)
+                            graphics.drawImage(sliceImage, 0, 0, getWidth(), getHeight(), null);
+                    }
+                };
+        slice.addMouseListener(
+                new MouseAdapter() {
+                    public void mousePressed(MouseEvent e) {
+                        int px = e.getX(),
+                                py = e.getY(),
+                                width = slice.getWidth(),
+                                height = slice.getHeight();
+                        submit(
+                                () -> {
+                                    int bx = (int) x - 32 + px * 64 / Math.max(1, width);
+                                    int bz = (int) z - 32 + py * 64 / Math.max(1, height);
+                                    edit(
+                                            () ->
+                                                    paint(
+                                                            bx,
+                                                            viewLayer,
+                                                            bz,
+                                                            e.getButton() == MouseEvent.BUTTON3
+                                                                    ? 0
+                                                                    : block));
+                                });
+                    }
+                });
         JTabbedPane views = new JTabbedPane();
-        views.add("2D", twoD);
-        views.add("3D", threeD);
-        frame.add(views, BorderLayout.CENTER);
+        views.addTab("3D world", canvas);
+        JPanel slices = new JPanel(new BorderLayout());
+        slices.add(slice);
+        layer = spinner(16, 0, 2047, 1);
+        layer.addChangeListener(
+                e -> submit(() -> viewLayer = ((Number) layer.getValue()).intValue()));
+        slices.add(layer, BorderLayout.SOUTH);
+        views.addTab("2D slice", slices);
+        JPanel sidebar = new JPanel();
+        sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
+        sidebar.setPreferredSize(new Dimension(285, 660));
+        JComboBox<String> tools =
+                new JComboBox<>(new String[] {"Place", "Remove", "Pick", "Select", "Mob"});
+        tools.addActionListener(e -> tool = (String) tools.getSelectedItem());
+        sidebar.add(new JLabel("Edit tool"));
+        sidebar.add(tools);
+        JSpinner size = spinner(1, 1, 8, 1);
+        size.addChangeListener(e -> brush = ((Number) size.getValue()).intValue());
+        sidebar.add(row("Brush radius", size));
+        JTextField search = new JTextField();
+        sidebar.add(row("Find block", search));
+        JList<String> blocks = new JList<>(palette);
+        blocks.setVisibleRowCount(8);
+        blocks.addListSelectionListener(
+                e -> {
+                    String value = blocks.getSelectedValue();
+                    if (value != null)
+                        block = Integer.parseInt(value.substring(0, value.indexOf(' ')));
+                });
+        search.getDocument()
+                .addDocumentListener(
+                        new javax.swing.event.DocumentListener() {
+                            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                                filterBlocks(search.getText());
+                            }
 
-        // Right: Omen-like control stack
-        rightPanel = buildOmenRightSidebar();   // <— use the Omen sidebar
-        frame.add(rightPanel, BorderLayout.EAST);
+                            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                                filterBlocks(search.getText());
+                            }
 
+                            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                                filterBlocks(search.getText());
+                            }
+                        });
+        filterBlocks("");
+        sidebar.add(new JScrollPane(blocks));
+        sidebar.add(button("Fill selection", () -> edit(() -> fill(block))));
+        sidebar.add(button("Clear selection", () -> edit(() -> fill(0))));
+        sidebar.add(new JLabel("Mobs"));
+        String[] names = MobRegistry.displayNames();
+        Arrays.sort(names);
+        JComboBox<String> types = new JComboBox<>(names);
+        sidebar.add(types);
+        sidebar.add(
+                button(
+                        "Add at camera",
+                        () ->
+                                edit(
+                                        () -> {
+                                            Mob mob =
+                                                    MobRegistry.create(
+                                                            MobRegistry.idOfName(
+                                                                    (String)
+                                                                            types
+                                                                                    .getSelectedItem()),
+                                                            document.level(),
+                                                            x,
+                                                            y,
+                                                            z);
+                                            if (mob == null)
+                                                throw new IOException("Cannot create mob");
+                                            document.level().addEntity(mob);
+                                            selected = mob;
+                                        })));
+        entities = new JList<>(mobList);
+        entities.setVisibleRowCount(5);
+        entities.setCellRenderer(
+                (list, mob, index, selected, focus) -> {
+                    JLabel label = new JLabel(mob.getClass().getSimpleName());
+                    label.setOpaque(true);
+                    label.setBackground(selected ? new Color(190, 215, 255) : Color.WHITE);
+                    return label;
+                });
+        entities.addListSelectionListener(
+                e -> {
+                    if (!updatingList && !e.getValueIsAdjusting()) {
+                        Mob value = entities.getSelectedValue();
+                        commands.add(
+                                () -> {
+                                    selected = value;
+                                    refreshProperties();
+                                });
+                    }
+                });
+        sidebar.add(new JScrollPane(entities));
+        mx = spinner(0, -30000000, 30000000, .25);
+        my = spinner(0, -2048, 4096, .25);
+        mz = spinner(0, -30000000, 30000000, .25);
+        rotation = spinner(0, -360, 360, 5);
+        health = spinner(20, 1, 100000, 1);
+        sidebar.add(row("X", mx));
+        sidebar.add(row("Y", my));
+        sidebar.add(row("Z", mz));
+        sidebar.add(row("Yaw", rotation));
+        sidebar.add(row("Health", health));
+        JButton apply = new JButton("Apply mob properties");
+        apply.addActionListener(
+                e -> {
+                    float px = number(mx), py = number(my), pz = number(mz), rot = number(rotation);
+                    int hp = (int) number(health);
+                    submit(
+                            () ->
+                                    edit(
+                                            () -> {
+                                                if (selected == null) return;
+                                                selected.moveTo(px, py, pz, rot, selected.xRot);
+                                                selected.yBodyRot = selected.yBodyRotO = rot;
+                                                selected.health = hp;
+                                            }));
+                });
+        sidebar.add(apply);
+        sidebar.add(button("Duplicate mob", () -> edit(this::duplicateMob)));
+        sidebar.add(
+                button(
+                        "Delete mob",
+                        () ->
+                                edit(
+                                        () -> {
+                                            if (selected != null) {
+                                                document.level().removeEntity(selected);
+                                                selected = null;
+                                            }
+                                        })));
+        sidebar.add(button("World settings", this::settings));
+        JScrollPane controls = new JScrollPane(sidebar);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, views, controls);
+        split.setResizeWeight(1);
+        frame.add(split);
+        status = new JLabel("WASD move | space / C vertical | right drag look | left drag edit");
+        frame.add(status, BorderLayout.SOUTH);
         frame.pack();
+        frame.setMinimumSize(new Dimension(900, 600));
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-        frame.addWindowListener(new WindowAdapter() {
-            @Override public void windowClosing(WindowEvent e) {
-                try { Display.destroy(); } catch (Throwable ignored) {}
-                System.exit(0);
-            }
-        });
     }
 
+    private volatile java.awt.image.BufferedImage sliceImage;
 
-    private Component buildTopBar() {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        JLabel lb = new JLabel("Left: select; Delete: remove; Right: paint; Wheel: Block ID | Tab: toggle creative/survival | F5 save | F6 reload");
-        row.add(lb);
-        JButton pick = new JButton("Pick Block ID…");
-        pick.addActionListener(e -> {
-            String s = JOptionPane.showInputDialog(frame, "Block ID (0..255)", selectedBlockId);
-            if (s != null) try {
-                int v = Integer.parseInt(s.trim());
-                if (v < 0 || v > 255) throw new NumberFormatException();
-                setSelectedBlock(v);
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(frame, "Invalid ID");
-            }
-        });
-        row.add(pick);
-        return row;
-    }
-
-    // ---------- Sidebar ----------
-    private JPanel buildRightSidebar() {
-        JPanel side = new JPanel(new BorderLayout());
-        side.setPreferredSize(new Dimension(360, 800));
-
-        // Header status
-        JPanel status = new JPanel(new GridLayout(3,1));
-        status.setBorder(new TitledBorder("Status"));
-        lblActive   = new JLabel();
-        lblSelected = new JLabel();
-        lblPos      = new JLabel();
-        status.add(lblActive);
-        status.add(lblSelected);
-        status.add(lblPos);
-        side.add(status, BorderLayout.NORTH);
-        updateStatusLabels();
-
-        // Middle: block palette + tabs
-        JPanel mid = new JPanel(new BorderLayout(0,8));
-
-        // Block palette grid
-        JPanel palette = makePalettePanel();
-        palette.setBorder(new TitledBorder("Block Types"));
-        mid.add(new JScrollPane(palette,
-                ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
-                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED),
-                BorderLayout.NORTH);
-
-        // Tabs: Brush / View / Selection / LoadSave
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.add("Brush", makeBrushTab());
-        tabs.add("View",  makeViewTab());
-        tabs.add("Selection", makeSelectionTab());
-        tabs.add("Load/Save", makeIoTab());
-        mid.add(tabs, BorderLayout.CENTER);
-
-        side.add(mid, BorderLayout.CENTER);
-        return side;
-    }
-
-    // ----- Palette -----
-    private static final int[] DEFAULT_IDS = {
-            1,2,3,4,5,12,13,14,15,16,
-            17,18,19,20,21,22,23,24,35,41,
-            42,45,46,47,48,49
-    };
-
-    private JPanel makePalettePanel() {
-        JPanel grid = new JPanel(new GridLayout(0, 10, 4, 4));
-        ButtonGroup group = new ButtonGroup();
-
-        for (int id : DEFAULT_IDS) {
-            JToggleButton b = new JToggleButton(blockIcon(id));
-            b.setToolTipText(id + " : " + blockName(id));
-            if (id == selectedBlockId) b.setSelected(true);
-            b.addActionListener(e -> setSelectedBlock(id));
-            group.add(b);
-            grid.add(b);
+    private void filterBlocks(String query) {
+        palette.clear();
+        for (int id = 1; id < Block.blocks.length; id++) {
+            Block value = Block.blocks[id];
+            if (value == null) continue;
+            String label = id + " " + blockName(id);
+            if (label.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT)))
+                palette.addElement(label);
         }
-        // + custom field
-        JPanel tail = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        JTextField tf = new JTextField(Integer.toString(selectedBlockId), 3);
-        JButton go = new JButton("Set");
-        go.addActionListener(e -> {
-            try { setSelectedBlock(Integer.parseInt(tf.getText().trim())); }
-            catch (Exception ignored) {}
-        });
-        tail.add(new JLabel("ID:")); tail.add(tf); tail.add(go);
-        JPanel outer = new JPanel(new BorderLayout());
-        outer.add(grid, BorderLayout.CENTER);
-        outer.add(tail, BorderLayout.SOUTH);
-        return outer;
-    }
-
-    private void setSelectedBlock(int id) {
-        selectedBlockId = Math.max(0, Math.min(255, id));
-        updateStatusLabels();
     }
 
     private static String blockName(int id) {
-        try { return (Block.blocks[id] != null ? Block.blocks[id].name : "?"); }
-        catch (Throwable t) { return "?"; }
-    }
-
-    private static Icon blockIcon(int id) {
-        int rgb = colorFor(id);
-        BufferedImage img = new BufferedImage(24, 24, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = img.createGraphics();
-        g.setColor(new Color(rgb | 0xFF000000, true));
-        g.fillRect(2,2,20,20);
-        g.setColor(Color.BLACK); g.drawRect(2,2,20,20);
-        g.dispose();
-        return new ImageIcon(img);
-    }
-
-    // ----- Brush tab -----
-    private JPanel makeBrushTab() {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-
-        // size
-        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JSlider size = new JSlider(1, 32, brushSize);
-        size.setPaintTicks(true); size.setMajorTickSpacing(8); size.setMinorTickSpacing(1);
-        size.addChangeListener(e -> brushSize = Math.max(1, size.getValue()));
-        row1.add(new JLabel("Size:")); row1.add(size);
-        p.add(row1);
-
-        // 2D/3D
-        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JRadioButton r2d = new JRadioButton("2D disc", !brush3D);
-        JRadioButton r3d = new JRadioButton("3D cube", brush3D);
-        ButtonGroup g = new ButtonGroup();
-        g.add(r2d); g.add(r3d);
-        r2d.addActionListener(e -> brush3D = false);
-        r3d.addActionListener(e -> brush3D = true);
-        row2.add(new JLabel("Mode:")); row2.add(r2d); row2.add(r3d);
-        p.add(row2);
-
-        JLabel hint = new JLabel("Right-drag paints with the brush.");
-        hint.setForeground(new Color(0,120,0));
-        p.add(hint);
-
-        return p;
-    }
-
-    // ----- View tab -----
-    private JPanel makeViewTab() {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-
-        // plane
-        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        ButtonGroup grp = new ButtonGroup();
-        JRadioButton bxz = new JRadioButton("XZ (top)", plane == Plane.XZ);
-        JRadioButton bxy = new JRadioButton("XY (front)", plane == Plane.XY);
-        JRadioButton byz = new JRadioButton("YZ (side)", plane == Plane.YZ);
-        grp.add(bxz); grp.add(bxy); grp.add(byz);
-        row1.add(new JLabel("Plane:")); row1.add(bxz); row1.add(bxy); row1.add(byz);
-        p.add(row1);
-
-        bxz.addActionListener(e -> { plane = Plane.XZ; setTopDownForPlane(); });
-        bxy.addActionListener(e -> { plane = Plane.XY; setTopDownForPlane(); });
-        byz.addActionListener(e -> { plane = Plane.YZ; setTopDownForPlane(); });
-
-        // layer
-        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        SpinnerNumberModel m = new SpinnerNumberModel(layerIndex, 0, 255, 1);
-        JSpinner sp = new JSpinner(m);
-        sp.addChangeListener(e -> layerIndex = (Integer) sp.getValue());
-        row2.add(new JLabel("Layer:")); row2.add(sp);
-        p.add(row2);
-
-        // FOV + radius (quick mirrors of fields)
-        JPanel row3 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JSlider fovS = new JSlider(30, 110, (int) fov);
-        fovS.addChangeListener(e -> fov = fovS.getValue());
-        row3.add(new JLabel("FOV:")); row3.add(fovS);
-        p.add(row3);
-
-        JPanel row4 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JSlider radXZ = new JSlider(16, 160, drawRadiusXZ);
-        JSlider radY  = new JSlider(8, 96, drawRadiusY);
-        radXZ.addChangeListener(e -> drawRadiusXZ = radXZ.getValue());
-        radY.addChangeListener(e -> drawRadiusY = radY.getValue());
-        row4.add(new JLabel("Draw R XZ:")); row4.add(radXZ);
-        row4.add(new JLabel(" Y:")); row4.add(radY);
-        p.add(row4);
-
-        JCheckBox snap = new JCheckBox("Top-down camera", topDownSnap);
-        snap.addActionListener(e -> { topDownSnap = snap.isSelected(); setTopDownForPlane(); });
-        p.add(snap);
-
-        return p;
-    }
-
-    private void setTopDownForPlane() {
-        if (!topDownSnap) return;
-        // snap camera orientation to a useful angle for each plane
-        switch (plane) {
-            case XZ: pitch = -90; yaw = 180; break; // look straight down
-            case XY: pitch =   0; yaw = 180; break; // look -Z
-            case YZ: pitch =   0; yaw =  90; break; // look +X
-        }
-        // also nudge camera inside bounds
-        if (active != null) {
-            camX = Math.max(1, Math.min(active.width - 2, camX));
-            camY = Math.max(1, Math.min(active.height - 2, camY));
-            camZ = Math.max(1, Math.min(active.depth - 2, camZ));
-        }
-    }
-
-    // ----- Selection tab (visual box is rendered in GL; here are actions) -----
-    private JPanel makeSelectionTab() {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-
-        JButton fill = new JButton("Fill selection with Block");
-        fill.addActionListener(e -> applyFillSelection(selectedBlockId));
-        JButton clear = new JButton("Clear selection");
-        clear.addActionListener(e -> applyFillSelection(0));
-
-        p.add(fill);
-        p.add(clear);
-        JLabel hint = new JLabel("Tip: Left click twice to define selection corners.");
-        hint.setForeground(new Color(0,0,130));
-        p.add(hint);
-        return p;
-    }
-
-    // ----- IO tab -----
-    private JPanel makeIoTab() {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-
-        JButton bNew = new JButton("New Map…");
-        bNew.addActionListener(e -> dialogNewMap());
-
-        JButton bLoad = new JButton("Reload (F6)");
-        bLoad.addActionListener(e -> reloadBoth());
-
-        JButton bSave = new JButton("Save (F5)");
-        bSave.addActionListener(e -> saveBoth());
-
-        JButton bExport = new JButton("Export Top-Down PNG");
-        bExport.addActionListener(e -> exportTopdownPNG());
-
-        JButton bToggle = new JButton("Toggle Creative/Survival (Tab)");
-        bToggle.addActionListener(e -> {
-            editingCreative = !editingCreative;
-            setActive(editingCreative ? levelCreative : levelSurvival);
-        });
-
-        p.add(bNew); p.add(Box.createVerticalStrut(6));
-        p.add(bLoad); p.add(bSave); p.add(Box.createVerticalStrut(6));
-        p.add(bExport); p.add(Box.createVerticalStrut(6));
-        p.add(bToggle);
-        return p;
-    }
-
-    private void dialogNewMap() {
-        JTextField fx = new JTextField("128", 5);
-        JTextField fy = new JTextField("64", 5);
-        JTextField fz = new JTextField("128", 5);
-        JPanel panel = new JPanel(new GridLayout(0,2,6,4));
-        panel.add(new JLabel("Width (X):"));  panel.add(fx);
-        panel.add(new JLabel("Height (Y):")); panel.add(fy);
-        panel.add(new JLabel("Depth (Z):"));  panel.add(fz);
-        if (JOptionPane.showConfirmDialog(frame, panel, "New Map", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+        for (java.lang.reflect.Field field : Block.class.getFields()) {
             try {
-                int w = Math.max(8, Integer.parseInt(fx.getText().trim()));
-                int h = Math.max(8, Integer.parseInt(fy.getText().trim()));
-                int d = Math.max(8, Integer.parseInt(fz.getText().trim()));
-                Level fresh = new Level();
-                fresh.setData(w, h, d, new byte[w*h*d]);
-                fresh.xSpawn = w/2; fresh.ySpawn = h/2; fresh.zSpawn = d/2;
-                if (editingCreative) levelCreative = fresh; else levelSurvival = fresh;
-                setActive(fresh);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(frame, "Invalid sizes.");
+                if (field.getType() == Block.class && field.get(null) == Block.blocks[id])
+                    return field.getName().replace('_', ' ');
+            } catch (ReflectiveOperationException ignored) {
             }
         }
+        return Block.blocks[id].getClass().getSimpleName();
     }
 
-    private void exportTopdownPNG() {
-        try {
-            if (active == null) return;
-            int w = active.width, d = active.depth;
-            BufferedImage img = new BufferedImage(w, d, BufferedImage.TYPE_INT_ARGB);
-            for (int z = 0; z < d; z++) {
-                for (int x = 0; x < w; x++) {
-                    // simple: find highest non-air column
-                    int y = active.height - 1;
-                    int id = 0;
-                    for (; y >= 0; y--) { id = active.getTile(x,y,z); if (id != 0) break; }
-                    int rgb = (id == 0 ? 0x00000000 : 0xFF000000 | colorFor(id));
-                    img.setRGB(x, d - 1 - z, rgb); // origin top-left like the screenshot
-                }
-            }
-            File out = new File(appDir(), "classic_topdown.png");
-            javax.imageio.ImageIO.write(img, "png", out);
-            JOptionPane.showMessageDialog(frame, "Exported:\n" + out.getAbsolutePath());
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(frame, "Export failed:\n" + ex, "Error", JOptionPane.ERROR_MESSAGE);
-        }
+    private static JSpinner spinner(double value, double min, double max, double step) {
+        return new JSpinner(new SpinnerNumberModel(value, min, max, step));
     }
 
-    private void createDisplayOn(Canvas parent) throws Exception {
-        Display.setParent(parent);
-        Display.setDisplayMode(new DisplayMode(parent.getWidth(), parent.getHeight()));
-        Display.setTitle("Classic 3D Map Editor");
-        Display.create();
-        Keyboard.create();
-        Mouse.create();
-        initGL();
+    private static JPanel row(String text, JComponent component) {
+        JPanel panel = new JPanel(new BorderLayout(4, 2));
+        panel.add(new JLabel(text), BorderLayout.WEST);
+        panel.add(component);
+        panel.setMaximumSize(new Dimension(1000, 32));
+        return panel;
     }
 
-    // ---------- GL ----------
-    private void initGL() {
-        GL11.glViewport(0,0,canvas.getWidth(),canvas.getHeight());
-        GL11.glMatrixMode(GL11.GL_PROJECTION); GL11.glLoadIdentity();
-        GLU.gluPerspective(fov, canvas.getWidth()/(float)canvas.getHeight(), 0.1f, 500.0f);
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-        GL11.glEnable(GL11.GL_DEPTH_TEST);
-        GL11.glDisable(GL11.GL_CULL_FACE);
-        GL11.glShadeModel(GL11.GL_FLAT);
+    private static float number(JSpinner spinner) {
+        return ((Number) spinner.getValue()).floatValue();
     }
 
-    // ---------- Loop ----------
-    private void loop() {
-        long last = System.nanoTime();
-        while (!Display.isCloseRequested()) {
-            long now = System.nanoTime();
-            float dt = (now - last) / 1_000_000_000f;
-            last = now;
-
-            handleInput(dt);
-            render();
-
-            Display.update();
-            Display.sync(60);
-        }
+    private void installInput() {
+        canvas.setFocusable(true);
+        KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .addPropertyChangeListener(
+                        "focusOwner",
+                        event -> {
+                            if (event.getNewValue() instanceof Component focused
+                                    && SwingUtilities.isDescendingFrom(focused, frame)) {
+                                viewportInputEnabled = focused == canvas;
+                            }
+                        });
     }
 
-    // ---------- I/O ----------
-    private void reloadBoth() {
-        levelCreative = safeLoad(creativeFile());
-        if (levelCreative == null) {
-            levelCreative = new Level();
-            byte[] empty = new byte[64*32*64];
-            levelCreative.setData(64, 32, 64, empty);
-        }
-        levelSurvival = safeLoad(survivalFile());
-        if (levelSurvival == null) {
-            levelSurvival = new Level();
-            byte[] empty = new byte[64*32*64];
-            levelSurvival.setData(64, 32, 64, empty);
-        }
-        setActive(editingCreative ? levelCreative : levelSurvival);
+    private boolean viewportActive() {
+        return viewportInputEnabled && !dialogOpen && canvas.isShowing() && Display.isActive();
     }
 
-    private Level safeLoad(File f) {
-        try { if (!f.isFile()) return null; return io.load(f); }
-        catch (Throwable t) { t.printStackTrace(); return null; }
-    }
-
-    private void saveBoth() {
-        try {
-            io.save(levelCreative, creativeFile());
-            io.save(levelSurvival, survivalFile());
-            System.out.println("[save] wrote: " + creativeFile().getAbsolutePath());
-            System.out.println("[save] wrote: " + survivalFile().getAbsolutePath());
-            JOptionPane.showMessageDialog(frame, "Saved both files:\n" +
-                    creativeFile().getAbsolutePath() + "\n" +
-                    survivalFile().getAbsolutePath());
-        } catch (Throwable t) {
-            t.printStackTrace();
-            JOptionPane.showMessageDialog(frame, "Save failed:\n" + t, "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private void setActive(Level lvl) {
-        active = lvl;
-        camX = active.xSpawn + 0.5f;
-        camY = Math.max(8, active.ySpawn + 6);
-        camZ = active.zSpawn + 0.5f;
-        layerIndex = Math.min(active.height - 1, Math.max(0, active.ySpawn));
-        updateStatusLabels();
-    }
-
-    private void updateStatusLabels() {
-        if (lblActive != null) {
-            lblActive.setText(editingCreative ? "Active: levelc.dat (Creative)" :
-                                               "Active: levels.dat (Survival)");
-        }
-        if (lblSelected != null) {
-            lblSelected.setText("Selected Block: " + selectedBlockId + " (" + blockName(selectedBlockId) + ")");
-        }
-        if (lblPos != null) {
-            lblPos.setText("Cam: " + (int)camX + "," + (int)camY + "," + (int)camZ);
-        }
-    }
-
-    // ---------- Input ----------
-    private void handleInput(float dt) {
-        if (Keyboard.isKeyDown(Keyboard.KEY_ESCAPE)) {
-            Display.destroy(); frame.dispose(); System.exit(0);
-        }
-
+    private void pollInput() {
+        boolean active = !dialogOpen && canvas.isShowing() && Display.isActive();
         while (Keyboard.next()) {
-            if (!Keyboard.getEventKeyState()) continue;
-            int k = Keyboard.getEventKey();
-
-            // quick IDs
-            switch (k) {
-                case Keyboard.KEY_0: setSelectedBlock(20); break;
-                case Keyboard.KEY_1: setSelectedBlock(1);  break;
-                case Keyboard.KEY_2: setSelectedBlock(2);  break;
-                case Keyboard.KEY_3: setSelectedBlock(3);  break;
-                case Keyboard.KEY_4: setSelectedBlock(4);  break;
-                case Keyboard.KEY_5: setSelectedBlock(5);  break;
-                case Keyboard.KEY_6: setSelectedBlock(12); break;
-                case Keyboard.KEY_7: setSelectedBlock(13); break;
-                case Keyboard.KEY_8: setSelectedBlock(41); break;
-                case Keyboard.KEY_9: setSelectedBlock(42); break;
-            }
-
-            if (k == Keyboard.KEY_TAB) { editingCreative = !editingCreative; setActive(editingCreative ? levelCreative : levelSurvival); }
-            if (k == Keyboard.KEY_F5) saveBoth();
-            if (k == Keyboard.KEY_F6) reloadBoth();
-
-            if (k == Keyboard.KEY_RETURN) doEdit(true);   // place once
-            if (k == Keyboard.KEY_DELETE) doEdit(false);  // remove once
-        }
-
-        // mouse wheel → change selected block id
-        int dw = Mouse.getDWheel();
-        if (dw != 0) setSelectedBlock(selectedBlockId + (dw > 0 ? 1 : -1));
-
-        // LOOK: Middle mouse OR RMB+Alt
-        boolean lookMode = Mouse.isButtonDown(2) || (Mouse.isButtonDown(1) && Keyboard.isKeyDown(Keyboard.KEY_LMENU));
-        if (lookMode) {
-            yaw   += Mouse.getDX() * 0.25f;
-            pitch -= Mouse.getDY() * 0.25f;
-            if (pitch < -89) pitch = -89;
-            if (pitch >  89) pitch =  89;
-        } else {
-            // drain deltas
-            Mouse.getDX(); Mouse.getDY();
-        }
-
-        // fly
-        float speed = 12f;
-        if (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) speed *= 0.25f;
-        if (Keyboard.isKeyDown(Keyboard.KEY_LMENU))  speed *= 3.0f;
-
-        float mx = 0, my = 0, mz = 0;
-        if (Keyboard.isKeyDown(Keyboard.KEY_W)) mz -= 1;
-        if (Keyboard.isKeyDown(Keyboard.KEY_S)) mz += 1;
-        if (Keyboard.isKeyDown(Keyboard.KEY_A)) mx -= 1;
-        if (Keyboard.isKeyDown(Keyboard.KEY_D)) mx += 1;
-        if (Keyboard.isKeyDown(Keyboard.KEY_SPACE))    my += 1;
-        if (Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)) my -= 1;
-
-        if (mx != 0 || my != 0 || mz != 0) {
-            float yawRad = (float) Math.toRadians(yaw);
-            float sin = MathHelper.sin(yawRad);
-            float cos = MathHelper.cos(yawRad);
-            camX += (mx * cos + mz * sin) * speed * dt;
-            camZ += (-mx * sin + mz * cos) * speed * dt;
-            camY += my * speed * dt;
-            updateStatusLabels();
-        }
-
-        if (active == null) return;
-
-        // --- Mouse actions ---
-        boolean leftNow  = Mouse.isButtonDown(0);
-        boolean rightNow = Mouse.isButtonDown(1);
-        boolean ctrlHeld = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
-
-        // Ctrl+LMB = selection corners; plain LMB drag = erase
-        if (leftNow) {
-            if (ctrlHeld && !leftPrev) {
-                int[] p = pickBlockFromCursor();
-                if (!selecting) { selAx=p[0]; selAy=p[1]; selAz=p[2]; selecting=true; hasSelection=false; }
-                else            { selBx=p[0]; selBy=p[1]; selBz=p[2]; selecting=false; hasSelection=true; }
-            } else {
-                doEdit(false); // erase while dragging
+            if (!active || !viewportInputEnabled || !Keyboard.getEventKeyState()) continue;
+            boolean control =
+                    Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+                            || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+            if (!control) continue;
+            switch (Keyboard.getEventKey()) {
+                case Keyboard.KEY_O -> submit(this::open);
+                case Keyboard.KEY_S -> {
+                    boolean saveAs =
+                            Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
+                                    || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+                    submit(() -> save(saveAs));
+                }
+                case Keyboard.KEY_Z -> submit(document::undo);
+                case Keyboard.KEY_Y -> submit(document::redo);
             }
         }
-        leftPrev = leftNow;
-
-        // RMB paints (unless holding Alt, which switched to lookMode)
-        if (rightNow && !Keyboard.isKeyDown(Keyboard.KEY_LMENU)) {
-            doEdit(true);
+        int dx = Mouse.getDX(), dy = Mouse.getDY(), wheel = Mouse.getDWheel();
+        mouseX = Mouse.getX();
+        mouseY = canvas.getHeight() - 1 - Mouse.getY();
+        if (active && viewportInputEnabled && Mouse.isButtonDown(1)) {
+            yaw += dx * .3f;
+            pitch = Math.max(-89, Math.min(89, pitch - dy * .3f));
         }
-        rightPrev = rightNow;
-    }
-
-
-    private static final float REACH = 120f;
-
-    /** Returns {x,y,z} of the block under the cursor (snaps to a cell). */
-    private int[] pickBlockFromCursor() {
-        // Build the same ray math used by doEdit()
-        float yawR   = (float) Math.toRadians(yaw);
-        float pitchR = (float) Math.toRadians(pitch);
-        float cx = MathHelper.cos(-yawR - (float)Math.PI);
-        float sx = MathHelper.sin(-yawR - (float)Math.PI);
-        float cy = -MathHelper.cos(-pitchR);
-        float sy = MathHelper.sin(-pitchR);
-        float dx = sx * cy, dy = sy, dz = cx * cy;
-
-        Vec3D start = new Vec3D(camX, camY, camZ);
-        Vec3D end   = new Vec3D(camX + dx*REACH, camY + dy*REACH, camZ + dz*REACH);
-
-        MovingObjectPosition hit = active.clip(new Vec3D(start.x, start.y, start.z),
-                                               new Vec3D(end.x,   end.y,   end.z));
-        if (hit != null) return new int[]{hit.x, hit.y, hit.z};
-
-        float x = start.x, y = start.y, z = start.z;
-        int bx = (int)Math.floor(x), by = (int)Math.floor(y), bz = (int)Math.floor(z);
-        float step = 0.25f, dist = 0f;
-        while (dist < REACH) {
-            x += dx*step; y += dy*step; z += dz*step; dist += step;
-            int ix = (int)Math.floor(x), iy = (int)Math.floor(y), iz = (int)Math.floor(z);
-            if (!active.isInBounds(ix, iy, iz)) break;
-            bx = ix; by = iy; bz = iz;
-        }
-        return new int[]{bx, by, bz};
-    }
- // --- Omen-like 2D view state ---
-    private enum ViewPlane { XY, XZ, YZ }
-    private ViewPlane viewPlane = ViewPlane.XY;
-    private int viewLayer = 31;        // “Viewing layer Z=31 in the X-Y plane”
-    private int viewZoom  = 4;         // pixels per block (2..16 is reasonable)
-    private boolean brushRound = false;
-    private boolean brushSquare = true;
-    private boolean mode2D = true;     // 2D mode in Brush tab; 3D paints cube
-
-    // hook to the 2D canvas (created below)
-    private Map2DPanel map2D;
-
- // call this instead of buildRightSidebar() in setupAwtWindow()
-    private JPanel buildOmenRightSidebar() {
-        JPanel side = new JPanel(new BorderLayout());
-        side.setPreferredSize(new Dimension(360, 800));
-
-        // Block palette (reuse your makePalettePanel + status)
-        JPanel status = new JPanel(new GridLayout(3,1));
-        status.setBorder(new javax.swing.border.TitledBorder("Status"));
-        lblActive   = new JLabel();
-        lblSelected = new JLabel();
-        lblPos      = new JLabel();
-        status.add(lblActive); status.add(lblSelected); status.add(lblPos);
-        side.add(status, BorderLayout.NORTH);
-
-        JPanel palette = makePalettePanel();
-        palette.setBorder(new javax.swing.border.TitledBorder("Block Types"));
-        side.add(new JScrollPane(palette,
-            ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
-            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED), BorderLayout.CENTER);
-
-        // Tabs
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.add("Brush", makeOmenBrushTab());
-        tabs.add("Flood Fill", makeOmenFloodTab());
-        tabs.add("Prefabs", new JPanel());     // stub
-        tabs.add("Selection", makeSelectionTab());
-        tabs.add("Info", makeInfoTab());
-        side.add(tabs, BorderLayout.SOUTH);
-
-        updateStatusLabels();
-        return side;
-    }
-    private JPanel makeOmenBrushTab() {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-
-        // Size row: Omen-like slider + quick buttons
-        JSlider size = new JSlider(1, 32, brushSize);
-        size.setPaintTicks(true); size.setMajorTickSpacing(16); size.setMinorTickSpacing(1);
-        size.addChangeListener(e -> brushSize = Math.max(1, size.getValue()));
-        p.add(labeled("Size", size));
-
-        // 2D / 3D
-        JRadioButton r2d = new JRadioButton("2d mode", true);
-        JRadioButton r3d = new JRadioButton("3d mode", false);
-        ButtonGroup g1 = new ButtonGroup(); g1.add(r2d); g1.add(r3d);
-        r2d.addActionListener(e -> mode2D = true);
-        r3d.addActionListener(e -> mode2D = false);
-        JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT)); modeRow.add(r2d); modeRow.add(r3d);
-        p.add(modeRow);
-
-        // Shape
-        JRadioButton round = new JRadioButton("Round Brush", false);
-        JRadioButton square = new JRadioButton("Square Brush", true);
-        ButtonGroup g2 = new ButtonGroup(); g2.add(round); g2.add(square);
-        round.addActionListener(e -> { brushRound=true; brushSquare=false; });
-        square.addActionListener(e -> { brushRound=false; brushSquare=true; });
-        JPanel shapeRow = new JPanel(new FlowLayout(FlowLayout.LEFT)); shapeRow.add(round); shapeRow.add(square);
-        p.add(shapeRow);
-
-        return p;
-    }
-
-    private JPanel makeOmenFloodTab() {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-        JButton flood = new JButton("Flood Fill (current plane)");
-        flood.addActionListener(e -> floodFillCurrentPlane());
-        p.add(flood);
-        return p;
-    }
-    private void floodFillCurrentPlane() {
-        if (active == null) return;
-        // start at center of panel
-        int cx, cy;
-        cx = Math.max(0, Math.min(map2D.getWidth()/Math.max(1,viewZoom)/2, (viewPlane==ViewPlane.YZ?active.depth:active.width)-1));
-        cy = Math.max(0, Math.min(map2D.getHeight()/Math.max(1,viewZoom)/2, (viewPlane==ViewPlane.XZ?active.depth:active.height)-1));
-
-        // convert canvas (cx,cy) -> level (x,y,z)
-        int sx=0, sy=0, sz=0;
-        switch (viewPlane) {
-            case XY: sx=cx; sy=cy; sz=viewLayer; break;
-            case XZ: sx=cx; sy=viewLayer; sz=active.depth-1-cy; break;
-            case YZ: sx=viewLayer; sy=cy; sz=active.depth-1-cx; break;
-        }
-        if (!active.isInBounds(sx,sy,sz)) return;
-
-        final int target = active.getTile(sx,sy,sz);
-        if (target == selectedBlockId) return;
-
-        java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<>();
-        q.add(new int[]{sx,sy,sz});
-        while (!q.isEmpty()) {
-            int[] v = q.poll();
-            int x=v[0], y=v[1], z=v[2];
-            if (!active.isInBounds(x,y,z)) continue;
-            if (active.getTile(x,y,z) != target) continue;
-            active.setTile(x,y,z, selectedBlockId);
-            // 4-neighbors in plane (or 6 if XY and flood in 3D; we keep plane)
-            if (viewPlane==ViewPlane.XY) { q.add(new int[]{x+1,y,z}); q.add(new int[]{x-1,y,z}); q.add(new int[]{x,y+1,z}); q.add(new int[]{x,y-1,z}); }
-            if (viewPlane==ViewPlane.XZ) { q.add(new int[]{x+1,y,z}); q.add(new int[]{x-1,y,z}); q.add(new int[]{x,y,z+1}); q.add(new int[]{x,y,z-1}); }
-            if (viewPlane==ViewPlane.YZ) { q.add(new int[]{x,y+1,z}); q.add(new int[]{x,y-1,z}); q.add(new int[]{x,y,z+1}); q.add(new int[]{x,y,z-1}); }
-        }
-        map2D.repaint();
-    }
- // Save a single layer from current plane as PNG
-    private void exportLayerPNG(File out) throws Exception {
-        if (active == null) return;
-        int W = (viewPlane==ViewPlane.YZ) ? active.depth : active.width;
-        int H = (viewPlane==ViewPlane.XZ) ? active.depth : active.height;
-        BufferedImage img = new BufferedImage(W,H,BufferedImage.TYPE_INT_ARGB);
-        for (int y=0; y<H; y++) for (int x=0; x<W; x++) {
-            int rx=x, ry=y, rz=viewLayer;
-            switch (viewPlane) {
-                case XY: break;
-                case XZ: ry=viewLayer; rz=active.depth-1-y; break;
-                case YZ: rx=viewLayer; rz=active.depth-1-x; break;
+        if (active && wheel != 0) y += wheel / 120f;
+        while (Mouse.next()) {
+            if (active && Mouse.getEventButton() >= 0 && Mouse.getEventButtonState()) {
+                viewportInputEnabled = true;
             }
-            int id = active.isInBounds(rx,ry,rz)? active.getTile(rx,ry,rz):0;
-            int rgb = id==0?0x00000000:(0xFF000000|colorFor(id));
-            img.setRGB(x,y,rgb);
+            if (Mouse.getEventButton() != 0) continue;
+            if (active && Mouse.getEventButtonState()) {
+                submit(
+                        () -> {
+                            if (document.simulating()) return;
+                            document.begin();
+                            if (tool.equals("Select")) selectionStarted = false;
+                            painting = true;
+                            selectOrPaint();
+                        });
+            } else commands.add(this::finishStroke);
         }
-        javax.imageio.ImageIO.write(img, "png", out);
+        if (!viewportActive()) finishStroke();
+        else if (painting && Mouse.isButtonDown(0) && (dx != 0 || dy != 0))
+            submit(this::selectOrPaint);
     }
 
-    // Load layer from PNG into current plane
-    private void importLayerPNG(File in) throws Exception {
-        if (active == null) return;
-        BufferedImage img = javax.imageio.ImageIO.read(in);
-        int W = Math.min(img.getWidth(),  (viewPlane==ViewPlane.YZ)?active.depth:active.width);
-        int H = Math.min(img.getHeight(), (viewPlane==ViewPlane.XZ)?active.depth:active.height);
-        for (int y=0; y<H; y++) for (int x=0; x<W; x++) {
-            int a = (img.getRGB(x,y) >>> 24) & 255;
-            int id = (a==0) ? 0 : selectedBlockId;
-            int rx=x, ry=y, rz=viewLayer;
-            switch (viewPlane) {
-                case XY: break;
-                case XZ: ry=viewLayer; rz=active.depth-1-y; break;
-                case YZ: rx=viewLayer; rz=active.depth-1-x; break;
-            }
-            if (active.isInBounds(rx,ry,rz)) active.setTile(rx,ry,rz,id);
+    private void finishStroke() {
+        if (!painting) return;
+        painting = false;
+        submit(document::commit);
+    }
+
+    private void moveCamera() {
+        if (!viewportActive()) return;
+        float speed =
+                Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)
+                        ? 1f
+                        : .25f;
+        float sy = (float) Math.sin(Math.toRadians(yaw)),
+                cy = (float) Math.cos(Math.toRadians(yaw));
+        if (Keyboard.isKeyDown(Keyboard.KEY_W)) {
+            x += sy * speed;
+            z -= cy * speed;
         }
-        map2D.repaint();
-    }
-
-    // Heightmap: grayscale → height in Y; fills with selected block up to height
-    private void importHeightmapPNG(File in) throws Exception {
-        if (active == null) return;
-        BufferedImage img = javax.imageio.ImageIO.read(in);
-        int W = Math.min(img.getWidth(),  active.width);
-        int D = Math.min(img.getHeight(), active.depth);
-        for (int z=0; z<D; z++) for (int x=0; x<W; x++) {
-            int rgb = img.getRGB(x,z);
-            int gray = ((rgb>>16)&255 + (rgb>>8)&255 + (rgb&255)) / 3;
-            int h = (int) Math.round((gray/255.0) * (active.height-1));
-            for (int y=0; y<active.height; y++) {
-                active.setTile(x,y,z, y<=h ? selectedBlockId : 0);
-            }
+        if (Keyboard.isKeyDown(Keyboard.KEY_S)
+                && !Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+                && !Keyboard.isKeyDown(Keyboard.KEY_RCONTROL)) {
+            x -= sy * speed;
+            z += cy * speed;
         }
-        map2D.repaint();
-    }
-    public void exportFullHDScreenshot(File out) throws Exception {
-        if (active == null) return;
-
-        // render a full top-down (XZ) to an offscreen image, then scale to 1920×1080 with letterbox
-        int srcW = active.width, srcH = active.depth;
-        BufferedImage src = new BufferedImage(srcW, srcH, BufferedImage.TYPE_INT_ARGB);
-
-        for (int z = 0; z < active.depth; z++) {
-            for (int x = 0; x < active.width; x++) {
-                int y = active.height - 1, id = 0;
-                for (; y >= 0; y--) { id = active.getTile(x,y,z); if (id != 0) break; }
-                int rgb = (id==0?0x00000000:(0xFF000000|colorFor(id)));
-                src.setRGB(x, active.depth-1-z, rgb);
-            }
+        if (Keyboard.isKeyDown(Keyboard.KEY_A)) {
+            x -= cy * speed;
+            z -= sy * speed;
         }
-
-        BufferedImage outImg = new BufferedImage(1920,1080,BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = outImg.createGraphics();
-        g.setColor(new Color(0x202531)); g.fillRect(0,0,1920,1080);
-
-        // fit with aspect preserve
-        double sx = 1920.0 / srcW, sy = 1080.0 / srcH;
-        double s = Math.min(sx, sy);
-        int dw = (int)Math.round(srcW * s);
-        int dh = (int)Math.round(srcH * s);
-        int dx = (1920 - dw)/2, dy = (1080 - dh)/2;
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        g.drawImage(src, dx, dy, dw, dh, null);
-
-        // header strip
-        g.setColor(new Color(0,0,0,160));
-        g.fillRect(12,12, 800, 26);
-        g.setColor(Color.WHITE);
-        g.drawString("Omen-style overview  (Top-down X-Z)   Selected: " + selectedBlockId + " " + blockName(selectedBlockId), 18, 30);
-        g.dispose();
-
-        javax.imageio.ImageIO.write(outImg, "png", out);
-    }
-
-    private JPanel makeInfoTab() {
-        JPanel p = new JPanel(new GridLayout(0,1));
-        p.add(new JLabel("Omen-style controls:"));
-        p.add(new JLabel("• Layer Up/Down, Zoom In/Out, X-Y / Y-Z / X-Z"));
-        p.add(new JLabel("• Left = paint   Right = erase   (in 2D view)"));
-        return p;
-    }
-
-    private JComponent labeled(String name, JComponent c) {
-        JPanel p = new JPanel(new BorderLayout(6,0));
-        p.add(new JLabel(name), BorderLayout.WEST);
-        p.add(c, BorderLayout.CENTER);
-        return p;
-    }
-
-    private JComponent buildOmenBottomBar() {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-
-        JButton up   = new JButton("Layer Up");
-        JButton down = new JButton("Layer Down");
-        JButton zin  = new JButton("Zoom In");
-        JButton zout = new JButton("Zoom Out");
-        JButton bXY  = new JButton("X-Y");
-        JButton bYZ  = new JButton("Y-Z");
-        JButton bXZ  = new JButton("X-Z");
-
-        up.addActionListener(e -> { viewLayer = Math.min(viewLayer+1, (active!=null?active.height-1:255)); map2D.repaint(); });
-        down.addActionListener(e -> { viewLayer = Math.max(viewLayer-1, 0); map2D.repaint(); });
-        zin.addActionListener(e -> { viewZoom = Math.min(viewZoom+1, 16); map2D.relayout(); });
-        zout.addActionListener(e -> { viewZoom = Math.max(viewZoom-1, 1);  map2D.relayout(); });
-
-        bXY.addActionListener(e -> { viewPlane = ViewPlane.XY; map2D.relayout(); });
-        bYZ.addActionListener(e -> { viewPlane = ViewPlane.YZ; map2D.relayout(); });
-        bXZ.addActionListener(e -> { viewPlane = ViewPlane.XZ; map2D.relayout(); });
-
-        row.add(up); row.add(down); row.add(zin); row.add(zout);
-        row.add(bXY); row.add(bYZ); row.add(bXZ);
-        return row;
-    }
-
-    private void doEdit(boolean place) {
-        if (active == null) return;
-
-        // Ray from camera
-        float yawR   = (float) Math.toRadians(yaw);
-        float pitchR = (float) Math.toRadians(pitch);
-        float cx = MathHelper.cos(-yawR - (float) Math.PI);
-        float sx = MathHelper.sin(-yawR - (float) Math.PI);
-        float cy = -MathHelper.cos(-pitchR);
-        float sy = MathHelper.sin(-pitchR);
-        float dx = sx * cy, dy = sy, dz = cx * cy;
-        Vec3D start = new Vec3D(camX, camY, camZ);
-        Vec3D end   = new Vec3D(camX + dx * REACH, camY + dy * REACH, camZ + dz * REACH);
-
-        MovingObjectPosition hit = active.clip(new Vec3D(start.x, start.y, start.z),
-                                               new Vec3D(end.x,   end.y,   end.z));
-        if (hit == null) return;
-
-        int hx = hit.x, hy = hit.y, hz = hit.z;
-
-        // Single-cell erase fast path
-        if (!place && brushSize <= 1) { active.setTile(hx, hy, hz, 0); return; }
-
-        // Placement anchor (adjacent when placing, else hit cell)
-        int px = hx, py = hy, pz = hz;
-        if (place) {
-            switch (hit.face) {
-                case 0: py -= 1; break; // bottom
-                case 1: py += 1; break; // top
-                case 2: pz -= 1; break; // north
-                case 3: pz += 1; break; // south
-                case 4: px -= 1; break; // west
-                case 5: px += 1; break; // east
-            }
+        if (Keyboard.isKeyDown(Keyboard.KEY_D)) {
+            x += cy * speed;
+            z += sy * speed;
         }
-        // Clamp anchor inside bounds to avoid all-OOB loops
-        px = Math.max(0, Math.min(active.width  - 1, px));
-        py = Math.max(0, Math.min(active.height - 1, py));
-        pz = Math.max(0, Math.min(active.depth  - 1, pz));
+        if (Keyboard.isKeyDown(Keyboard.KEY_SPACE)) y += speed;
+        if (Keyboard.isKeyDown(Keyboard.KEY_C)) y -= speed;
+    }
 
-        int r = Math.max(1, brushSize);
+    private Vec3D rayEnd() {
+        float width = Math.max(1, canvas.getWidth()), height = Math.max(1, canvas.getHeight());
+        double scale = Math.tan(Math.toRadians(35));
+        double rx = (2 * mouseX / width - 1) * width / height * scale;
+        double ry = (1 - 2 * mouseY / height) * scale;
+        double cp = Math.cos(Math.toRadians(pitch)), sp = Math.sin(Math.toRadians(pitch));
+        double cy = Math.cos(Math.toRadians(yaw)), sy = Math.sin(Math.toRadians(yaw));
+        double up = ry * cp - sp, forward = -ry * sp - cp;
+        return new Vec3D(
+                x + (float) (rx * cy - forward * sy) * 100,
+                y + (float) up * 100,
+                z + (float) (rx * sy + forward * cy) * 100);
+    }
 
-        if (!mode2D) {
-            // 3D cube brush
-            int x0 = Math.max(0, px - r + 1), x1 = Math.min(active.width  - 1, px + r - 1);
-            int y0 = Math.max(0, py - r + 1), y1 = Math.min(active.height - 1, py + r - 1);
-            int z0 = Math.max(0, pz - r + 1), z1 = Math.min(active.depth  - 1, pz + r - 1);
-            for (int y = y0; y <= y1; y++)
-                for (int z = z0; z <= z1; z++)
-                    for (int x = x0; x <= x1; x++)
-                        active.setTile(x, y, z, place ? selectedBlockId : 0);
+    private void selectOrPaint() throws Exception {
+        Level world = document.level();
+        Vec3D start = new Vec3D(x, y, z), end = rayEnd();
+        MovingObjectPosition hit = world.clip(start, end);
+        if (tool.equals("Mob")) {
+            selected = null;
+            double distance = hit == null ? Double.MAX_VALUE : dist(start, hit.vec);
+            for (Object value : world.blockMap.all)
+                if (value instanceof Mob mob && !(mob instanceof Player)) {
+                    MovingObjectPosition entityHit = mob.bb.clip(start, end);
+                    if (entityHit != null && dist(start, entityHit.vec) < distance) {
+                        selected = mob;
+                        distance = dist(start, entityHit.vec);
+                    }
+                }
+            refreshProperties();
             return;
         }
+        if (hit == null) return;
+        if (tool.equals("Pick")) {
+            block = world.getTile(hit.x, hit.y, hit.z);
+            return;
+        }
+        if (tool.equals("Select")) {
+            last = new int[] {hit.x, hit.y, hit.z};
+            if (!selectionStarted) {
+                first = last.clone();
+                selectionStarted = true;
+            }
+            return;
+        }
+        int bx = hit.x, by = hit.y, bz = hit.z;
+        if (tool.equals("Place")) {
+            if (hit.face == 0) by--;
+            if (hit.face == 1) by++;
+            if (hit.face == 2) bz--;
+            if (hit.face == 3) bz++;
+            if (hit.face == 4) bx--;
+            if (hit.face == 5) bx++;
+        }
+        paint(bx, by, bz, tool.equals("Remove") ? 0 : block);
+    }
 
-        // 2D brush on the chosen view plane, supports round/square
-        switch (viewPlane) {
-            case XZ: {
-                int y = place ? py : hy;
-                int z0 = Math.max(0, pz - r + 1), z1 = Math.min(active.depth - 1, pz + r - 1);
-                int x0 = Math.max(0, px - r + 1), x1 = Math.min(active.width - 1, px + r - 1);
-                int rr = (r - 1) * (r - 1);
-                for (int zz = z0; zz <= z1; zz++)
-                    for (int xx = x0; xx <= x1; xx++) {
-                        int dx1 = xx - px, dz1 = zz - pz;
-                        if (brushRound && (dx1*dx1 + dz1*dz1) > rr) continue;
-                        if (active.isInBounds(xx, y, zz)) active.setTile(xx, y, zz, place ? selectedBlockId : 0);
-                    }
-                break;
-            }
-            case XY: {
-                int z = viewLayer;
-                int y0 = Math.max(0, py - r + 1), y1 = Math.min(active.height - 1, py + r - 1);
-                int x0 = Math.max(0, px - r + 1), x1 = Math.min(active.width  - 1, px + r - 1);
-                int rr = (r - 1) * (r - 1);
-                for (int yy = y0; yy <= y1; yy++)
-                    for (int xx = x0; xx <= x1; xx++) {
-                        int dx1 = xx - px, dy0 = yy - py;
-                        if (brushRound && (dx1*dx1 + dy0*dy0) > rr) continue;
-                        if (active.isInBounds(xx, yy, z)) active.setTile(xx, yy, z, place ? selectedBlockId : 0);
-                    }
-                break;
-            }
-            case YZ: {
-                int x = viewLayer;
-                int y0 = Math.max(0, py - r + 1), y1 = Math.min(active.height - 1, py + r - 1);
-                int z0 = Math.max(0, pz - r + 1), z1 = Math.min(active.depth  - 1, pz + r - 1);
-                int rr = (r - 1) * (r - 1);
-                for (int yy = y0; yy <= y1; yy++)
-                    for (int zz = z0; zz <= z1; zz++) {
-                        int dz1 = zz - pz, dy0 = yy - py;
-                        if (brushRound && (dz1*dz1 + dy0*dy0) > rr) continue;
-                        if (active.isInBounds(x, yy, zz)) active.setTile(x, yy, zz, place ? selectedBlockId : 0);
-                    }
-                break;
-            }
+    private static double dist(Vec3D a, Vec3D b) {
+        return Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2) + Math.pow(a.z - b.z, 2);
+    }
+
+    private void paint(int bx, int by, int bz, int id) {
+        Level world = document.level();
+        for (int dx = 1 - brush; dx < brush; dx++)
+            for (int dy = 1 - brush; dy < brush; dy++)
+                for (int dz = 1 - brush; dz < brush; dz++)
+                    if (inBounds(world, bx + dx, by + dy, bz + dz))
+                        world.setTile(bx + dx, by + dy, bz + dz, id);
+        rebuild = true;
+    }
+
+    private static boolean inBounds(Level world, int x, int y, int z) {
+        if (world instanceof LevelInfiniteFlat || world instanceof LevelInfiniteTerrain)
+            return y >= 0 && y < world.depth;
+        return world.isInBounds(x, y, z);
+    }
+
+    private void fill(int id) throws IOException {
+        if (first == null || last == null) return;
+        long count =
+                (long) (Math.abs(first[0] - last[0]) + 1)
+                        * (Math.abs(first[1] - last[1]) + 1)
+                        * (Math.abs(first[2] - last[2]) + 1);
+        if (count > 1000000) throw new IOException("Selection exceeds one million blocks");
+        Level world = document.level();
+        for (int bx = Math.min(first[0], last[0]); bx <= Math.max(first[0], last[0]); bx++)
+            for (int by = Math.min(first[1], last[1]); by <= Math.max(first[1], last[1]); by++)
+                for (int bz = Math.min(first[2], last[2]); bz <= Math.max(first[2], last[2]); bz++)
+                    if (inBounds(world, bx, by, bz)) world.setTile(bx, by, bz, id);
+        selectionStarted = false;
+    }
+
+    private void edit(Action action) throws Exception {
+        document.begin();
+        try {
+            action.run();
+        } finally {
+            document.commit();
         }
     }
 
+    private void duplicateMob() throws IOException {
+        if (selected == null) return;
+        // Use the world codec to copy all persisted equipment and per-mob properties.
+        Level clone =
+                new LevelIO(null)
+                        .load(
+                                new ByteArrayInputStream(
+                                        WorldEditorDocument.snapshot(document.level())));
+        try {
+            int index = mobs(document.level()).indexOf(selected);
+            java.util.List<Mob> copies = mobs(clone);
+            if (index < 0 || index >= copies.size())
+                throw new IOException("Cannot duplicate this mob");
+            Mob copy = copies.get(index);
+            clone.removeEntity(copy);
+            copy.level = document.level();
+            copy.setPos(selected.x + 1, selected.y, selected.z);
+            document.level().addEntity(copy);
+            selected = copy;
+        } finally {
+            if (clone instanceof LevelInfiniteFlat flat) flat.chunks().shutdown();
+            if (clone instanceof LevelInfiniteTerrain terrain) terrain.chunks().shutdown();
+        }
+    }
 
-    // ---------- Render ----------
+    private static java.util.List<Mob> mobs(Level world) {
+        java.util.List<Mob> result = new ArrayList<>();
+        if (world != null && world.blockMap != null)
+            for (Object value : world.blockMap.all)
+                if (value instanceof Mob mob
+                        && !(mob instanceof Player)
+                        && !mob.removed
+                        && mob.health > 0) result.add(mob);
+        return result;
+    }
+
+    private void refreshProperties() {
+        Mob value = selected;
+        if (value == null) return;
+        float px = value.x, py = value.y, pz = value.z, rot = value.yRot;
+        int hp = value.health;
+        SwingUtilities.invokeLater(
+                () -> {
+                    mx.setValue((double) px);
+                    my.setValue((double) py);
+                    mz.setValue((double) pz);
+                    rotation.setValue((double) (rot % 360));
+                    health.setValue((double) Math.max(1, hp));
+                });
+    }
+
+    private void refresh() throws IOException {
+        Level world = document.level();
+        if (world == null) return;
+        if (selected != null && !world.blockMap.all.contains(selected)) selected = null;
+        java.util.List<Mob> values = mobs(world);
+        boolean dirty = document.dirty();
+        String text =
+                (document.file() == null ? "Untitled" : document.file().getName())
+                        + (dirty ? " *" : "")
+                        + (document.simulating() ? " | TEST COPY" : " | Paused")
+                        + " | WASD move, space/C vertical, right drag look, left edit";
+        SwingUtilities.invokeLater(
+                () -> {
+                    status.setText(text);
+                    frame.setTitle("Classic World Editor - " + text.split(" \\|")[0]);
+                    updatingList = true;
+                    mobList.clear();
+                    for (Mob value : values) mobList.addElement(value);
+                    entities.setSelectedValue(selected, true);
+                    updatingList = false;
+                });
+        updateSlice();
+    }
+
+    private void updateSlice() {
+        Level world = document.level();
+        java.awt.image.BufferedImage image =
+                new java.awt.image.BufferedImage(64, 64, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        for (int dx = 0; dx < 64; dx++)
+            for (int dz = 0; dz < 64; dz++) {
+                int bx = (int) x - 32 + dx, bz = (int) z - 32 + dz;
+                int id = inBounds(world, bx, viewLayer, bz) ? world.getTile(bx, viewLayer, bz) : 0;
+                image.setRGB(
+                        dx, dz, id == 0 ? 0x202830 : Color.HSBtoRGB((id * .071f) % 1, .5f, .8f));
+            }
+        sliceImage = image;
+        SwingUtilities.invokeLater(slice::repaint);
+    }
+
+    private boolean confirmDiscard() throws Exception {
+        if (!document.dirty()) return true;
+        int answer =
+                onUi(
+                        () ->
+                                JOptionPane.showConfirmDialog(
+                                        frame,
+                                        "Save changes before continuing?",
+                                        "Unsaved world",
+                                        JOptionPane.YES_NO_CANCEL_OPTION));
+        if (answer == JOptionPane.CANCEL_OPTION || answer == JOptionPane.CLOSED_OPTION)
+            return false;
+        return answer != JOptionPane.YES_OPTION || save(false);
+    }
+
+    private <T> T onUi(Callable<T> call) throws Exception {
+        if (SwingUtilities.isEventDispatchThread()) return call.call();
+        FutureTask<T> task = new FutureTask<>(call);
+        dialogOpen = true;
+        viewportInputEnabled = false;
+        try {
+            SwingUtilities.invokeLater(task);
+            // The native child window belongs to this thread. Modal AWT dialogs send
+            // it synchronous window messages, so this thread must keep pumping them.
+            while (!task.isDone()) {
+                if (Display.isCreated()) Display.processMessages();
+                Thread.sleep(5);
+            }
+            return task.get();
+        } finally {
+            dialogOpen = false;
+            if (Keyboard.isCreated()) {
+                Keyboard.poll();
+                while (Keyboard.next()) {}
+            }
+            if (Mouse.isCreated()) {
+                Mouse.poll();
+                while (Mouse.next()) {}
+                Mouse.getDX();
+                Mouse.getDY();
+                Mouse.getDWheel();
+            }
+            SwingUtilities.invokeLater(
+                    () -> {
+                        if (frame.isDisplayable()) canvas.requestFocusInWindow();
+                    });
+        }
+    }
+
+    private File choose(boolean save) throws Exception {
+        return onUi(
+                () -> {
+                    JFileChooser picker = new JFileChooser(appDir());
+                    picker.setFileFilter(
+                            new javax.swing.filechooser.FileNameExtensionFilter(
+                                    "Classic Reborn world (*.dat)", "dat"));
+                    if (document.file() != null) picker.setSelectedFile(document.file());
+                    int result = save ? picker.showSaveDialog(frame) : picker.showOpenDialog(frame);
+                    if (result != JFileChooser.APPROVE_OPTION) return null;
+                    File file = picker.getSelectedFile();
+                    if (save && !file.getName().toLowerCase(Locale.ROOT).endsWith(".dat"))
+                        file = new File(file + ".dat");
+                    if (save
+                            && file.exists()
+                            && (document.file() == null || !file.equals(document.file()))
+                            && JOptionPane.showConfirmDialog(
+                                            frame,
+                                            "Replace " + file.getName() + "?",
+                                            "Save as",
+                                            JOptionPane.YES_NO_OPTION)
+                                    != JOptionPane.YES_OPTION) return null;
+                    return file;
+                });
+    }
+
+    private void open() throws Exception {
+        if (!confirmDiscard()) return;
+        File file = choose(false);
+        if (file == null) return;
+        document.open(file);
+        first = last = null;
+        selected = null;
+        resetCamera();
+    }
+
+    private boolean save(boolean as) throws Exception {
+        File file = as || document.file() == null ? choose(true) : document.file();
+        if (file == null) return false;
+        document.save(file);
+        return true;
+    }
+
+    private void newWorld() throws Exception {
+        if (!confirmDiscard()) return;
+        String type =
+                onUi(
+                        () ->
+                                (String)
+                                        JOptionPane.showInputDialog(
+                                                frame,
+                                                "World type",
+                                                "New world",
+                                                JOptionPane.PLAIN_MESSAGE,
+                                                null,
+                                                new String[] {
+                                                    "Finite", "Infinite flat", "Infinite terrain"
+                                                },
+                                                "Finite"));
+        if (type != null) {
+            createWorld(type);
+            resetCamera();
+            first = last = null;
+            selected = null;
+        }
+    }
+
+    private void createWorld(String type) throws IOException {
+        Level world;
+        if (type.equals("Infinite flat")) world = new LevelInfiniteFlat(System.nanoTime(), 64);
+        else if (type.equals("Infinite terrain"))
+            world = new LevelInfiniteTerrain(System.nanoTime(), 64);
+        else {
+            world = new Level();
+            world.setData(64, 32, 64, new byte[64 * 32 * 64]);
+            for (int bx = 0; bx < 64; bx++)
+                for (int bz = 0; bz < 64; bz++) world.setTile(bx, 0, bz, Block.GRASS.id);
+            world.xSpawn = 32;
+            world.ySpawn = 3;
+            world.zSpawn = 32;
+        }
+        world.name = "Untitled";
+        world.creativeMode = true;
+        document.replace(world, null);
+    }
+
+    private void resetCamera() {
+        Level world = document.view();
+        x = world.xSpawn;
+        y = Math.min(world.depth - 2, world.ySpawn + 12);
+        z = world.zSpawn + 18;
+        yaw = 0;
+        pitch = 30;
+        rebuild = true;
+    }
+
+    private void toggleSimulation() throws IOException {
+        if (document.simulating()) {
+            document.stopSimulation();
+            return;
+        }
+        document.startSimulation();
+        Level world = document.view();
+        // Replace the cloned player only in the disposable simulation world.
+        if (world.player != null) world.removeEntity(world.player);
+        Player player = new PreviewPlayer(world);
+        player.setPos(x, y, z);
+        nextTick = System.nanoTime();
+    }
+
+    /** A simulation target with world physics and no game keyboard or HUD dependency. */
+    private static final class PreviewPlayer extends Player {
+        PreviewPlayer(Level world) {
+            super(world);
+        }
+
+        @Override
+        public void aiStep() {
+            move(xd, yd, zd);
+            yd = (yd - .08f) * .98f;
+            xd *= .8f;
+            zd *= .8f;
+        }
+    }
+
+    private void settings() throws Exception {
+        Level world = document.level();
+        String current =
+                world.xSpawn
+                        + ","
+                        + world.ySpawn
+                        + ","
+                        + world.zSpawn
+                        + ","
+                        + world.timeOfDay
+                        + ","
+                        + world.creativeMode
+                        + ","
+                        + world.doDayNightCycle
+                        + ","
+                        + world.skyColor
+                        + ","
+                        + world.fogColor
+                        + ","
+                        + world.cloudColor
+                        + ","
+                        + world.waterLevel;
+        String value =
+                onUi(
+                        () ->
+                                JOptionPane.showInputDialog(
+                                        frame,
+                                        "Spawn X,Y,Z, time, creative, daylight cycle, sky RGB, fog"
+                                                + " RGB, cloud RGB, water level",
+                                        current));
+        if (value == null) return;
+        String[] fields = value.split(",");
+        if (fields.length != 10) throw new IOException("Enter ten comma-separated values");
+        int sx = Integer.parseInt(fields[0].trim()),
+                sy = Integer.parseInt(fields[1].trim()),
+                sz = Integer.parseInt(fields[2].trim()),
+                time = Integer.parseInt(fields[3].trim());
+        int sky = Integer.decode(fields[6].trim()),
+                fog = Integer.decode(fields[7].trim()),
+                cloud = Integer.decode(fields[8].trim()),
+                water = Integer.parseInt(fields[9].trim());
+        if (!inBounds(world, sx, sy, sz) || water < 0 || water >= world.depth)
+            throw new IOException("Spawn or water level is outside the world");
+        if (!fields[4].trim().matches("(?i)true|false")
+                || !fields[5].trim().matches("(?i)true|false"))
+            throw new IOException("Use true or false for switches");
+        edit(
+                () -> {
+                    world.xSpawn = sx;
+                    world.ySpawn = sy;
+                    world.zSpawn = sz;
+                    world.setTime(time);
+                    world.creativeMode = Boolean.parseBoolean(fields[4].trim());
+                    world.doDayNightCycle = Boolean.parseBoolean(fields[5].trim());
+                    world.skyColor = sky;
+                    world.fogColor = fog;
+                    world.cloudColor = cloud;
+                    world.waterLevel = water;
+                });
+    }
+
     private void render() {
-        if (active == null) return;
-
-        // camera matrices
-        GL11.glViewport(0,0,canvas.getWidth(), canvas.getHeight());
-        GL11.glClearColor(((skyboxColor>>16)&255)/255f, ((skyboxColor>>8)&255)/255f, (skyboxColor&255)/255f, 1f);
+        Level world = document.view();
+        GL11.glViewport(0, 0, canvas.getWidth(), Math.max(1, canvas.getHeight()));
+        GL11.glClearColor(
+                ((world.skyColor >> 16) & 255) / 255f,
+                ((world.skyColor >> 8) & 255) / 255f,
+                (world.skyColor & 255) / 255f,
+                1);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
-        GL11.glMatrixMode(GL11.GL_PROJECTION); GL11.glLoadIdentity();
-        GLU.gluPerspective(fov, canvas.getWidth()/(float)canvas.getHeight(), 0.05f, 500f);
-        GL11.glMatrixMode(GL11.GL_MODELVIEW); GL11.glLoadIdentity();
-
-        // Build a look vector
-        GL11.glRotatef(pitch, 1,0,0);
-        GL11.glRotatef(yaw, 0,1,0);
-        GL11.glTranslatef(-camX, -camY, -camZ);
-
-        // ground grid
-        drawGrid();
-
-        // draw blocks in a radius
-        int minX = (int)Math.floor(camX - drawRadiusXZ);
-        int maxX = (int)Math.ceil (camX + drawRadiusXZ);
-        int minZ = (int)Math.floor(camZ - drawRadiusXZ);
-        int maxZ = (int)Math.ceil (camZ + drawRadiusXZ);
-        int minY = (int)Math.floor(camY - drawRadiusY);
-        int maxY = (int)Math.ceil (camY + drawRadiusY);
-
-        clampRange(active, minX, maxX, minY, maxY, minZ, maxZ);
-
-        for (int y = minY; y <= maxY; y++) {
-            for (int z = minZ; z <= maxZ; z++) {
-                for (int x = minX; x <= maxX; x++) {
-                    int id = active.getTile(x, y, z);
-                    if (id == 0) continue;
-
-                    boolean drawN = neighborAir(active, x, y, z-1);
-                    boolean drawS = neighborAir(active, x, y, z+1);
-                    boolean drawW = neighborAir(active, x-1, y, z);
-                    boolean drawE = neighborAir(active, x+1, y, z);
-                    boolean drawD = neighborAir(active, x, y-1, z);
-                    boolean drawU = neighborAir(active, x, y+1, z);
-                    if (!(drawN|drawS|drawW|drawE|drawD|drawU)) continue;
-
-                    int rgb = colorFor(id);
-                    float r = ((rgb>>16)&255)/255f, g = ((rgb>>8)&255)/255f, b = (rgb&255)/255f;
-
-                    GL11.glColor3f(r,g,b);
-                    GL11.glBegin(GL11.GL_QUADS);
-                    float x1=x, y1=y, z1=z, x2=x+1, y2=y+1, z2=z+1;
-
-                    if (drawD) { GL11.glVertex3f(x1, y1, z2); GL11.glVertex3f(x1, y1, z1); GL11.glVertex3f(x2, y1, z1); GL11.glVertex3f(x2, y1, z2); }
-                    if (drawU) { GL11.glVertex3f(x2, y2, z2); GL11.glVertex3f(x2, y2, z1); GL11.glVertex3f(x1, y2, z1); GL11.glVertex3f(x1, y2, z2); }
-                    if (drawN) { GL11.glVertex3f(x1, y2, z1); GL11.glVertex3f(x2, y2, z1); GL11.glVertex3f(x2, y1, z1); GL11.glVertex3f(x1, y1, z1); }
-                    if (drawS) { GL11.glVertex3f(x1, y2, z2); GL11.glVertex3f(x1, y1, z2); GL11.glVertex3f(x2, y1, z2); GL11.glVertex3f(x2, y2, z2); }
-                    if (drawW) { GL11.glVertex3f(x1, y2, z2); GL11.glVertex3f(x1, y2, z1); GL11.glVertex3f(x1, y1, z1); GL11.glVertex3f(x1, y1, z2); }
-                    if (drawE) { GL11.glVertex3f(x2, y1, z2); GL11.glVertex3f(x2, y1, z1); GL11.glVertex3f(x2, y2, z1); GL11.glVertex3f(x2, y2, z2); }
-                    GL11.glEnd();
-                }
-            }
-        }
-
-        // --- Selection render (precise) ---
-        if (selecting || hasSelection) {
-            int bx = selBx, by = selBy, bz = selBz;
-            if (selecting) {
-                int[] p = pickBlockFromCursor();
-                bx = p[0]; by = p[1]; bz = p[2];
-            }
-            int minx = Math.min(selAx, bx), maxx = Math.max(selAx, bx) + 1;
-            int miny = Math.min(selAy, by), maxy = Math.max(selAy, by) + 1;
-            int minz = Math.min(selAz, bz), maxz = Math.max(selAz, bz) + 1;
-
-            GL11.glDisable(GL11.GL_TEXTURE_2D);
-            GL11.glDisable(GL11.GL_DEPTH_TEST);
-            GL11.glColor4f(1f, 1f, 0f, 1f); // yellow
-            GL11.glBegin(GL11.GL_LINES);
-            // bottom
-            GL11.glVertex3f(minx, miny, minz); GL11.glVertex3f(maxx, miny, minz);
-            GL11.glVertex3f(maxx, miny, minz); GL11.glVertex3f(maxx, miny, maxz);
-            GL11.glVertex3f(maxx, miny, maxz); GL11.glVertex3f(minx, miny, maxz);
-            GL11.glVertex3f(minx, miny, maxz); GL11.glVertex3f(minx, miny, minz);
-            // top
-            GL11.glVertex3f(minx, maxy, minz); GL11.glVertex3f(maxx, maxy, minz);
-            GL11.glVertex3f(maxx, maxy, minz); GL11.glVertex3f(maxx, maxy, maxz);
-            GL11.glVertex3f(maxx, maxy, maxz); GL11.glVertex3f(minx, maxy, maxz);
-            GL11.glVertex3f(minx, maxy, maxz); GL11.glVertex3f(minx, maxy, minz);
-            // verticals
-            GL11.glVertex3f(minx, miny, minz); GL11.glVertex3f(minx, maxy, minz);
-            GL11.glVertex3f(maxx, miny, minz); GL11.glVertex3f(maxx, maxy, minz);
-            GL11.glVertex3f(maxx, miny, maxz); GL11.glVertex3f(maxx, maxy, maxz);
-            GL11.glVertex3f(minx, miny, maxz); GL11.glVertex3f(minx, maxy, maxz);
-            GL11.glEnd();
-            GL11.glEnable(GL11.GL_DEPTH_TEST);
-        }
-
-        // HUD
-        drawHud();
-    }
-
-    private void drawGrid() {
-        GL11.glDisable(GL11.GL_DEPTH_TEST);
-        GL11.glColor3f(0.15f,0.18f,0.22f);
-        GL11.glBegin(GL11.GL_LINES);
-        int R = 128;
-        for (int i = -R; i <= R; i++) {
-            GL11.glVertex3f(i, 0, -R); GL11.glVertex3f(i, 0, R);
-            GL11.glVertex3f(-R, 0, i); GL11.glVertex3f(R, 0, i);
-        }
-        GL11.glEnd();
         GL11.glEnable(GL11.GL_DEPTH_TEST);
-    }
-
-    private final GLText hudLine1 = new GLText();
-    private final GLText hudLine2 = new GLText();
-    private final GLText hudLine3 = new GLText();
-
-    private void drawHud() {
-        GL11.glMatrixMode(GL11.GL_PROJECTION); GL11.glPushMatrix(); GL11.glLoadIdentity();
-        GL11.glOrtho(0, canvas.getWidth(), canvas.getHeight(), 0, -1, 1);
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);  GL11.glPushMatrix(); GL11.glLoadIdentity();
-
-        String line1 = editingCreative ? "ACTIVE: levelc.dat (Creative)" : "ACTIVE: levels.dat (Survival)";
-        String line2 = "Block ID: " + selectedBlockId + " (" + blockName(selectedBlockId) + ")";
-        String line3 = "Pos: " + (int)camX + "," + (int)camY + "," + (int)camZ;
-
-        hudLine1.draw(10, 10, line1);
-        hudLine2.draw(10, 30, line2);
-        hudLine3.draw(10, 50, line3);
-
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);  GL11.glPopMatrix();
-        GL11.glMatrixMode(GL11.GL_PROJECTION); GL11.glPopMatrix();
-    }
-
-    private static void clampRange(Level lv,
-            int[] minX, int[] maxX,
-            int[] minY, int[] maxY,
-            int[] minZ, int[] maxZ) {} // <- ignore
-
-//keep your call site as-is; just drop this in:
-private static void clampRange(Level lv, int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
-if (lv == null) return;
-if (minX < 0) minX = 0;             if (maxX > lv.width  - 1)  maxX = lv.width  - 1;
-if (minY < 0) minY = 0;             if (maxY > lv.height - 1)  maxY = lv.height - 1;
-if (minZ < 0) minZ = 0;             if (maxZ > lv.depth  - 1)  maxZ = lv.depth  - 1;
-// write back by returning new ints isn’t possible here, so instead:
-// change the caller to read the clamped values from a small helper:
-}
-
-    // --- selection state ---
-    private int selAx, selAy, selAz;
-    private boolean hasSelection = false;
-    private int selBx, selBy, selBz;
-    private boolean selecting = false;
-
-    private void applyFillSelection(int id) {
-        if (!hasSelection) return;
-        int minx = Math.min(selAx, selBx), maxx = Math.max(selAx, selBx);
-        int miny = Math.min(selAy, selBy), maxy = Math.max(selAy, selBy);
-        int minz = Math.min(selAz, selBz), maxz = Math.max(selAz, selBz);
-        for (int y = miny; y <= maxy; y++)
-            for (int z = minz; z <= maxz; z++)
-                for (int x = minx; x <= maxx; x++)
-                    if (active.isInBounds(x,y,z)) active.setTile(x,y,z, id);
-    }
-
-    private static boolean neighborAir(Level lv, int x, int y, int z) {
-        if (!lv.isInBounds(x,y,z)) return true;
-        return lv.getTile(x,y,z) == 0;
-    }
-
-    // ---------- Color LUT ----------
-    private static int colorFor(int id) {
-        switch (id) {
-            case 0:  return 0x00000000;
-            case 1:  return 0x7f7f7f; // stone
-            case 2:  return 0x5aa04a; // grass
-            case 3:  return 0x6b4b2a; // dirt
-            case 4:  return 0x8a8a8a; // cobble
-            case 5:  return 0x9c7b4f; // wood
-            case 8:  return 0x3a56d1;
-            case 9:  return 0x3a56d1;
-            case 10: return 0xcc5533;
-            case 11: return 0xcc5533;
-            case 12: return 0xcbb27d; // sand
-            case 13: return 0x7e7465; // gravel
-            case 14: return 0xddd18b; // gold ore
-            case 15: return 0xd0d0d0; // iron ore
-            case 16: return 0x404040; // coal ore
-            case 17: return 0x6a4d2d; // log
-            case 18: return 0x3f6a2c; // leaves
-            case 19: return 0xf8e76a; // sponge
-            case 20: return 0xbdd0ff; // glass
-            case 41: return 0xfff07a; // gold block
-            case 42: return 0xc9c9c9; // iron block
-            case 45: return 0x9b4a32; // brick
-            case 46: return 0xd05a5a; // tnt
-            case 47: return 0x8c6b43; // bookshelf-ish
-            case 48: return 0x65705a; // mossy
-            case 49: return 0x1a0f29; // obsidian
-            default: return ((id*97)&0xff)<<16 | ((id*57)&0xff)<<8 | ((id*23)&0xff);
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glEnable(GL11.GL_ALPHA_TEST);
+        GL11.glAlphaFunc(GL11.GL_GREATER, .1f);
+        GL11.glDisable(GL11.GL_CULL_FACE);
+        GL11.glMatrixMode(GL11.GL_PROJECTION);
+        GL11.glLoadIdentity();
+        GLU.gluPerspective(
+                70, canvas.getWidth() / (float) Math.max(1, canvas.getHeight()), .05f, 220);
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glLoadIdentity();
+        GL11.glRotatef(pitch, 1, 0, 0);
+        GL11.glRotatef(yaw, 0, 1, 0);
+        GL11.glTranslatef(-x, -y, -z);
+        int cx = Math.floorDiv((int) Math.floor(x), 16),
+                cz = Math.floorDiv((int) Math.floor(z), 16);
+        if (rebuild || cx != regionX || cz != regionZ) {
+            regionX = cx;
+            regionZ = cz;
+            for (int pass = 0; pass < 2; pass++) {
+                GL11.glNewList(opaqueList + pass, GL11.GL_COMPILE);
+                ShapeRenderer renderer = ShapeRenderer.instance;
+                renderer.begin();
+                for (int bx = cx * 16 - 32; bx < cx * 16 + 48; bx++)
+                    for (int bz = cz * 16 - 32; bz < cz * 16 + 48; bz++)
+                        for (int by = 0; by < world.depth; by++) {
+                            if (!inBounds(world, bx, by, bz)) continue;
+                            int id = world.getTile(bx, by, bz);
+                            if (id > 0
+                                    && Block.blocks[id] != null
+                                    && Block.blocks[id].getRenderPass() == pass)
+                                Block.blocks[id].render(world, bx, by, bz, renderer);
+                        }
+                renderer.end();
+                GL11.glEndList();
+            }
+            rebuild = false;
         }
+        GL11.glBindTexture(
+                GL11.GL_TEXTURE_2D,
+                textures.load(net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE));
+        GL11.glCallList(opaqueList);
+        net.classicremastered.minecraft.level.ChestController.render(
+                world, textures, net.classicremastered.minecraft.render.FrustrumImpl.update());
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glDepthMask(false);
+        GL11.glCallList(translucentList);
+        GL11.glDepthMask(true);
+        GL11.glDisable(GL11.GL_BLEND);
+        for (Mob mob : mobs(world))
+            if (Math.abs(mob.x - x) < 96 && Math.abs(mob.z - z) < 96) mob.render(textures, 1);
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        if (selected != null && !document.simulating())
+            outline(
+                    selected.bb.x0,
+                    selected.bb.y0,
+                    selected.bb.z0,
+                    selected.bb.x1,
+                    selected.bb.y1,
+                    selected.bb.z1);
+        if (first != null && last != null)
+            outline(
+                    Math.min(first[0], last[0]),
+                    Math.min(first[1], last[1]),
+                    Math.min(first[2], last[2]),
+                    Math.max(first[0], last[0]) + 1,
+                    Math.max(first[1], last[1]) + 1,
+                    Math.max(first[2], last[2]) + 1);
+    }
+
+    private static void outline(float x0, float y0, float z0, float x1, float y1, float z1) {
+        GL11.glColor3f(1, 1, 0);
+        GL11.glLineWidth(2);
+        float[][] points = {
+            {x0, y0, z0},
+            {x1, y0, z0},
+            {x1, y0, z1},
+            {x0, y0, z1},
+            {x0, y1, z0},
+            {x1, y1, z0},
+            {x1, y1, z1},
+            {x0, y1, z1}
+        };
+        int[][] edges = {
+            {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6}, {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6},
+            {3, 7}
+        };
+        GL11.glBegin(GL11.GL_LINES);
+        for (int[] edge : edges)
+            for (int index : edge)
+                GL11.glVertex3f(points[index][0], points[index][1], points[index][2]);
+        GL11.glEnd();
+        GL11.glColor3f(1, 1, 1);
     }
 }

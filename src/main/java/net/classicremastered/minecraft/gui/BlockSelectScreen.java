@@ -1,386 +1,320 @@
 package net.classicremastered.minecraft.gui;
 
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.input.Keyboard;
-
 import net.classicremastered.minecraft.CreativeInventoryBlocks;
+import net.classicremastered.minecraft.level.itemstack.*;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.render.ShapeRenderer;
-import net.classicremastered.minecraft.render.TextureManager;
 
-public final class BlockSelectScreen extends GuiScreen {
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.GL11;
 
-   private static final String[] TABS = {"All", "Build", "Nature", "Decor", "Wool", "Items", "Util", "Inv"};
-   private int currentTab = 0;
-   private String searchQuery = "";
-   private int scrollRow = 0;
+import java.util.*;
 
-   public BlockSelectScreen() {
-      this.grabsMouse = true;
-   }
+/** Classic catalog with a shared grid for drawing and input. */
+public final class BlockSelectScreen extends InventoryScreen {
+    private static final String[] TABS = {
+        "All",
+        "Building",
+        "Nature",
+        "Decor",
+        "Equipment",
+        "Items",
+        "Utilities",
+        "Spawn eggs",
+        "Mob wands"
+    };
+    private static int currentTab, scrollRow;
+    private static String searchQuery = "";
+    private boolean searchFocused;
+    private int mouseX, mouseY;
+    private static final Map<Block, String> BLOCK_NAMES = blockNames();
 
-   private String getBlockDisplayName(Block block) {
-      if (block == null) return "";
-      if (block == Block.RED_WOOL) return "Red Wool";
-      if (block == Block.ORANGE_WOOL) return "Orange Wool";
-      if (block == Block.YELLOW_WOOL) return "Yellow Wool";
-      if (block == Block.LIME_WOOL) return "Lime Wool";
-      if (block == Block.GREEN_WOOL) return "Green Wool";
-      if (block == Block.AQUA_GREEN_WOOL) return "Aqua Green Wool";
-      if (block == Block.CYAN_WOOL) return "Cyan Wool";
-      if (block == Block.BLUE_WOOL) return "Blue Wool";
-      if (block == Block.PURPLE_WOOL) return "Purple Wool";
-      if (block == Block.INDIGO_WOOL) return "Indigo Wool";
-      if (block == Block.VIOLET_WOOL) return "Violet Wool";
-      if (block == Block.MAGENTA_WOOL) return "Magenta Wool";
-      if (block == Block.PINK_WOOL) return "Pink Wool";
-      if (block == Block.BLACK_WOOL) return "Black Wool";
-      if (block == Block.GRAY_WOOL) return "Gray Wool";
-      if (block == Block.WHITE_WOOL) return "White Wool";
-      
-      if (block == Block.STONE) return "Stone";
-      if (block == Block.GRASS) return "Grass";
-      if (block == Block.DIRT) return "Dirt";
-      if (block == Block.COBBLESTONE) return "Cobblestone";
-      if (block == Block.WOOD) return "Planks";
-      if (block == Block.SAPLING) return "Sapling";
-      if (block == Block.BEDROCK) return "Bedrock";
-      if (block == Block.SAND) return "Sand";
-      if (block == Block.GRAVEL) return "Gravel";
-      if (block == Block.GOLD_ORE) return "Gold Ore";
-      if (block == Block.IRON_ORE) return "Iron Ore";
-      if (block == Block.COAL_ORE) return "Coal Ore";
-      if (block == Block.LOG) return "Log";
-      if (block == Block.LEAVES) return "Leaves";
-      if (block == Block.SPONGE) return "Sponge";
-      if (block == Block.GLASS) return "Glass";
-      
-      if (block == Block.GOLD_BLOCK) return "Block of Gold";
-      if (block == Block.IRON_BLOCK) return "Block of Iron";
-      if (block == Block.DOUBLE_SLAB) return "Double Slab";
-      if (block == Block.SLAB) return "Slab";
-      if (block == Block.BRICK) return "Brick Block";
-      if (block == Block.TNT) return "TNT";
-      if (block == Block.BOOKSHELF) return "Bookshelf";
-      if (block == Block.MOSSY_COBBLESTONE) return "Mossy Cobblestone";
-      if (block == Block.OBSIDIAN) return "Obsidian";
-      
-      if (block == Block.DIAMOND_ORE_NEW) return "Diamond Ore";
-      if (block == Block.DIAMOND_BLOCK_NEW) return "Block of Diamond";
-      if (block == Block.BEACON) return "Beacon";
-      if (block == Block.FURNACE) return "Furnace";
-      if (block == Block.PUMPKIN) return "Pumpkin";
-      if (block == Block.CACTUS) return "Cactus";
-      if (block == Block.PISTON) return "Piston";
-      if (block == Block.LUCKY_BLOCK) return "Lucky Block";
-      
-      if (block.name != null) return block.name;
-      return "Unknown Block";
-   }
+    private static Map<Block, String> blockNames() {
+        Map<Block, String> names = new HashMap<>();
+        for (java.lang.reflect.Field field : Block.class.getFields())
+            if (field.getType() == Block.class)
+                try {
+                    Block block = (Block) field.get(null);
+                    StringBuilder label = new StringBuilder();
+                    for (String word : field.getName().replace("_NEW", "").split("_")) {
+                        if (label.length() > 0) label.append(' ');
+                        label.append(word.charAt(0))
+                                .append(word.substring(1).toLowerCase(Locale.ROOT));
+                    }
+                    names.put(block, label.toString());
+                } catch (ReflectiveOperationException ignored) {
+                }
+        names.put(Block.WOOD, "Planks");
+        return names;
+    }
 
-   private String getItemDisplayName(Item item) {
-      if (item == null) return "";
-      if (item == Item.APPLE) return "Apple";
-      if (item == Item.SWORD) return "Sword";
-      if (item == Item.MINING_AXE) return "Axe";
-      if (item == Item.SHOVEL) return "Shovel";
-      if (item == Item.BEETROOT) return "Beetroot";
-      if (item == Item.BOW) return "Bow";
-      if (item == Item.FLINT_AND_STEEL) return "Flint and Steel";
-      if (item == Item.FEATHER) return "Feather";
-      if (item == Item.BUCKET_EMPTY) return "Bucket";
-      if (item == Item.BUCKET_WATER) return "Water Bucket";
-      if (item == Item.BUCKET_LAVA) return "Lava Bucket";
-      if (item == Item.GRAVITYGUN) return "Gravity Gun";
-      if (item == Item.BAG_OF_SALT) return "Bag of Salt";
-      if (item == Item.HEALTH_DRINK) return "Health Drink";
-      if (item == Item.DAMAGE_BOTTLE) return "Damage Bottle";
-      if (item == Item.GRAPPLING_HOOK) return "Grappling Hook";
-      if (item == Item.GLASS_LOOKER) return "Glass Looker";
-      if (item == Item.ENDER_PEARL) return "Ender Pearl";
-      
-      if (item.name != null) return item.name;
-      return "Unknown Item";
-   }
+    private int left() {
+        return (width - 195) / 2;
+    }
 
-   private String getDisplayName(int rawId) {
-      if (rawId < 256) {
-         return getBlockDisplayName(Block.blocks[rawId]);
-      } else {
-         int itemId = rawId - 256;
-         if (itemId >= 0 && itemId < Item.items.length) {
-            return getItemDisplayName(Item.items[itemId]);
-         }
-      }
-      return "Unknown";
-   }
+    private int top() {
+        return (height - 180) / 2 + 28;
+    }
 
-   private boolean isBlockInTab(Block block, int tab) {
-      if (tab == 0) return true; // All
-      String name = getBlockDisplayName(block).toLowerCase();
-      if (tab == 1) { // Building
-         return block == Block.STONE || block == Block.COBBLESTONE || block == Block.BRICK || 
-                block == Block.WOOD || block == Block.LOG || block == Block.SLAB || 
-                block == Block.MOSSY_COBBLESTONE || block == Block.BOOKSHELF || 
-                block == Block.OBSIDIAN || block == Block.BEDROCK || 
-                block == Block.PISTON || block == Block.LUCKY_BLOCK;
-      }
-      if (tab == 2) { // Natural
-         return block == Block.DIRT || block == Block.SAND || block == Block.GRAVEL || 
-                block == Block.SPONGE || block == Block.COAL_ORE || block == Block.IRON_ORE || 
-                block == Block.GOLD_ORE || block == Block.IRON_BLOCK || block == Block.GOLD_BLOCK || 
-                block == Block.DIAMOND_ORE_NEW || block == Block.DIAMOND_BLOCK_NEW || 
-                block == Block.BEACON;
-      }
-      if (tab == 3) { // Decor
-         return block == Block.LEAVES || block == Block.GLASS || block == Block.SAPLING || 
-                block == Block.DANDELION || block == Block.ROSE || 
-                block == Block.BROWN_MUSHROOM || block == Block.RED_MUSHROOM || 
-                block == Block.PUMPKIN || block == Block.CACTUS;
-      }
-      if (tab == 4) { // Wool
-         return name.contains("wool");
-      }
-      if (tab == 6) { // Utility (Note: tab 5 is Items)
-         return block == Block.TNT || block == Block.FURNACE || block == Block.WORKBENCH;
-      }
-      return false;
-   }
+    public BlockSelectScreen() {
+        grabsMouse = true;
+    }
 
-   private java.util.List<Integer> getFilteredRawIds() {
-      java.util.List<Integer> list = new java.util.ArrayList<>();
-      
-      // Items tab
-      if (currentTab == 5) {
-         for (Item item : Item.items) {
-            if (item != null && item != Item.EMPTY) {
-               int rawId = item.id + 256;
-               String name = getItemDisplayName(item);
-               if (searchQuery.isEmpty() || name.toLowerCase().contains(searchQuery.toLowerCase())) {
-                  list.add(rawId);
-               }
+    @Override
+    public void onOpen() {
+        super.onOpen();
+        ItemRegistry.bootstrap();
+    }
+
+    public static String displayName(int raw) {
+        if (raw < 256)
+            return raw > 0 && Block.blocks[raw] != null
+                    ? BLOCK_NAMES.getOrDefault(Block.blocks[raw], Block.blocks[raw].name)
+                    : "";
+        return raw - 256 < Item.items.length && Item.items[raw - 256] != null
+                ? Item.items[raw - 256].name
+                : "";
+    }
+
+    public static List<Integer> catalog(int tab, String query) {
+        ItemRegistry.bootstrap();
+        List<Integer> ids = new ArrayList<>();
+        String q = query.toLowerCase(Locale.ROOT);
+        for (Object o : CreativeInventoryBlocks.allowedBlocks) {
+            Block b = (Block) o;
+            if (b == Block.REDSTONE_WIRE || b == Block.PISTON_HEAD) continue;
+            String n = displayName(b.id).toLowerCase(Locale.ROOT);
+            boolean nature =
+                    b == Block.DIRT
+                            || b == Block.SAND
+                            || b == Block.GRAVEL
+                            || b == Block.LOG
+                            || b == Block.LEAVES
+                            || n.contains("ore")
+                            || n.contains("sapling")
+                            || n.contains("mushroom")
+                            || n.contains("flower")
+                            || b == Block.CACTUS;
+            boolean decor =
+                    n.contains("wool")
+                            || b == Block.GLASS
+                            || b == Block.BOOKSHELF
+                            || b == Block.PUMPKIN;
+            boolean utility =
+                    b == Block.TNT
+                            || b instanceof net.classicremastered.minecraft.level.tile.CircuitBlock
+                            || b == Block.CHEST
+                            || b == Block.FURNACE
+                            || b == Block.BEACON
+                            || b == Block.LUCKY_BLOCK;
+            if ((tab == 0
+                            || tab == 1 && !nature && !decor && !utility
+                            || tab == 2 && nature
+                            || tab == 3 && decor
+                            || tab == 6 && utility)
+                    && n.contains(q)
+                    && !ids.contains(b.id)) ids.add(b.id);
+        }
+        for (Item item : Item.items)
+            if (item != null && item != Item.EMPTY && item.id != Item.LEVER_ICON_ID) {
+                boolean egg = item instanceof ItemSpawnEgg,
+                        gear =
+                                Equipment.GEAR.containsKey(item.id)
+                                        || item == Item.MINING_AXE
+                                        || item == Item.SHOVEL
+                                        || item == Item.BOW;
+                boolean utility =
+                        item instanceof ToolItem && !gear
+                                || item == Item.ENDER_PEARL
+                                || item.id == Item.REDSTONE_DUST_ID;
+                if ((tab == 0
+                                || tab == 7 && egg
+                                || tab == 4 && gear && !egg
+                                || tab == 5 && !egg && !gear
+                                || tab == 6 && utility
+                                || tab == 8 && item instanceof MobWandItem)
+                        && item.name.toLowerCase(Locale.ROOT).contains(q)) ids.add(item.id + 256);
             }
-         }
-         return list;
-      }
-      
-      // All tab (Blocks only)
-      if (currentTab == 0) {
-         for (Object obj : CreativeInventoryBlocks.allowedBlocks) {
-            Block block = (Block) obj;
-            String name = getBlockDisplayName(block);
-            if (searchQuery.isEmpty() || name.toLowerCase().contains(searchQuery.toLowerCase())) {
-               list.add(block.id);
+        return ids;
+    }
+
+    private List<Integer> entries() {
+        List<Integer> ids = catalog(currentTab, searchQuery);
+        scrollRow = Math.max(0, Math.min(scrollRow, Math.max(0, (ids.size() + 8) / 9 - 5)));
+        return ids;
+    }
+
+    private int entryAt(int x, int y) {
+        int gx = x - left() - 9, gy = y - top() - 18;
+        if (gx < 0 || gy < 0 || gx >= 162 || gy >= 90 || gx % 18 >= 16 || gy % 18 >= 16) return -1;
+        int index = (gy / 18 + scrollRow) * 9 + gx / 18;
+        return index < entries().size() ? index : -1;
+    }
+
+    private void sprite(String path, int x, int y, int w, int h) {
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glColor4f(1, 1, 1, 1);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, minecraft.textureManager.load(path));
+        ShapeRenderer shape = ShapeRenderer.instance;
+        shape.begin();
+        shape.vertexUV(x, y + h, 0, 0, 1);
+        shape.vertexUV(x + w, y + h, 0, 1, 1);
+        shape.vertexUV(x + w, y, 0, 1, 0);
+        shape.vertexUV(x, y, 0, 0, 0);
+        shape.end();
+    }
+
+    @Override
+    public void render(int mx, int my) {
+        mouseX = mx;
+        mouseY = my;
+        int x = left(), y = top();
+        List<Integer> ids = entries();
+        int wheel = Mouse.isCreated() ? Mouse.getDWheel() : 0;
+        if (wheel != 0) {
+            scrollRow += wheel > 0 ? -1 : 1;
+            ids = entries();
+        }
+        drawBox(0, 0, width, height, 0x60000000);
+        int[] icons = {
+            Block.STONE.id,
+            Block.WOOD.id,
+            Block.SAPLING.id,
+            Block.GLASS.id,
+            Item.BOW.id + 256,
+            Item.APPLE.id + 256,
+            Block.TNT.id,
+            357,
+            336
+        };
+        for (int t = 0; t < TABS.length; t++) {
+            int tx = x + 2 + t * 21;
+            sprite(
+                    t == currentTab ? "/gui/creative-tab-selected.png" : "/gui/creative-tab.png",
+                    tx,
+                    y - 28,
+                    23,
+                    29);
+            drawIdIcon(icons[t], tx + 3, y - 22);
+        }
+        GL11.glColor4f(1, 1, 1, 1);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, minecraft.textureManager.load("/gui/creative.png"));
+        drawImage(x, y, 0, 0, 195, 136);
+        drawString(fontRenderer, TABS[currentTab], x + 8, y + 5, 0x404040);
+        drawBox(x + 80, y + 3, x + 187, y + 15, 0xFF373737);
+        String query =
+                searchQuery.isEmpty() && !searchFocused
+                        ? "Search..."
+                        : searchQuery + (searchFocused ? "_" : "");
+        while (fontRenderer.getWidth(query) > 94 && query.length() > 1) query = query.substring(1);
+        drawString(fontRenderer, query, x + 83, y + 5, 0xFFFFFF);
+        int hover = entryAt(mx, my);
+        for (int row = 0; row < 5; row++)
+            for (int col = 0; col < 9; col++) {
+                int index = (row + scrollRow) * 9 + col,
+                        sx = x + 9 + col * 18,
+                        sy = y + 18 + row * 18;
+                if (index == hover) drawBox(sx, sy, sx + 16, sy + 16, 0x80FFFFFF);
+                if (index < ids.size()) drawIdIcon(ids.get(index), sx, sy);
             }
-         }
-         return list;
-      }
-      
-      // Categorized block tabs
-      for (Object obj : CreativeInventoryBlocks.allowedBlocks) {
-         Block block = (Block) obj;
-         if (isBlockInTab(block, currentTab)) {
-            String name = getBlockDisplayName(block);
-            if (searchQuery.isEmpty() || name.toLowerCase().contains(searchQuery.toLowerCase())) {
-               list.add(block.id);
-            }
-         }
-      }
-      return list;
-   }
+        if (ids.isEmpty())
+            drawCenteredString(fontRenderer, "No matching items", x + 86, y + 59, 0x404040);
+        int max = Math.max(0, (ids.size() + 8) / 9 - 5);
+        sprite(
+                "/gui/creative-scroll.png",
+                x + 175,
+                y + 18 + (max == 0 ? 0 : 75 * scrollRow / max),
+                12,
+                15);
+        var inv = minecraft.player.inventory;
+        for (int slot = 0; slot < 9; slot++) {
+            int sx = x + 9 + slot * 18;
+            if (slot == inv.selected) drawBox(sx, y + 112, sx + 16, y + 128, 0x60FFFFFF);
+            if (inv.getId(slot) > 0) drawIdIcon(inv.getId(slot), sx, y + 112);
+        }
+        drawBox(x, y + 139, x + 62, y + 154, 0xFF555555);
+        drawString(fontRenderer, "Inventory", x + 5, y + 143, 0xFFFFFF);
+        drawString(fontRenderer, "Click / 1-9 to give", x + 70, y + 143, 0xFFFFFF);
+        String tooltip = null, detail = "";
+        if (hover >= 0) {
+            int raw = ids.get(hover);
+            tooltip = displayName(raw);
+            if (raw >= 256 && Item.items[raw - 256] instanceof MobWandItem wand)
+                detail = wand.instructions();
+            else detail = Equipment.description(raw);
+        } else if (my >= y - 28 && my < y && mx >= x + 2 && mx < x + 191)
+            tooltip = TABS[(mx - x - 2) / 21];
+        if (tooltip != null) {
+            int tw = Math.max(fontRenderer.getWidth(tooltip), fontRenderer.getWidth(detail));
+            int tx = Math.max(3, Math.min(width - tw - 6, mx + 9)),
+                    ty = Math.min(height - 28, my + 12);
+            drawBox(tx - 3, ty - 3, tx + tw + 4, ty + (detail.isEmpty() ? 11 : 23), 0xF0100010);
+            drawString(fontRenderer, tooltip, tx, ty, 0xFFFFFF);
+            if (!detail.isEmpty()) drawString(fontRenderer, detail, tx, ty + 12, 0xAAAAAA);
+        }
+        GL11.glColor4f(1, 1, 1, 1);
+    }
 
-   private int getBlockOnScreen(int mx, int my) {
-      int x1 = this.width / 2 - 120;
-      int y1 = this.height / 2 - 100;
-      java.util.List<Integer> filtered = getFilteredRawIds();
-      for (int i = 0; i < filtered.size(); ++i) {
-         int col = i % 9;
-         int row = i / 9;
-         int renderRow = row - scrollRow;
-         if (renderRow >= 0 && renderRow < 5) {
-            int var4 = x1 + 12 + col * 24;
-            int var5 = y1 + 25 + renderRow * 24 + 3;
-            if (mx >= var4 && mx <= var4 + 24 && my >= var5 - 12 && my <= var5 + 12) {
-               return i;
-            }
-         }
-      }
-      return -1;
-   }
-
-   public final void render(int mx, int my) {
-      int x1 = this.width / 2 - 120;
-      int x2 = this.width / 2 + 120;
-      int y1 = this.height / 2 - 100;
-      int y2 = this.height / 2 + 100;
-
-      java.util.List<Integer> filtered = getFilteredRawIds();
-      int totalBlocks = filtered.size();
-      int totalRows = (totalBlocks + 8) / 9;
-      int maxScrollRow = Math.max(0, totalRows - 5);
-
-      // Mouse wheel scrolling
-      int dw = org.lwjgl.input.Mouse.getDWheel();
-      if (dw != 0) {
-         if (dw > 0) {
-            scrollRow--;
-         } else {
-            scrollRow++;
-         }
-         if (scrollRow < 0) scrollRow = 0;
-         if (scrollRow > maxScrollRow) scrollRow = maxScrollRow;
-      }
-
-      // Draw background box
-      drawFadingBox(x1, y1, x2, y2, -1878719232, -1070583712);
-
-      // Draw tabs
-      int tabWidth = 240 / TABS.length;
-      for (int i = 0; i < TABS.length; ++i) {
-         int tx1 = x1 + i * tabWidth;
-         int tx2 = tx1 + tabWidth;
-         int tabBgColor = (i == currentTab) ? 0x60FFFFFF : ((mx >= tx1 && mx < tx2 && my >= y1 + 5 && my <= y1 + 22) ? 0x30FFFFFF : 0x00FFFFFF);
-         if (tabBgColor != 0) {
-            drawBox(tx1 + 1, y1 + 5, tx2 - 1, y1 + 20, tabBgColor);
-         }
-         int textColor = (i == currentTab) ? 16777120 : 14737632;
-         drawCenteredString(this.fontRenderer, TABS[i], tx1 + tabWidth / 2, y1 + 8, textColor);
-      }
-
-      // Separator
-      drawBox(x1, y1 + 22, x2, y1 + 23, 0x40FFFFFF);
-
-      int hoveredIndex = this.getBlockOnScreen(mx, my);
-
-      TextureManager textureManager = this.minecraft.textureManager;
-      ShapeRenderer shapeRenderer = ShapeRenderer.instance;
-      int terrainTextureId = textureManager.load("/terrain.png");
-
-      for (int i = 0; i < filtered.size(); ++i) {
-         int col = i % 9;
-         int row = i / 9;
-         int renderRow = row - scrollRow;
-         if (renderRow < 0 || renderRow >= 5) continue; // Out of visible range
-
-         int rawId = filtered.get(i);
-         GL11.glPushMatrix();
-         int bx = x1 + 12 + col * 24;
-         int by = y1 + 25 + renderRow * 24;
-
-         if (rawId < 256) {
-            Block block = Block.blocks[rawId];
-            if (block != null) {
-               GL11.glTranslatef((float)bx, (float)by, 0.0F);
-               GL11.glScalef(10.0F, 10.0F, 10.0F);
-               GL11.glTranslatef(1.0F, 0.5F, 8.0F);
-               GL11.glRotatef(-30.0F, 1.0F, 0.0F, 0.0F);
-               GL11.glRotatef(45.0F, 0.0F, 1.0F, 0.0F);
-               if (hoveredIndex == i) {
-                  GL11.glScalef(1.6F, 1.6F, 1.6F);
-               }
-               GL11.glTranslatef(-1.5F, 0.5F, 0.5F);
-               GL11.glScalef(-1.0F, -1.0F, -1.0F);
-               GL11.glBindTexture(3553, terrainTextureId);
-               shapeRenderer.begin();
-               block.renderFullbright(shapeRenderer);
-               shapeRenderer.end();
-            }
-         } else {
-            int itemId = rawId - 256;
-            if (itemId >= 0 && itemId < Item.items.length) {
-               Item item = Item.items[itemId];
-               if (item != null) {
-                  GL11.glTranslatef((float)(bx + 4), (float)(by + 4), 0.0F);
-                  if (hoveredIndex == i) {
-                     GL11.glScalef(1.3F, 1.3F, 1.3F);
-                     GL11.glTranslatef(-2.0F, -2.0F, 0.0F);
-                  }
-                  item.renderIcon(textureManager, shapeRenderer);
-               }
-            }
-         }
-         GL11.glPopMatrix();
-      }
-
-      // Draw scrollbar if there are more than 5 rows
-      if (totalRows > 5) {
-         drawBox(x1 + 231, y1 + 25, x1 + 234, y1 + 145, 0x40FFFFFF);
-         int thumbHeight = 120 * 5 / totalRows;
-         int thumbY = y1 + 25 + (120 - thumbHeight) * scrollRow / maxScrollRow;
-         drawBox(x1 + 230, thumbY, x1 + 235, thumbY + thumbHeight, 0x80FFFFFF);
-      }
-
-      // Draw search text
-      String searchDisplayText = "Search: " + searchQuery + "_";
-      drawString(this.fontRenderer, searchDisplayText, x1 + 12, y2 - 18, 0xFFFFFFFF);
-
-      // Draw tooltip
-      if (hoveredIndex >= 0 && hoveredIndex < filtered.size()) {
-         int hoveredRawId = filtered.get(hoveredIndex);
-         String displayName = getDisplayName(hoveredRawId);
-         int tooltipWidth = this.fontRenderer.getWidth(displayName);
-         int tx = mx + 10;
-         int ty = my - 10;
-         if (tx + tooltipWidth + 6 > this.width) {
-            tx = mx - tooltipWidth - 10;
-         }
-         drawBox(tx, ty - 2, tx + tooltipWidth + 6, ty + 10, -1878719232);
-         drawString(this.fontRenderer, displayName, tx + 3, ty, 0xFFFFFF00);
-      }
-   }
-
-   protected final void onMouseClick(int mx, int my, int button) {
-      if (button == 0) {
-         int x1 = this.width / 2 - 120;
-         int y1 = this.height / 2 - 100;
-         
-         // Check tab click
-         if (my >= y1 + 5 && my <= y1 + 22) {
-            int tabWidth = 240 / TABS.length;
-            for (int i = 0; i < TABS.length; ++i) {
-               int tx1 = x1 + i * tabWidth;
-               int tx2 = tx1 + tabWidth;
-               if (mx >= tx1 && mx <= tx2) {
-                  if (TABS[i].equals("Inv")) {
-                     this.minecraft.setCurrentScreen(new net.classicremastered.minecraft.gui.InventoryScreen());
-                  } else {
-                     currentTab = i;
-                     scrollRow = 0;
-                  }
-                  return;
-               }
-            }
-         }
-         
-         // Check block click
-         int clickedIndex = this.getBlockOnScreen(mx, my);
-         if (clickedIndex >= 0) {
-            java.util.List<Integer> filtered = getFilteredRawIds();
-            if (clickedIndex < filtered.size()) {
-               this.minecraft.player.inventory.replaceSlotWithId(filtered.get(clickedIndex));
-               this.minecraft.setCurrentScreen((GuiScreen)null);
-            }
-         }
-      }
-   }
-
-   protected final void onKeyPress(char var1, int var2) {
-      if (var2 == Keyboard.KEY_ESCAPE) {
-         this.minecraft.setCurrentScreen((GuiScreen)null);
-         this.minecraft.grabMouse();
-         return;
-      }
-      if (var2 == Keyboard.KEY_BACK) {
-         if (searchQuery.length() > 0) {
-            searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+    @Override
+    protected void onMouseClick(int mx, int my, int button) {
+        if (button != 0) return;
+        int x = left(), y = top();
+        searchFocused = mx >= x + 80 && mx < x + 187 && my >= y + 3 && my < y + 15;
+        if (searchFocused) return;
+        if (my >= y - 28 && my < y && mx >= x + 2 && mx < x + 191) {
+            currentTab = (mx - x - 2) / 21;
             scrollRow = 0;
-         }
-         return;
-      }
-      if (var1 >= ' ' && var1 <= '~') {
-         searchQuery += var1;
-         scrollRow = 0;
-      }
-   }
+            return;
+        }
+        if (mx >= x + 175 && mx < x + 187 && my >= y + 18 && my < y + 108) {
+            scrollRow =
+                    Math.round((my - y - 18) / 89f * Math.max(0, (entries().size() + 8) / 9 - 5));
+            return;
+        }
+        if (my >= y + 112 && my < y + 128 && mx >= x + 9 && mx < x + 171) {
+            minecraft.player.inventory.selected = (mx - x - 9) / 18;
+            return;
+        }
+        if (my >= y + 139 && my < y + 154 && mx >= x && mx < x + 62) {
+            minecraft.setCurrentScreen(new InventoryScreen());
+            return;
+        }
+        int index = entryAt(mx, my);
+        if (index >= 0) minecraft.player.inventory.replaceSlotWithId(entries().get(index));
+    }
+
+    @Override
+    protected void onKeyPress(char ch, int key) {
+        if (key == Keyboard.KEY_ESCAPE) {
+            if (searchFocused) {
+                searchFocused = false;
+                return;
+            }
+            minecraft.setCurrentScreen(null);
+            minecraft.grabMouse();
+            return;
+        }
+        if (searchFocused) {
+            if (key == Keyboard.KEY_BACK && !searchQuery.isEmpty())
+                searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+            else if (ch >= 32 && ch < 127 && searchQuery.length() < 24) searchQuery += ch;
+            scrollRow = 0;
+            return;
+        }
+        if (key == minecraft.settings.inventoryKey.key) {
+            minecraft.setCurrentScreen(null);
+            minecraft.grabMouse();
+            return;
+        }
+        if (key >= Keyboard.KEY_1 && key <= Keyboard.KEY_9) {
+            int i = entryAt(mouseX, mouseY);
+            if (i >= 0) {
+                int prev = minecraft.player.inventory.selected;
+                minecraft.player.inventory.selected = key - Keyboard.KEY_1;
+                minecraft.player.inventory.replaceSlotWithId(entries().get(i));
+                minecraft.player.inventory.selected = prev;
+            }
+        }
+    }
 }

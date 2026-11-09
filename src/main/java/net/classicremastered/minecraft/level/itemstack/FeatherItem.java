@@ -20,14 +20,7 @@ public class FeatherItem extends Item {
         player.hurt(null, 1);
 
         // Optionally reduce item stack
-        int slot = player.inventory.selected;
-        if (player.inventory.count[slot] > 0) {
-            player.inventory.count[slot]--;
-            if (player.inventory.count[slot] <= 0) {
-                player.inventory.slots[slot] = -1;
-                player.inventory.count[slot] = 0;
-            }
-        }
+        consumeSelected(player,level);
 
         // Feedback (if you want chat text):
         // if (player.minecraft != null && player.minecraft.hud != null) {
