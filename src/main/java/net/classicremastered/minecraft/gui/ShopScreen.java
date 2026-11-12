@@ -63,20 +63,30 @@ public final class ShopScreen extends GuiScreen {
         if (raw <= 0
                 || raw >= 256 && (raw - 256 >= Item.items.length || Item.items[raw - 256] == null))
             return false;
-        int capacity = 0,
-                cap =
-                        raw >= 256 && Item.items[raw - 256] != null
-                                ? Item.items[raw - 256].maxStackSize
-                                : 99;
-        for (int i = 0; i < p.inventory.totalSize(); i++) {
-            int id = p.inventory.getId(i), n = p.inventory.getCount(i);
-            if (id <= 0 || n <= 0) capacity += cap;
-            else if (id == raw) capacity += Math.max(0, cap - n);
+        if (raw == TurretItems.PACKED + 256) return false;
+        synchronized (p.inventory) {
+            int remaining = count;
+            int[] additions = new int[p.inventory.totalSize()];
+            int cap = Item.stackLimit(raw);
+            for (int pass = 0; pass < 2; pass++) {
+                for (int slot = 0; slot < additions.length && remaining > 0; slot++) {
+                    int id = p.inventory.getId(slot), existing = p.inventory.getCount(slot);
+                    boolean empty = id <= 0 || existing <= 0;
+                    if (pass == 0 ? empty || id != raw : !empty) continue;
+                    int amount = Math.min(remaining, Math.max(0, cap - (empty ? 0 : existing)));
+                    additions[slot] = amount;
+                    remaining -= amount;
+                }
+            }
+            if (remaining > 0) return false;
+            for (int slot = 0; slot < additions.length; slot++) {
+                if (additions[slot] == 0) continue;
+                int existing = p.inventory.getId(slot) == raw ? p.inventory.getCount(slot) : 0;
+                p.inventory.setIdCount(slot, raw, Math.max(0, existing) + additions[slot]);
+            }
+            p.coins -= price;
+            return true;
         }
-        if (capacity < count) return false;
-        for (int i = 0; i < count; i++) p.inventory.addResource(raw);
-        p.coins -= price;
-        return true;
     }
 
     @Override

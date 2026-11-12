@@ -46,13 +46,15 @@ public class DroppedBlock extends Entity {
     @Override
     public void tick() {
         if (removed) return;
+        boolean fireResistant = resource == Block.OBSIDIAN.id || resource == Block.BEDROCK.id;
+        if (fireDestroysStack(fireResistant)) return;
         xo = x;
         yo = y;
         zo = z;
 
         yd -= 0.04F;
         move(xd, yd, zd);
-        if (cactusDamagesStack()) return;
+        if (fireDestroysStack(fireResistant) || cactusDamagesStack()) return;
 
         xd *= 0.98F;
         yd *= 0.98F;

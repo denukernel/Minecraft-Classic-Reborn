@@ -40,8 +40,8 @@ public final class MobSpawner {
             case EASY -> 12;
             case NORMAL -> 20;
             case HARD -> 28;
-        case VERY_HARD -> 32;
-        case EXTREME -> 36;
+            case VERY_HARD -> 32;
+            case EXTREME -> 36;
         };
     }
 
@@ -150,8 +150,8 @@ public final class MobSpawner {
             int batches, Entity near, ProgressBarDisplay bar, boolean allowHostiles) {
         if (level == null || level.isNetworkMode() || !level.doMobSpawning) return 0;
         MobRegistry.bootstrapDefaults();
-        BiomeLevelGenerator biomes = level.biomeSeed == null ? null
-                : new BiomeLevelGenerator(level.biomeSeed);
+        BiomeLevelGenerator biomes =
+                level.biomeSeed == null ? null : new BiomeLevelGenerator(level.biomeSeed);
         allowHostiles &= near != null && monsterCap() > 0;
         float centerX = near == null ? level.xSpawn : near.x,
                 centerY = near == null ? level.ySpawn : near.y,
@@ -243,24 +243,30 @@ public final class MobSpawner {
                     boolean baby = level.random.nextInt(100) < 5;
                     var biome = biomes == null ? null : biomes.biomeAt(sx, sz);
                     if (biome == BiomeLevelGenerator.Biome.DESERT) {
-                        variant = baby ? net.classicremastered.minecraft.mob.BabyHusk.REGISTRY_ID
-                                : Husk.REGISTRY_ID;
-                    } else if (!level.isDaytime() && (biome == BiomeLevelGenerator.Biome.SNOWY_PLAINS
-                            || biome == BiomeLevelGenerator.Biome.SNOWY_FOREST)) {
-                        variant = baby ? net.classicremastered.minecraft.mob.BabyFrostbite.REGISTRY_ID
-                                : net.classicremastered.minecraft.mob.Frostbite.REGISTRY_ID;
+                        variant =
+                                baby
+                                        ? net.classicremastered.minecraft.mob.BabyHusk.REGISTRY_ID
+                                        : Husk.REGISTRY_ID;
+                    } else if (!level.isDaytime()
+                            && (biome == BiomeLevelGenerator.Biome.SNOWY_PLAINS
+                                    || biome == BiomeLevelGenerator.Biome.SNOWY_FOREST)) {
+                        variant =
+                                baby
+                                        ? net.classicremastered.minecraft.mob.BabyFrostbite
+                                                .REGISTRY_ID
+                                        : net.classicremastered.minecraft.mob.Frostbite.REGISTRY_ID;
                     } else if (baby) {
                         variant = 40;
                     } else {
                         var difficulty = CombatRules.difficulty(level);
-                        if (difficulty.ordinal() >= net.classicremastered.minecraft.Difficulty.VERY_HARD
-                                .ordinal()) {
+                        if (difficulty.ordinal()
+                                >= net.classicremastered.minecraft.Difficulty.VERY_HARD.ordinal()) {
                             int roll = level.random.nextInt(100);
-                            int igniterChance = difficulty == net.classicremastered.minecraft.Difficulty.EXTREME
-                                    ? 12
-                                    : 2;
-                            if (roll < igniterChance)
-                                variant = ZombieIgniter.REGISTRY_ID;
+                            int igniterChance =
+                                    difficulty == net.classicremastered.minecraft.Difficulty.EXTREME
+                                            ? 12
+                                            : 2;
+                            if (roll < igniterChance) variant = ZombieIgniter.REGISTRY_ID;
                             else if (roll < igniterChance + 2)
                                 variant = MobRegistry.idOfName("ZombieBuilder");
                         }
@@ -273,14 +279,11 @@ public final class MobSpawner {
                 if (mob instanceof Zombie && mob.isBaby() && level.random.nextInt(20) == 0) {
                     var candidate = MobRegistry.create((short) 25, level, sx + .5f, sy, sz + .5f);
                     if (candidate instanceof net.classicremastered.minecraft.mob.Chicken
-                            && place(candidate, sx, sy, sz, near))
-                        chicken = candidate;
+                            && place(candidate, sx, sy, sz, near)) chicken = candidate;
                 }
-                if (chicken != null)
-                    level.addEntity(chicken);
+                if (chicken != null) level.addEntity(chicken);
                 level.addEntity(mob);
-                if (chicken != null)
-                    mob.mount(chicken);
+                if (chicken != null) mob.mount(chicken);
                 if (mob instanceof Spider spider && level.random.nextInt(100) == 0) {
                     Mob rider = MobRegistry.create((short) 2, level, mob.x, mob.y, mob.z);
                     if (rider instanceof Skeleton skeleton && spider.hasRiderClearance(skeleton)) {
@@ -303,6 +306,9 @@ public final class MobSpawner {
     }
 
     private boolean place(Mob mob, int x, int feetY, int z, Entity near) {
+        if (mob instanceof Zombie
+                && net.classicremastered.minecraft.level.structure.GeneratedHouse.containsHouse(
+                        level, x, feetY, z)) return false;
         // Refresh bounds after constructors that assign dimensions directly.
         mob.setPos(mob.x, mob.y, mob.z);
         // Respect species with feet-based origins as well as centered entities.

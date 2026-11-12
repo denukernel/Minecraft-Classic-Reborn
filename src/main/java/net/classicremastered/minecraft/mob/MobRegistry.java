@@ -127,7 +127,8 @@ public final class MobRegistry {
                     || Creeper.class.isAssignableFrom(entry.type)
                     || Spider.class.isAssignableFrom(entry.type)
                     || Enderman.class.isAssignableFrom(entry.type)
-                    || extraTurretTarget(entry.type)) {
+                    || extraTurretTarget(entry.type)
+                    || entry.type == IronGolem.class) {
                 result.put(entry.id, displayName(entry.id));
             }
         }

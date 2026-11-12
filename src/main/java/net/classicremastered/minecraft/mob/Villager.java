@@ -5,6 +5,30 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.player.Player;
 
 public class Villager extends Mob {
+    private static final long serialVersionUID = 3112391374784077778L;
+    private java.util.List<net.classicremastered.minecraft.level.itemstack.VillagerTrades.Offer>
+            savedOffers;
+
+    public java.util.List<net.classicremastered.minecraft.level.itemstack.VillagerTrades.Offer>
+            tradeOffers() {
+        if (savedOffers == null)
+            savedOffers =
+                    net.classicremastered.minecraft.level.itemstack.VillagerTrades.randomOffers(
+                            level.random);
+        return savedOffers;
+    }
+
+    @Override
+    public void savePersistence(net.classicremastered.nbt.CompoundTag tag) {
+        super.savePersistence(tag);
+        net.classicremastered.minecraft.level.itemstack.VillagerTrades.save(this, tag);
+    }
+
+    @Override
+    public void loadPersistence(net.classicremastered.nbt.CompoundTag tag) {
+        super.loadPersistence(tag);
+        savedOffers = net.classicremastered.minecraft.level.itemstack.VillagerTrades.load(tag);
+    }
 
     public boolean persistent = true;
     private int deathTicks = 0;
@@ -121,6 +145,7 @@ public class Villager extends Mob {
 
     @Override
     public void tick() {
+        updateHostility();
         super.tick();
 
         if (this.health > 0) {
@@ -139,11 +164,6 @@ public class Villager extends Mob {
 
         Player p = (this.level != null) ? (Player) this.level.player : null;
         if (p != null && p.isSpectator()) return;
-
-        // --- Flip to hostile if reputation <= -100 (skip in Creative) ---
-        if (p != null && p.villagerReputation <= -100 && !this.level.creativeMode) {
-            hostile = true;
-        }
 
         Entity combatTarget =
                 ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
@@ -190,16 +210,6 @@ public class Villager extends Mob {
                 idleSoundTimer = 100 + this.level.random.nextInt(100);
             }
 
-            // If inside house → move toward door first
-            if (this.hasHome) {
-                float doorX = this.homeX;
-                float doorZ = this.homeZ - this.homeRadius; // assume south side door
-                if (Math.abs(this.x - this.homeX) < this.homeRadius
-                        && Math.abs(this.z - this.homeZ) < this.homeRadius) {
-                    return;
-                }
-            }
-
             Entity target =
                     ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
                             ? basic.attackTarget
@@ -230,6 +240,24 @@ public class Villager extends Mob {
                     this.attackTime = 20;
                 }
             }
+        }
+    }
+
+    private void updateHostility() {
+        boolean next =
+                level != null
+                        && level.player instanceof Player player
+                        && player.villagerReputation <= -100
+                        && !level.creativeMode
+                        && !player.isSpectator();
+        if (hostile == next) return;
+        hostile = next;
+        bossBattleCounter = idleSoundTimer = 0;
+        murderMessageShown = false;
+        running = false;
+        if (ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic) {
+            basic.attackTarget = null;
+            basic.clearNavigation();
         }
     }
 

@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.gui;
 
 import net.classicremastered.minecraft.level.itemstack.VillagerTrades;
 import net.classicremastered.minecraft.mob.Villager;
+
 import org.lwjgl.opengl.GL11;
 
 public final class VillagerTradingScreen extends InventoryScreen {
@@ -60,7 +61,7 @@ public final class VillagerTradingScreen extends InventoryScreen {
         if (button == 0) beginStackDrag(-1);
         if (!VillagerTrades.available(villager, minecraft.player)) return;
         if (button == 0) {
-            var offers = VillagerTrades.offers(minecraft.player);
+            var offers = VillagerTrades.offers(villager, minecraft.player);
             int index = offerAt(mx, my, offers.size());
             if (index >= 0) {
                 if (minecraft.player.coins < offers.get(index).price()) {
@@ -84,7 +85,7 @@ public final class VillagerTradingScreen extends InventoryScreen {
     public void render(int mx, int my) {
         int x = panelLeft(), y = panelTop();
         var player = minecraft.player;
-        var offers = VillagerTrades.offers(player);
+        var offers = VillagerTrades.offers(villager, player);
         int hoverOffer = offerAt(mx, my, offers.size());
 
         GL11.glPushAttrib(GL11.GL_ENABLE_BIT);

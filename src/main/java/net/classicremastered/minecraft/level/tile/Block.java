@@ -72,7 +72,11 @@ public class Block {
     public static final Block STICKY_PISTON, PISTON_HEAD;
     public static final Block SANDSTONE, CUT_SANDSTONE, CHISELED_SANDSTONE, SMOOTH_SANDSTONE;
     public static final Block SANDSTONE_SLAB,
-            SANDSTONE_STAIRS, OAK_STAIRS, COBBLESTONE_STAIRS, STONE_BRICK_STAIRS, STONE_BRICKS,
+            SANDSTONE_STAIRS,
+            OAK_STAIRS,
+            COBBLESTONE_STAIRS,
+            STONE_BRICK_STAIRS,
+            STONE_BRICKS,
             ORANGE_TERRACOTTA,
             BLUE_TERRACOTTA,
             CHEST,
@@ -437,8 +441,15 @@ public class Block {
                     float dy = (b + 0.5F) / rows;
                     float dz = (c + 0.5F) / layers;
                     particleManager.spawnParticle(
-                            new TerrainParticle(level, x + x1 + dx * width, y + y1 + dy * height,
-                                    z + z1 + dz * depth, dx - 0.5F, dy - 0.5F, dz - 0.5F, this)
+                            new TerrainParticle(
+                                            level,
+                                            x + x1 + dx * width,
+                                            y + y1 + dy * height,
+                                            z + z1 + dz * depth,
+                                            dx - 0.5F,
+                                            dy - 0.5F,
+                                            dz - 0.5F,
+                                            this)
                                     .scale(0.65F));
                 }
     }
@@ -601,7 +612,17 @@ public class Block {
                 || this == DOUBLE_SLAB
                 || this == OBSIDIAN
                 || this == GOLD_BLOCK
-                || this == IRON_BLOCK;
+                || this == IRON_BLOCK
+                || this == DIAMOND_BLOCK_NEW
+                || this == REDSTONE_BLOCK
+                || this == FURNACE
+                || this == STONE_BRICKS
+                || this == SANDSTONE
+                || this == CUT_SANDSTONE
+                || this == CHISELED_SANDSTONE
+                || this == SMOOTH_SANDSTONE
+                || this == SANDSTONE_SLAB
+                || this instanceof StairBlock && getDrop() != OAK_STAIRS.id;
     }
 
     /** Shovel is best for these. */
@@ -610,12 +631,23 @@ public class Block {
                 || this == DIRT
                 || this == GRASS
                 || this == SAND
-                || this == GRAVEL;
+                || this == GRAVEL
+                || this == SNOWY_GRASS
+                || this == SNOW_LAYER
+                || this == SNOW_BLOCK
+                || this instanceof LeavesBlock;
     }
 
     /** Axe is best for these. */
     public boolean prefersAxe() {
-        return this == LOG || this == WOOD || this == BOOKSHELF || this == LEAVES;
+        return this == LOG
+                || this == WOOD
+                || this == BOOKSHELF
+                || this instanceof LeavesBlock
+                || this == CHEST
+                || this == WORKBENCH
+                || this instanceof StairBlock && getDrop() == OAK_STAIRS.id
+                || this instanceof LadderBlock;
     }
 
     // -------- Static init --------
@@ -720,7 +752,8 @@ public class Block {
                 new PyramidBlock(82, "Chiseled Sandstone", 132, PyramidBlock.Shape.CUBE);
         SMOOTH_SANDSTONE = new PyramidBlock(83, "Smooth Sandstone", 129, PyramidBlock.Shape.CUBE);
         SANDSTONE_SLAB = new PyramidBlock(84, "Sandstone Slab", 129, PyramidBlock.Shape.SLAB);
-        STONE_BRICKS = new Block(159, 158, "Stone Bricks").setData(Tile$SoundType.stone, 1f, 1f, 1.5f);
+        STONE_BRICKS =
+                new Block(159, 158, "Stone Bricks").setData(Tile$SoundType.stone, 1f, 1f, 1.5f);
         Block[] stairs = StairBlock.register(SANDSTONE, WOOD, COBBLESTONE, STONE_BRICKS);
         SANDSTONE_STAIRS = stairs[0];
         OAK_STAIRS = stairs[1];

@@ -135,6 +135,11 @@ public class Item {
         return 0xffffff;
     }
 
+    /** Whether a dropped stack of this item survives fire and lava. */
+    public boolean isFireResistantDrop() {
+        return false;
+    }
+
     /** Convenience: non-stackable tools report true. */
     public boolean isTool() {
         return this.maxStackSize == 1;

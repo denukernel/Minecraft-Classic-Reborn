@@ -3,7 +3,6 @@ package net.classicremastered.minecraft.gamemode;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.MobSpawner;
-import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Player;
@@ -14,7 +13,8 @@ public final class SurvivalGameMode extends GameMode {
     }
 
     private int hitX, hitY, hitZ;
-    private int hits;
+    private float hits;
+    private int hitType;
     private int hardness; // effective hardness for cracks/progress
     private int hitDelay;
     private MobSpawner spawner;
@@ -98,6 +98,10 @@ public final class SurvivalGameMode extends GameMode {
             hitZ = z;
         }
         final int type = minecraft.level.getTile(x, y, z);
+        if (type != hitType) {
+            hits = 0;
+            hitType = type;
+        }
         if (type == 0) {
             hits = 0;
             return;
@@ -105,9 +109,10 @@ public final class SurvivalGameMode extends GameMode {
         final Block block = Block.blocks[type];
         final int base = Math.max(0, block.getHardness());
         final float mult = getToolSpeed(minecraft.player, block);
-        final int required = Math.max(1, (int) Math.ceil((base + 1) / Math.max(1.0f, mult)));
+        final float required = base + 1f;
         block.spawnBlockParticles(minecraft.level, x, y, z, side, minecraft.particleManager);
-        if (++hits >= required) {
+        hits += mult;
+        if (hits >= required) {
             breakBlock(x, y, z);
             hits = 0;
             hitDelay = 5;
@@ -126,9 +131,12 @@ public final class SurvivalGameMode extends GameMode {
 
     private boolean holdingShovel() {
         int selected = minecraft.player.inventory.getSelected();
-        return selected == Item.SHOVEL.id + 256
-                || selected == Equipment.DIAMOND_SHOVEL + 256
-                || selected == Equipment.GOLDEN_SHOVEL + 256;
+        return selected >= 256
+                && selected - 256 < Item.items.length
+                && Item.items[selected - 256]
+                        instanceof net.classicremastered.minecraft.level.itemstack.ToolItem tool
+                && tool.kind()
+                        == net.classicremastered.minecraft.level.itemstack.ToolItem.Kind.SHOVEL;
     }
 
     @Override
@@ -159,8 +167,8 @@ public final class SurvivalGameMode extends GameMode {
         Block b = Block.blocks[type];
         int base = Math.max(0, b.getHardness());
         float mult = getToolSpeed(minecraft.player, b);
-        int required = Math.max(1, (int) Math.ceil((base + 1) / Math.max(1.0f, mult)));
-        minecraft.levelRenderer.cracks = ((float) hits + time) / (float) required;
+        float required = base + 1f;
+        minecraft.levelRenderer.cracks = Math.min(1f, (hits + Math.max(0, time) * mult) / required);
     }
 
     @Override
@@ -225,20 +233,8 @@ public final class SurvivalGameMode extends GameMode {
                 net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
         if (it == null) return 1.0f;
 
-        String n = it.name != null ? it.name.toLowerCase(java.util.Locale.ROOT) : "";
-
-        if (n.contains("mining axe")
-                || n.contains("pickaxe")
-                || n.equals("pick")
-                || n.equals("pick axe")) {
-            if (block.prefersPickaxe()) return 3.0f;
-            return 1.0f;
-        }
-        if (n.contains("shovel") || n.contains("spade")) {
-            if (block.prefersShovel()) return 3.0f;
-            return 1.0f;
-        }
-        if (n.contains("sword")) return 1.0f;
-        return 1.0f;
+        return it instanceof net.classicremastered.minecraft.level.itemstack.ToolItem tool
+                ? tool.miningSpeed(block)
+                : 1f;
     }
 }

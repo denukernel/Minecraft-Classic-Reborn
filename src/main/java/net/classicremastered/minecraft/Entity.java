@@ -664,6 +664,16 @@ public abstract class Entity implements Serializable {
         return false;
     }
 
+    protected final boolean fireDestroysStack(boolean fireResistant) {
+        if (fireResistant || level.isNetworkMode()) return false;
+        // Drops are shorter than the inset used by the mob lava check.
+        if (remainingFireTicks > 0 || isInFire() || level.containsLiquid(bb, LiquidType.LAVA)) {
+            remove();
+            return true;
+        }
+        return false;
+    }
+
     protected final boolean cactusDamagesStack() {
         if (removed || level.isNetworkMode() || !touchesCactus() || ++cactusStackHits < 5)
             return false;

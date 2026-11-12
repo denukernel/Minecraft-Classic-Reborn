@@ -30,6 +30,10 @@ final class ClientFrameRenderer {
 
     private ClientFrameRenderer() {}
 
+    static int crackTexture(float progress) {
+        return 240 + Math.min(9, Math.max(0, (int) (progress * 10.0F)));
+    }
+
     static void render(Minecraft mc) {
         Minecraft.checkGLError("Pre render");
         GL11.glEnable(3553);
@@ -282,8 +286,7 @@ final class ClientFrameRenderer {
                         lr.level.blockMap.render(camVec, fr, lr.textureManager, renderPartial);
                         r2.setLighting(false);
                         r2.updateFog();
-                        if (!fabulous)
-                            renderParticles(pm, renderPartial);
+                        if (!fabulous) renderParticles(pm, renderPartial);
                         GL11.glDisable(3553);
                         r2.updateFog();
                         GL11.glDisable(3553);
@@ -347,7 +350,7 @@ final class ClientFrameRenderer {
                                             pick.y,
                                             pick.z,
                                             face,
-                                            240 + (int) (lrPick.cracks * 10.0F));
+                                            crackTexture(lrPick.cracks));
                                 sr1.end();
                                 GL11.glDepthMask(true);
                                 GL11.glPopMatrix();
@@ -450,8 +453,9 @@ final class ClientFrameRenderer {
                     }
                     mc.renderer.renderUnderwaterOverlay(partial);
                     if (!mc.hudHidden) {
-                        boolean hideHotbar = mc.currentScreen instanceof InventoryScreen
-                                || mc.currentScreen instanceof GuiCrafting;
+                        boolean hideHotbar =
+                                mc.currentScreen instanceof InventoryScreen
+                                        || mc.currentScreen instanceof GuiCrafting;
                         mc.hud.render(partial, hideHotbar, mouseUiX, uiH);
                     } else if (mc.currentScreen != null) {
                         r.enableGuiMode();
@@ -485,8 +489,7 @@ final class ClientFrameRenderer {
     }
 
     private static void renderParticles(ParticleManager manager, float partial) {
-        if (manager.particles[0].isEmpty() && manager.particles[1].isEmpty())
-            return;
+        if (manager.particles[0].isEmpty() && manager.particles[1].isEmpty()) return;
         PARTICLE_VIEW.clear();
         GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, PARTICLE_VIEW);
         Vec3D right = new Vec3D(PARTICLE_VIEW.get(0), PARTICLE_VIEW.get(4), PARTICLE_VIEW.get(8));
@@ -498,8 +501,7 @@ final class ClientFrameRenderer {
             GL11.glEnable(GL11.GL_ALPHA_TEST);
             for (int pass = 0; pass < 2; pass++) {
                 var particles = manager.particles[pass];
-                if (particles.isEmpty())
-                    continue;
+                if (particles.isEmpty()) continue;
                 String texture = pass == 0 ? "/particles.png" : BlockTextureAtlas.RESOURCE;
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, manager.textureManager.load(texture));
                 ShapeRenderer shape = ShapeRenderer.instance;

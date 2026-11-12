@@ -15,6 +15,18 @@ public final class HostileVillagerGoal extends MobGoal<VillagerAI> {
         return super.canStart() && ai.mob instanceof Villager villager && villager.isHostile();
     }
 
+    private float exitX(Villager villager) {
+        float dx = villager.homeDoorX + .5f - villager.homeX;
+        float dz = villager.homeDoorZ + .5f - villager.homeZ;
+        return Math.abs(dx) > Math.abs(dz) ? Math.signum(dx) * 1.5f : 0;
+    }
+
+    private float exitZ(Villager villager) {
+        float dx = villager.homeDoorX + .5f - villager.homeX;
+        float dz = villager.homeDoorZ + .5f - villager.homeZ;
+        return Math.abs(dx) > Math.abs(dz) ? 0 : Math.signum(dz) * 1.5f;
+    }
+
     @Override
     public void tick() {
         Villager villager = (Villager) ai.mob;
@@ -27,9 +39,9 @@ public final class HostileVillagerGoal extends MobGoal<VillagerAI> {
                 && Math.abs(ai.mob.z - ai.homeZ) < ai.homeRadius) {
             ai.level.villagerDoors().openForHostile(villager);
             ai.navigateTo(
-                    villager.homeDoorX + .5f,
+                    villager.homeDoorX + .5f + exitX(villager),
                     villager.homeDoorY,
-                    villager.homeDoorZ + .5f,
+                    villager.homeDoorZ + .5f + exitZ(villager),
                     ai.runSpeed);
             return;
         }

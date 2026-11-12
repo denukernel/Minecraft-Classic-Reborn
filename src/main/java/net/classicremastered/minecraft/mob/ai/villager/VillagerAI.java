@@ -7,9 +7,7 @@ import net.classicremastered.minecraft.mob.ai.goal.villager.ReturnHomeGoal;
 import net.classicremastered.minecraft.mob.ai.goal.villager.VillagerFleeGoal;
 import net.classicremastered.minecraft.mob.ai.goal.villager.VillagerWanderGoal;
 
-/**
- * Shared navigation for home travel, wandering, fleeing, and hostile villagers.
- */
+/** Shared navigation for home travel, wandering, fleeing, and hostile villagers. */
 public class VillagerAI extends BasicAI {
 
     private static final long serialVersionUID = 0L;
@@ -17,6 +15,7 @@ public class VillagerAI extends BasicAI {
     public float homeRadius = 3f;
     public boolean enforceInsideAtNight = true;
     public boolean freeWander, returningHome;
+
     @Override
     protected boolean usesWanderNavigation() {
         return false;
@@ -38,11 +37,12 @@ public class VillagerAI extends BasicAI {
 
     @Override
     protected void update() {
+        runSpeed = 0.6f;
+        walkSpeed = 0.1f;
         freeWander = false;
         xxa = yya = yRotA = 0;
         jumping = running = false;
-        if (level == null || !(mob instanceof Villager villager))
-            return;
+        if (level == null || !(mob instanceof Villager villager)) return;
         boolean home = villager.hasHome;
         if (home) {
             homeX = villager.homeX;
@@ -53,7 +53,8 @@ public class VillagerAI extends BasicAI {
     }
 
     @Override
-    protected void registerGoals(net.classicremastered.minecraft.mob.ai.goal.GoalSelector selector) {
+    protected void registerGoals(
+            net.classicremastered.minecraft.mob.ai.goal.GoalSelector selector) {
         selector.addGoal(0, new VillagerFleeGoal(this));
         selector.addGoal(1, new HostileVillagerGoal(this));
         selector.addGoal(2, new ReturnHomeGoal(this));

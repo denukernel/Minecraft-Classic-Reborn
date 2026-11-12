@@ -5,7 +5,6 @@ import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
-
 import net.classicremastered.minecraft.model.CrossbowTurretModel;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
@@ -79,8 +78,11 @@ public final class CrossbowTurret extends Mob {
     }
 
     public int reloadDuration() {
-        return Math.round(variant.reload * (upgraded(TurretUpgrade.RELOAD_II) ? .5f
-                : upgraded(TurretUpgrade.RELOAD_I) ? .85f : 1f));
+        return Math.round(
+                variant.reload
+                        * (upgraded(TurretUpgrade.RELOAD_II)
+                                ? .5f
+                                : upgraded(TurretUpgrade.RELOAD_I) ? .85f : 1f));
     }
 
     public int firingRange() {
@@ -88,7 +90,9 @@ public final class CrossbowTurret extends Mob {
     }
 
     private float rangeMultiplier() {
-        return upgraded(TurretUpgrade.RANGE_II) ? 1.5f : upgraded(TurretUpgrade.RANGE_I) ? 1.25f : 1f;
+        return upgraded(TurretUpgrade.RANGE_II)
+                ? 1.5f
+                : upgraded(TurretUpgrade.RANGE_I) ? 1.25f : 1f;
     }
 
     public boolean changeUpgrade(Player player, int index, boolean install) {
@@ -134,8 +138,7 @@ public final class CrossbowTurret extends Mob {
     }
 
     boolean detachHead() {
-        if (headless || removed || health <= 0)
-            return false;
+        if (headless || removed || health <= 0) return false;
         headless = true;
         ammo = 0;
         reloadTicks = 0;
@@ -144,8 +147,7 @@ public final class CrossbowTurret extends Mob {
     }
 
     public boolean attachHead(Player player) {
-        if (!headless || !canControl(player))
-            return false;
+        if (!headless || !canControl(player)) return false;
         if (!level.creativeMode && !player.inventory.removeResource(TurretItems.HEAD + 256))
             return false;
         headless = false;
@@ -154,17 +156,16 @@ public final class CrossbowTurret extends Mob {
 
     public void loadAmmo(Player player, int raw) {
         boolean bullet = raw == TurretItems.BULLET + 256;
-        if (headless || !canControl(player)
+        if (headless
+                || !canControl(player)
                 || !(variant.acceptsAmmo(raw) || variant == TurretVariant.ROVER && bullet)
-                || variant == TurretVariant.ROVER && ammo > 0 && roverBullets != bullet)
-            return;
+                || variant == TurretVariant.ROVER && ammo > 0 && roverBullets != bullet) return;
         int count = player.inventory.getCount(player.inventory.selected);
-        if (player.inventory.getSelected() != raw)
-            return;
-        while (count-- > 0 && ammo < ammoCapacity()
+        if (player.inventory.getSelected() != raw) return;
+        while (count-- > 0
+                && ammo < ammoCapacity()
                 && (level.creativeMode || player.inventory.removeResource(raw))) {
-            if (variant == TurretVariant.ROVER)
-                roverBullets = bullet;
+            if (variant == TurretVariant.ROVER) roverBullets = bullet;
             ammo++;
         }
     }
@@ -201,8 +202,11 @@ public final class CrossbowTurret extends Mob {
     }
 
     Player creditedOwner() {
-        return level.getPlayer() instanceof Player player && !owner.isEmpty()
-                && owner.equals(playerName(player)) ? player : null;
+        return level.getPlayer() instanceof Player player
+                        && !owner.isEmpty()
+                        && owner.equals(playerName(player))
+                ? player
+                : null;
     }
 
     public boolean canControl(Player player) {
@@ -219,7 +223,7 @@ public final class CrossbowTurret extends Mob {
                 && mob.health > 0
                 && !mob.removed
                 && !mob.corruptedToDefendPlayer
-                && MobRegistry.isTurretHostile(mob)
+                && (MobRegistry.isTurretHostile(mob) || mob instanceof IronGolem)
                 && (variant != TurretVariant.BRAIN_NANO || DefenderAI.canConvert(mob))
                 && targets(MobRegistry.idOf(mob));
     }
@@ -237,8 +241,7 @@ public final class CrossbowTurret extends Mob {
         }
         TurretShot shot = null;
         if (variant == TurretVariant.ROVER) {
-            if (drive == null)
-                setGuardPost();
+            if (drive == null) setGuardPost();
             shot = drive.tick(this);
         } else {
             fall(0f, 0f);
@@ -251,8 +254,7 @@ public final class CrossbowTurret extends Mob {
         if (reloadTicks > 0) {
             reloadTicks--;
         }
-        if (variant != TurretVariant.ROVER && ammo > 0)
-            shot = findShot();
+        if (variant != TurretVariant.ROVER && ammo > 0) shot = findShot();
         trackedTarget = shot == null ? null : shot.target();
         if (shot == null) {
             aligned = false;
@@ -260,20 +262,31 @@ public final class CrossbowTurret extends Mob {
         }
         float desiredYaw = shot.yaw();
         float desiredPitch = shot.pitch();
-        float tracking = upgraded(TurretUpgrade.TRACKING_II) ? 2f
-                : upgraded(TurretUpgrade.TRACKING_I) ? 1.5f : 1f;
+        float tracking =
+                upgraded(TurretUpgrade.TRACKING_II)
+                        ? 2f
+                        : upgraded(TurretUpgrade.TRACKING_I) ? 1.5f : 1f;
         float yawStep = 12f * tracking;
         float pitchStep = 8f * tracking;
         aimYaw += Math.max(-yawStep, Math.min(yawStep, angleDifference(desiredYaw, aimYaw)));
         aimPitch += Math.max(-pitchStep, Math.min(pitchStep, desiredPitch - aimPitch));
-        aligned = Math.abs(angleDifference(desiredYaw, aimYaw)) <= 2f
-                && Math.abs(desiredPitch - aimPitch) <= 2f;
+        aligned =
+                Math.abs(angleDifference(desiredYaw, aimYaw)) <= 2f
+                        && Math.abs(desiredPitch - aimPitch) <= 2f;
         if (ammo > 0 && reloadTicks == 0 && aligned) {
             Vec3D muzzle = shot.muzzle();
             int spread = variant.shotgun() ? 12 : 0;
             for (int yawOffset = -spread; yawOffset <= spread; yawOffset += 6) {
-                level.addEntity(new Arrow(level, this, muzzle.x, muzzle.y, muzzle.z,
-                        desiredYaw + yawOffset, desiredPitch, projectileSpeed()));
+                level.addEntity(
+                        new Arrow(
+                                level,
+                                this,
+                                muzzle.x,
+                                muzzle.y,
+                                muzzle.z,
+                                desiredYaw + yawOffset,
+                                desiredPitch,
+                                projectileSpeed()));
             }
             if (variant == TurretVariant.PREDICTABLE) {
                 boolean followUp = isFollowUp(shot.target());
@@ -282,8 +295,10 @@ public final class CrossbowTurret extends Mob {
                 followUpAvailable = !followUp;
             }
             level.playSound("random/bow", this, .8f, 1f);
-            int recycle = upgraded(TurretUpgrade.RECYCLER_II) ? 2
-                    : upgraded(TurretUpgrade.RECYCLER_I) ? 1 : 0;
+            int recycle =
+                    upgraded(TurretUpgrade.RECYCLER_II)
+                            ? 2
+                            : upgraded(TurretUpgrade.RECYCLER_I) ? 1 : 0;
             if (recycle == 0 || level.random.nextInt(4) >= recycle) {
                 ammo--;
             }
@@ -301,7 +316,8 @@ public final class CrossbowTurret extends Mob {
         float downward = (yd - .08f) * .98f;
         // Harpoons can be deployed directly on water.
         int waterY = (int) Math.floor(bb.y0 - .001f);
-        if (variant == TurretVariant.HARPOON && Math.abs(bb.y0 - (waterY + 1f)) < .001f
+        if (variant == TurretVariant.HARPOON
+                && Math.abs(bb.y0 - (waterY + 1f)) < .001f
                 && level.isWater((int) Math.floor(x), waterY, (int) Math.floor(z))) {
             yd = 0f;
             return;
@@ -322,22 +338,20 @@ public final class CrossbowTurret extends Mob {
         Vec3D muzzle = muzzle();
         float scanRange = range + TurretShot.MAX_LEAD_DISTANCE + Arrow.HALF_WIDTH;
         float vertical = variant == TurretVariant.ROVER ? range : RANGE_BELOW;
-        List<Entity> nearby = new ArrayList<>(level.findEntities(this,
-                bb.grow(scanRange, vertical + 2f, scanRange)));
+        List<Entity> nearby =
+                new ArrayList<>(
+                        level.findEntities(this, bb.grow(scanRange, vertical + 2f, scanRange)));
         if (variant == TurretVariant.PREDICTABLE && isFollowUp(lastShotTarget)) {
             TurretShot followUp = aimAt(lastShotTarget, muzzle, range * range, nearby);
-            if (followUp != null)
-                return followUp;
+            if (followUp != null) return followUp;
         }
         TurretShot locked = aimAt(trackedTarget, muzzle, range * range, nearby);
-        if (locked != null)
-            return locked;
+        if (locked != null) return locked;
 
         TurretShot bestShot = null;
         float bestDistance = range * range;
         for (Entity entity : nearby) {
-            if (!(entity instanceof Mob target) || target == trackedTarget)
-                continue;
+            if (!(entity instanceof Mob target) || target == trackedTarget) continue;
             TurretShot candidate = aimAt(target, muzzle, bestDistance, nearby);
             if (candidate != null) {
                 bestDistance = center(target).distanceSquared(muzzle);
@@ -348,8 +362,7 @@ public final class CrossbowTurret extends Mob {
     }
 
     private TurretShot aimAt(Mob target, Vec3D muzzle, float maxDistance, List<Entity> nearby) {
-        if (!canTarget(target) || !target.isShootable())
-            return null;
+        if (!canTarget(target) || !target.isShootable()) return null;
         Vec3D center = center(target);
         float dy = center.y - muzzle.y;
         if (center.distanceSquared(muzzle) > maxDistance
@@ -360,7 +373,9 @@ public final class CrossbowTurret extends Mob {
     }
 
     private boolean isFollowUp(Mob target) {
-        return followUpAvailable && target != null && target == lastShotTarget
+        return followUpAvailable
+                && target != null
+                && target == lastShotTarget
                 && center(target).distanceSquared(lastShotAim) > .35f * .35f;
     }
 
@@ -369,16 +384,11 @@ public final class CrossbowTurret extends Mob {
     }
 
     public String firingStatus() {
-        if (headless)
-            return "Missing turret head";
-        if (!enabled)
-            return "Firing disabled";
-        if (ammo <= 0)
-            return "No ammunition";
-        if (!canTarget(trackedTarget))
-            return "No clear target";
-        if (!aligned)
-            return "Aligning";
+        if (headless) return "Missing turret head";
+        if (!enabled) return "Firing disabled";
+        if (ammo <= 0) return "No ammunition";
+        if (!canTarget(trackedTarget)) return "No clear target";
+        if (!aligned) return "Aligning";
         return reloadTicks > 0 ? "Reloading" : "Ready";
     }
 
@@ -400,20 +410,24 @@ public final class CrossbowTurret extends Mob {
 
     @Override
     public void hurt(Entity source, int damage) {
-        if (upgraded(TurretUpgrade.FIRE_SEAL) && ("fire".equals(damageCause)
-                || "burn".equals(damageCause) || "lava".equals(damageCause))) {
+        if (upgraded(TurretUpgrade.FIRE_SEAL)
+                && ("fire".equals(damageCause)
+                        || "burn".equals(damageCause)
+                        || "lava".equals(damageCause))) {
             return;
         }
         if (damage > 0
-                && (source != null && !"fall".equals(damageCause) || "explosion".equals(damageCause))) {
-            float multiplier = upgraded(TurretUpgrade.ARMOR_II) ? .6f
-                    : upgraded(TurretUpgrade.ARMOR_I) ? .8f : 1f;
+                && (source != null && !"fall".equals(damageCause)
+                        || "explosion".equals(damageCause))) {
+            float multiplier =
+                    upgraded(TurretUpgrade.ARMOR_II)
+                            ? .6f
+                            : upgraded(TurretUpgrade.ARMOR_I) ? .8f : 1f;
             damage = Math.max(1, Math.round(damage * multiplier));
         }
         int oldHealth = health;
         super.hurt(source, damage);
-        if (health < oldHealth)
-            repairTicks = 0;
+        if (health < oldHealth) repairTicks = 0;
     }
 
     @Override
@@ -424,8 +438,7 @@ public final class CrossbowTurret extends Mob {
     }
 
     public void hitWithArrow(Arrow arrow, Entity target, int damage) {
-        if (!canTarget(target))
-            return;
+        if (!canTarget(target)) return;
         if (variant == TurretVariant.BRAIN_NANO) {
             DefenderAI.convert((Mob) target);
         } else {
@@ -435,7 +448,8 @@ public final class CrossbowTurret extends Mob {
 
     @Override
     public boolean isUnderWater() {
-        return variant != TurretVariant.HARPOON && !upgraded(TurretUpgrade.WATER_SEAL)
+        return variant != TurretVariant.HARPOON
+                && !upgraded(TurretUpgrade.WATER_SEAL)
                 && super.isUnderWater();
     }
 
@@ -451,7 +465,9 @@ public final class CrossbowTurret extends Mob {
     public void tick() {
         hasTicked = true;
         super.tick();
-        if (!level.isNetworkMode() && health > 0 && health < maxHealth()
+        if (!level.isNetworkMode()
+                && health > 0
+                && health < maxHealth()
                 && upgraded(TurretUpgrade.REPAIR)) {
             if (++repairTicks >= 100) {
                 health++;
@@ -460,14 +476,18 @@ public final class CrossbowTurret extends Mob {
         } else {
             repairTicks = 0;
         }
-        if (health > 0 || level.particleEngine == null)
-            return;
+        if (health > 0 || level.particleEngine == null) return;
         int count = removed ? 16 : deathTime % 3 == 1 ? 3 : 0;
         for (int i = 0; i < count; i++) {
             float dx = (level.random.nextFloat() - .5f) * (removed ? 1.5f : .55f);
             float dz = (level.random.nextFloat() - .5f) * (removed ? 1.5f : .55f);
-            var smoke = new net.classicremastered.minecraft.particle.SmokeParticle(level, x + dx,
-                    bb.y0 + .65f + level.random.nextFloat() * .45f, z + dz, removed ? .12f : .05f);
+            var smoke =
+                    new net.classicremastered.minecraft.particle.SmokeParticle(
+                            level,
+                            x + dx,
+                            bb.y0 + .65f + level.random.nextFloat() * .45f,
+                            z + dz,
+                            removed ? .12f : .05f);
             level.particleEngine.spawnParticle(smoke);
         }
     }
@@ -488,15 +508,21 @@ public final class CrossbowTurret extends Mob {
             GL11.glRotatef(9 * jolt + 20 * collapse * collapse, 0, 0, 1);
             GL11.glTranslatef(0, (harpoon ? .45f : 1.5f) - .22f * collapse, 0);
             GL11.glScalef(1, harpoon ? 1 : -1, harpoon ? 1 : -1);
-            GL11.glColor4f(1 - .5f * collapse, 1 - .6f * hurt - .35f * collapse,
-                    1 - .6f * hurt - .35f * collapse, 1);
+            GL11.glColor4f(
+                    1 - .5f * collapse,
+                    1 - .6f * hurt - .35f * collapse,
+                    1 - .6f * hurt - .35f * collapse,
+                    1);
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, textures.load(variant.texture()));
             float yaw = previousAimYaw + (aimYaw - previousAimYaw) * partial;
             float pitch = previousAimPitch + (aimPitch - previousAimPitch) * partial;
             pitch = pitch * (1 - collapse) + 55 * collapse + 12 * jolt;
-            model.render(harpoon ? yaw + 180 : -yaw, harpoon ? -pitch : pitch,
+            model.render(
+                    harpoon ? yaw + 180 : -yaw,
+                    harpoon ? -pitch : pitch,
                     drive == null ? 0f : drive.chassisYaw(partial),
-                    drive == null ? 0f : drive.wheelPitch(partial), !headless);
+                    drive == null ? 0f : drive.wheelPitch(partial),
+                    !headless);
         } finally {
             GL11.glColor4f(1, 1, 1, 1);
             GL11.glPopMatrix();
@@ -511,8 +537,7 @@ public final class CrossbowTurret extends Mob {
         tag.putFloat("TurretAimYaw", aimYaw);
         tag.putFloat("TurretAimPitch", aimPitch);
         saveTurretData(tag);
-        if (variant == TurretVariant.ROVER && drive != null)
-            drive.save(tag);
+        if (variant == TurretVariant.ROVER && drive != null) drive.save(tag);
     }
 
     public net.classicremastered.minecraft.level.itemstack.PackedTurret packedData() {
@@ -543,10 +568,8 @@ public final class CrossbowTurret extends Mob {
             tag.put(list);
         }
         tag.putInt("TurretAmmo", ammo);
-        if (variant == TurretVariant.ROVER)
-            tag.putBoolean("RoverBullets", roverBullets);
-        if (headless)
-            tag.putBoolean("TurretHeadless", true);
+        if (variant == TurretVariant.ROVER) tag.putBoolean("RoverBullets", roverBullets);
+        if (headless) tag.putBoolean("TurretHeadless", true);
         tag.putBoolean("TurretEnabled", enabled);
     }
 
@@ -558,10 +581,13 @@ public final class CrossbowTurret extends Mob {
             setPos(x, tag.getFloat("TurretFeetY") + heightOffset, z);
         }
         aimYaw = previousAimYaw = tag.hasKey("TurretAimYaw") ? tag.getFloat("TurretAimYaw") : yRot;
-        aimPitch = previousAimPitch = tag.hasKey("TurretAimPitch") ? tag.getFloat("TurretAimPitch")
-                : xRot;
+        aimPitch =
+                previousAimPitch =
+                        tag.hasKey("TurretAimPitch") ? tag.getFloat("TurretAimPitch") : xRot;
         loadTurretData(tag);
-        if (variant == TurretVariant.ROVER && tag.hasKey("RoverPostX") && tag.hasKey("RoverPostY")
+        if (variant == TurretVariant.ROVER
+                && tag.hasKey("RoverPostX")
+                && tag.hasKey("RoverPostY")
                 && tag.hasKey("RoverPostZ")) {
             float postX = tag.getFloat("RoverPostX");
             float postY = tag.getFloat("RoverPostY");

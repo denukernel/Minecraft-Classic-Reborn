@@ -90,7 +90,7 @@ public class InventoryScreen extends CraftingContainerScreen {
             return;
         } else if (id <= 0 || id == carriedId) {
             int moved = Math.min(button == 1 ? 1 : carriedCnt, maxStackFor(carriedId) - count);
-            if (moved == 0) return;
+            if (moved <= 0) return;
             craftingIds[slot] = carriedId;
             craftingCounts[slot] += moved;
             carriedCnt -= moved;

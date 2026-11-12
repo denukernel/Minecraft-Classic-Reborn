@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
@@ -41,11 +42,14 @@ public class DroppedItem extends Entity {
     @Override
     public void tick() {
         if (removed) return;
+        Item item = itemId >= 0 && itemId < Item.items.length ? Item.items[itemId] : null;
+        boolean fireResistant = item != null && item.isFireResistantDrop();
+        if (fireDestroysStack(fireResistant)) return;
         heightOffset = bbHeight / 2;
         super.tick();
         yd -= 0.04F;
         move(xd, yd, zd);
-        if (cactusDamagesStack()) return;
+        if (fireDestroysStack(fireResistant) || cactusDamagesStack()) return;
         yd *= 0.98F; xd *= 0.98F; zd *= 0.98F;
         if (onGround) { xd *= 0.7F; zd *= 0.7F; yd *= -0.5F; }
         if (--life <= 0) remove();
