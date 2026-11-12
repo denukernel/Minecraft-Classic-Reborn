@@ -1,4 +1,4 @@
-<img width="695" height="193" alt="Minecraft Classic Reborn" src="https://github.com/user-attachments/assets/f506a0a2-9dad-4458-87b6-bdfdda1595f0" />
+<img width="1000" height="99" alt="image" src="https://github.com/user-attachments/assets/7db7fdae-070e-47a6-977d-69646d8f85da" />
 
 # Minecraft Classic Reborn
 
