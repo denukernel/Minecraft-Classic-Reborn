@@ -54,6 +54,7 @@ public class ZombieModel extends HumanoidModel {
 
     @Override
     public void preAnimate(Object entity) {
+        super.preAnimate(entity);
         // keep builder pose detection
         syncBuilderPose(entity);
 
@@ -97,6 +98,10 @@ public class ZombieModel extends HumanoidModel {
         leftArm.roll -= MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.05F;
         rightArm.pitch += MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
         leftArm.pitch -= MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
+        if (isRidingPose() && attackOffset <= 0f) {
+            rightArm.pitch += .65f;
+            leftArm.pitch += .65f;
+        }
 
         // --- builder-specific overrides ---
         if (builderBreaking && !builderPlacing) {

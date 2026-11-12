@@ -11,8 +11,8 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 /**
- * Classic 8×8 ASCII atlas + Unicode fallback (Noto Sans) for any non-ASCII.
- * Fallback glyphs now render at ~8–9 px so they match the classic height.
+ * Classic 8×8 ASCII atlas + Unicode fallback (Noto Sans) for any non-ASCII. Fallback glyphs now
+ * render at ~8–9 px so they match the classic height.
  */
 public final class FontRenderer {
 
@@ -53,12 +53,10 @@ public final class FontRenderer {
                 empty = true;
                 for (int yy = 0; yy < 8 && empty; ++yy) {
                     int idx = ((row << 3) + yy) * w + px;
-                    if ((rgba[idx] & 0xFF) > 128)
-                        empty = false;
+                    if ((rgba[idx] & 0xFF) > 128) empty = false;
                 }
             }
-            if (c == 32)
-                adv = 4; // space
+            if (c == 32) adv = 4; // space
             widthmap[c] = adv;
         }
 
@@ -68,32 +66,43 @@ public final class FontRenderer {
     /* ------------ public API ------------ */
 
     public void render(String s, int x, int y, int rgb) {
-        drawText(s, x, y, rgb, true);
+        drawText(s, x, y, rgb, true, true);
     }
 
     public void renderNoShadow(String s, int x, int y, int rgb) {
-        drawText(s, x, y, rgb, false);
+        drawText(s, x, y, rgb, false, true);
     }
 
-    private void drawText(String text, int x, int y, int rgb, boolean shadow) {
+    public void renderLiteral(String text, int x, int y, int rgb) {
+        drawText(text, x, y, rgb, false, false);
+    }
+
+    private void drawText(String text, int x, int y, int rgb, boolean shadow, boolean formatting) {
         GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT | GL11.GL_TEXTURE_BIT);
         try {
             GL11.glDisable(GL11.GL_LIGHTING);
-            if (shadow) renderInternal(text, x + 1, y + 1, rgb, true);
-            renderInternal(text, x, y, rgb, false);
+            if (shadow) renderInternal(text, x + 1, y + 1, rgb, true, formatting);
+            renderInternal(text, x, y, rgb, false, formatting);
         } finally {
             GL11.glPopAttrib();
         }
     }
 
     public int getWidth(String s) {
-        if (s == null)
-            return 0;
+        return measure(s, true);
+    }
+
+    public int getLiteralWidth(String text) {
+        return measure(text, false);
+    }
+
+    private int measure(String s, boolean formatting) {
+        if (s == null) return 0;
         int w = 0;
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
             // Skip classic color codes (&x or §x)
-            if ((ch == '&' || ch == '§') && i + 1 < s.length()) {
+            if (formatting && (ch == '&' || ch == '§') && i + 1 < s.length()) {
                 i++;
                 continue;
             }
@@ -111,8 +120,7 @@ public final class FontRenderer {
     }
 
     public static String stripColor(String s) {
-        if (s == null)
-            return "";
+        if (s == null) return "";
         StringBuilder out = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
@@ -127,9 +135,9 @@ public final class FontRenderer {
 
     /* ------------ internals ------------ */
 
-    private void renderInternal(String text, int x, int y, int rgb, boolean shadow) {
-        if (text == null)
-            return;
+    private void renderInternal(
+            String text, int x, int y, int rgb, boolean shadow, boolean formatting) {
+        if (text == null) return;
 
         int curColor = shadow ? ((rgb & 0xFCFCFC) >> 2) : rgb;
         final String codes = "0123456789abcdef";
@@ -145,11 +153,11 @@ public final class FontRenderer {
         sr.begin();
         sr.color(curColor);
 
-        for (int i = 0; i < text.length();) {
+        for (int i = 0; i < text.length(); ) {
             char ch = text.charAt(i);
 
             // classic color codes (&x or §x)
-            if ((ch == '&' || ch == '§') && i + 1 < text.length()) {
+            if (formatting && (ch == '&' || ch == '§') && i + 1 < text.length()) {
                 char c2 = Character.toLowerCase(text.charAt(i + 1));
                 int idx = codes.indexOf(c2);
                 if (idx >= 0) {
@@ -167,8 +175,7 @@ public final class FontRenderer {
                         b = bGray;
                     }
                     curColor = (r << 16) | (g << 8) | b;
-                    if (shadow)
-                        curColor = (curColor & 0xFCFCFC) >> 2;
+                    if (shadow) curColor = (curColor & 0xFCFCFC) >> 2;
 
                     // flush color change
                     sr.end();

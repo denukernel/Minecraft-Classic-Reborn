@@ -1,12 +1,13 @@
 package net.classicremastered.minecraft.mob.ai.goal.enderman;
 
-import java.util.*;
+import static net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanTeleportation.*;
+
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.ai.enderman.EndermanAI;
 import net.classicremastered.minecraft.phys.AABB;
-import net.classicremastered.minecraft.player.Player;
-import static net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanTeleportation.*;
+
+import java.util.*;
 
 public final class EndermanNavigation {
 
@@ -16,12 +17,18 @@ public final class EndermanNavigation {
     private Enderman mob;
     private List<int[]> currentPath;
     private int pathIndex;
+
     public void clear() {
         currentPath = null;
         pathIndex = 0;
     }
 
-    void steer(EndermanAI ai, Enderman enderman, Player player, float dx, float dz) {
+    void steer(
+            EndermanAI ai,
+            Enderman enderman,
+            net.classicremastered.minecraft.mob.Mob player,
+            float dx,
+            float dz) {
         mob = enderman;
         // --- Pathfinder: try to walk around water if direct forward would step into
         // water ---
@@ -44,9 +51,17 @@ public final class EndermanNavigation {
             int goalTz = (dry != null) ? dry[2] : rawGoalTz;
 
             // If we don't have a cached path, find one
-            if (currentPath == null || pathIndex >= (currentPath != null ? currentPath.size() : 0)) {
-                currentPath = findPathAvoidingWater(enderman, startTx, startTz, goalTx, goalTz, PATH_RADIUS,
-                        PATH_MAX_NODES);
+            if (currentPath == null
+                    || pathIndex >= (currentPath != null ? currentPath.size() : 0)) {
+                currentPath =
+                        findPathAvoidingWater(
+                                enderman,
+                                startTx,
+                                startTz,
+                                goalTx,
+                                goalTz,
+                                PATH_RADIUS,
+                                PATH_MAX_NODES);
                 pathIndex = 0;
             }
 
@@ -74,8 +89,8 @@ public final class EndermanNavigation {
                 return;
             }
         }
-
     }
+
     private static final class Node {
 
         int x, z;
@@ -96,14 +111,13 @@ public final class EndermanNavigation {
         }
     }
 
-    private List<int[]> findPathAvoidingWater(Enderman mob, int sx, int sz, int gx, int gz, int radius, int maxNodes) {
-        if (mob == null || mob.level == null)
-            return null;
+    private List<int[]> findPathAvoidingWater(
+            Enderman mob, int sx, int sz, int gx, int gz, int radius, int maxNodes) {
+        if (mob == null || mob.level == null) return null;
         Level lvl = mob.level;
 
         // quick bounds check
-        if (!lvl.isInBounds(gx, 0, gz))
-            return null;
+        if (!lvl.isInBounds(gx, 0, gz)) return null;
 
         // clamp search box
         int minX = Math.max(0, Math.min(sx, gx) - radius);
@@ -123,20 +137,21 @@ public final class EndermanNavigation {
         all.put(start.key(), start);
 
         int nodes = 0;
-        int[][] neigh = new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1},
-                {-1, -1}}; // 8-neigh
+        int[][] neigh =
+                new int[][] {
+                    {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+                }; // 8-neigh
 
         while (!open.isEmpty() && nodes < maxNodes) {
             Node cur = open.poll();
-            if (cur == null)
-                break;
+            if (cur == null) break;
             nodes++;
             if (cur.x == gx && cur.z == gz) {
                 // reconstruct path
                 List<int[]> path = new ArrayList<>();
                 Node p = cur;
                 while (p != null && !(p.x == sx && p.z == sz)) {
-                    path.add(new int[]{p.x, p.z});
+                    path.add(new int[] {p.x, p.z});
                     p = p.parent;
                 }
                 Collections.reverse(path);
@@ -148,37 +163,28 @@ public final class EndermanNavigation {
             for (int[] d : neigh) {
                 int nx = cur.x + d[0];
                 int nz = cur.z + d[1];
-                if (nx < minX || nx > maxX || nz < minZ || nz > maxZ)
-                    continue;
-                if (!lvl.isInBounds(nx, 0, nz))
-                    continue;
+                if (nx < minX || nx > maxX || nz < minZ || nz > maxZ) continue;
+                if (!lvl.isInBounds(nx, 0, nz)) continue;
 
                 // candidate must be walkable: highest tile >0, solid below, not liquid at top
                 int ny = lvl.getHighestTile(nx, nz);
-                if (ny <= 0)
-                    continue;
-                if (!lvl.isSolidTile(nx, ny - 1, nz))
-                    continue;
+                if (ny <= 0) continue;
+                if (!lvl.isSolidTile(nx, ny - 1, nz)) continue;
                 // ensure step up/down not too large
                 int curY = lvl.getHighestTile(cur.x, cur.z);
-                if (Math.abs(ny - curY) > MAX_STEP_UP)
-                    continue;
+                if (Math.abs(ny - curY) > MAX_STEP_UP) continue;
 
                 float cost = (d[0] != 0 && d[1] != 0) ? 1.4142f : 1.0f; // diagonal cost
                 String key = nx + ":" + nz;
-                if (closed.contains(key))
-                    continue;
+                if (closed.contains(key)) continue;
 
                 // reject if candidate AABB intersects liquid or blocks/entities
                 float cx = nx + 0.5f;
                 float cz = nz + 0.5f;
                 AABB candidate = buildCandidateBB(mob, cx, ny, cz);
-                if (candidateIntersectsLiquid(lvl, candidate))
-                    continue;
-                if (!lvl.isFree(candidate))
-                    continue;
-                if (lvl.getCubes(candidate).size() > 0)
-                    continue;
+                if (candidateIntersectsLiquid(lvl, candidate)) continue;
+                if (!lvl.isFree(candidate)) continue;
+                if (lvl.getCubes(candidate).size() > 0) continue;
 
                 int ng = cur.gx + Math.round(cost * 10); // multiply to keep ints
                 Node node = all.get(key);
@@ -206,56 +212,43 @@ public final class EndermanNavigation {
     }
 
     private int[] findNearestDryTile(Level lvl, int gx, int gz, int radius) {
-        if (lvl == null || !lvl.isInBounds(gx, 0, gz))
-            return null;
+        if (lvl == null || !lvl.isInBounds(gx, 0, gz)) return null;
 
         // spiral/expanding square search — small and deterministic
         for (int r = 0; r <= radius; r++) {
             for (int dx = -r; dx <= r; dx++) {
-                int[] candX = new int[]{gx + dx, gx + dx};
-                int[] candZ = new int[]{gz - r, gz + r};
+                int[] candX = new int[] {gx + dx, gx + dx};
+                int[] candZ = new int[] {gz - r, gz + r};
                 for (int k = 0; k < 2; k++) {
                     int tx = candX[k];
                     int tz = candZ[k];
-                    if (!lvl.isInBounds(tx, 0, tz))
-                        continue;
+                    if (!lvl.isInBounds(tx, 0, tz)) continue;
                     int ty = lvl.getHighestTile(tx, tz);
-                    if (ty <= 0)
-                        continue;
+                    if (ty <= 0) continue;
                     // ensure solid ground beneath and not water at top/below
-                    if (!lvl.isSolidTile(tx, ty - 1, tz))
-                        continue;
+                    if (!lvl.isSolidTile(tx, ty - 1, tz)) continue;
                     AABB candidate = buildCandidateBB((Enderman) mob, tx + 0.5f, ty, tz + 0.5f);
-                    if (candidateIntersectsLiquid(lvl, candidate))
-                        continue;
-                    if (!lvl.isFree(candidate))
-                        continue;
-                    if (lvl.getCubes(candidate).size() > 0)
-                        continue;
-                    return new int[]{tx, ty, tz};
+                    if (candidateIntersectsLiquid(lvl, candidate)) continue;
+                    if (!lvl.isFree(candidate)) continue;
+                    if (lvl.getCubes(candidate).size() > 0) continue;
+                    return new int[] {tx, ty, tz};
                 }
             }
             for (int dz = -r + 1; dz <= r - 1; dz++) {
-                int[] candZ = new int[]{gz + dz, gz + dz};
-                int[] candX = new int[]{gx - r, gx + r};
+                int[] candZ = new int[] {gz + dz, gz + dz};
+                int[] candX = new int[] {gx - r, gx + r};
                 for (int k = 0; k < 2; k++) {
                     int tx = candX[k];
                     int tz = candZ[k];
-                    if (!lvl.isInBounds(tx, 0, tz))
-                        continue;
+                    if (!lvl.isInBounds(tx, 0, tz)) continue;
                     int ty = lvl.getHighestTile(tx, tz);
-                    if (ty <= 0)
-                        continue;
-                    if (!lvl.isSolidTile(tx, ty - 1, tz))
-                        continue;
+                    if (ty <= 0) continue;
+                    if (!lvl.isSolidTile(tx, ty - 1, tz)) continue;
                     AABB candidate = buildCandidateBB((Enderman) mob, tx + 0.5f, ty, tz + 0.5f);
-                    if (candidateIntersectsLiquid(lvl, candidate))
-                        continue;
-                    if (!lvl.isFree(candidate))
-                        continue;
-                    if (lvl.getCubes(candidate).size() > 0)
-                        continue;
-                    return new int[]{tx, ty, tz};
+                    if (candidateIntersectsLiquid(lvl, candidate)) continue;
+                    if (!lvl.isFree(candidate)) continue;
+                    if (lvl.getCubes(candidate).size() > 0) continue;
+                    return new int[] {tx, ty, tz};
                 }
             }
         }
@@ -263,8 +256,7 @@ public final class EndermanNavigation {
     }
 
     private boolean wouldWalkIntoWater(Enderman mob, float forwardX, float forwardZ) {
-        if (mob == null || mob.level == null)
-            return true;
+        if (mob == null || mob.level == null) return true;
         Level lvl = mob.level;
 
         final float step = 0.6f; // small step to probe immediate cell
@@ -275,23 +267,18 @@ public final class EndermanNavigation {
             float nz = mob.z + forwardZ * (step * s);
             int bx = (int) Math.floor(nx);
             int bz = (int) Math.floor(nz);
-            if (!lvl.isInBounds(bx, 0, bz))
-                return true;
+            if (!lvl.isInBounds(bx, 0, bz)) return true;
 
             int top = lvl.getHighestTile(bx, bz);
-            if (top <= 0)
-                return true;
+            if (top <= 0) return true;
 
             // if the column immediately has water at the top or below, consider unsafe
-            if (lvl.isWater(bx, top - 1, bz) || lvl.isWater(bx, top, bz))
-                return true;
+            if (lvl.isWater(bx, top - 1, bz) || lvl.isWater(bx, top, bz)) return true;
 
             // candidate AABB for the mob feet at that column
             AABB candidate = buildCandidateBB(mob, bx + 0.5f, top, bz + 0.5f);
-            if (candidateIntersectsLiquid(lvl, candidate))
-                return true;
-            if (!lvl.isFree(candidate))
-                return true;
+            if (candidateIntersectsLiquid(lvl, candidate)) return true;
+            if (!lvl.isFree(candidate)) return true;
         }
 
         return false;

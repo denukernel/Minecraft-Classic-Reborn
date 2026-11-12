@@ -8,6 +8,9 @@ public final class ModelManager {
     private SkeletonModel skeleton = new SkeletonModel();
     private BabySkeletonModel babySkeleton = new BabySkeletonModel();
     private ZombieModel zombie = new ZombieModel();
+    private final FrostbiteModel frostbite = new FrostbiteModel();
+    private final FrostbiteModel babyFrostbite = new FrostbiteModel("frostbite_baby", true);
+    private final FrostbiteModel babyHusk = new FrostbiteModel("husk_baby", true);
     private final CowModel cow = new CowModel();
     private AnimalModel pig = new PigModel();
     private AnimalModel sheep = new SheepModel();
@@ -69,6 +72,12 @@ public final class ModelManager {
                 return armoredHumanBaby;
             case "skeleton":
                 return this.skeleton;
+            case "frostbite_baby":
+                return babyFrostbite;
+            case "husk_baby":
+                return babyHusk;
+            case "frostbite":
+                return frostbite;
             case "zombie":
                 return this.zombie;
             case "zombiebuilder":

@@ -27,6 +27,7 @@ final class InfiniteLevelNbtCodec {
             map = flat.chunks().getAllChunks();
         } else if (level instanceof LevelInfiniteTerrain terrain) {
             if (terrain.biomesEnabled) root.putString("TerrainType", "Biomes");
+            if (terrain.flatBiomes) root.putBoolean("FlatBiomes", true);
             seed = terrain.randomSeed;
             depthY = terrain.depth;
             map = terrain.chunks().getAllChunks();
@@ -76,7 +77,9 @@ final class InfiniteLevelNbtCodec {
             rot.add(new FloatTag(null, 0f));
             player.put(rot);
         }
+        var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
         PlayerNbtCodec.save(player, savePlayer);
+        RidingLinks.savePassenger(all, savePlayer, player);
         root.put(player);
 
         ListTag chunks = new ListTag("Chunks", (byte) 10);
@@ -93,7 +96,6 @@ final class InfiniteLevelNbtCodec {
         root.put(chunks);
 
         ListTag entities = new ListTag("Entities", (byte) 10);
-        var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
         for (Object e : all) {
             if (!(e instanceof net.classicremastered.minecraft.mob.Mob m)) continue;
             if (m instanceof net.classicremastered.minecraft.player.Player) continue;
@@ -119,6 +121,7 @@ final class InfiniteLevelNbtCodec {
 
             mobTag.putInt("Health", m.health);
             m.savePersistence(mobTag);
+            RidingLinks.save(all, m, mobTag);
             net.classicremastered.minecraft.level.itemstack.Equipment.save(m, mobTag);
             VillagerDoorManager.saveHome(m, mobTag);
             entities.add(mobTag);
@@ -127,6 +130,7 @@ final class InfiniteLevelNbtCodec {
         level.villagerDoors().save(root);
         WorldStateNbtCodec.save(level, root);
 
+        net.classicremastered.minecraft.level.structure.CobblestoneTower.save(level, root);
         net.classicremastered.nbt.NBTIO.write(root, out);
     }
 
@@ -149,11 +153,16 @@ final class InfiniteLevelNbtCodec {
         if ("Flat".equalsIgnoreCase(type)) {
             level = new LevelInfiniteFlat(seed, depth);
         } else {
-            level = new LevelInfiniteTerrain(seed, depth, "Biomes".equalsIgnoreCase(type));
+            level =
+                    new LevelInfiniteTerrain(
+                            seed,
+                            depth,
+                            "Biomes".equalsIgnoreCase(type),
+                            root.getBoolean("FlatBiomes"));
         }
 
         level.setTime(root.getInt("TimeOfDay"));
-        level.doDayNightCycle = root.getBoolean("DoDayNightCycle");
+        level.doDayNightCycle = !root.hasKey("DoDayNightCycle") || root.getBoolean("DoDayNightCycle");
         if (root.hasKey("Name")) level.name = root.getString("Name");
         if (root.hasKey("Creator")) level.creator = root.getString("Creator");
         if (root.hasKey("CreateTime")) level.createTime = root.getLong("CreateTime");
@@ -224,6 +233,7 @@ final class InfiniteLevelNbtCodec {
         ListTag entities = root.getList("Entities");
         level.villagerDoors().load(root);
         net.classicremastered.minecraft.mob.MobRegistry.bootstrapDefaults();
+        var ridingLinks = new RidingLinks();
         for (int i = 0; i < entities.size(); i++) {
             CompoundTag mobTag = (CompoundTag) entities.get(i);
             short id = mobTag.getShort("Id");
@@ -259,11 +269,15 @@ final class InfiniteLevelNbtCodec {
                 mob.health = health;
                 mob.loadPersistence(mobTag);
                 level.addEntity(mob);
+                ridingLinks.read(mob, mobTag);
             }
         }
-        WorldStateNbtCodec.load(level, root);
+        ridingLinks.readPassenger(level.player, player);
+        WorldStateNbtCodec.load(level, root, ridingLinks);
+        ridingLinks.restore();
         level.updateDayNightColorsSmooth();
 
+        net.classicremastered.minecraft.level.structure.CobblestoneTower.load(level, root);
         return level;
     }
 }

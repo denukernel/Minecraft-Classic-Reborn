@@ -68,11 +68,12 @@ final class ClassicLevelNbtCodec {
             rot.add(new FloatTag(null, 0f));
             player.put(rot);
         }
+        var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
         PlayerNbtCodec.save(player, savePlayer);
+        RidingLinks.savePassenger(all, savePlayer, player);
         root.put(player);
 
         ListTag entities = new ListTag("Entities", (byte) 10); // TAG_Compound
-        var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
         for (Object e : all) {
             if (!(e instanceof net.classicremastered.minecraft.mob.Mob m)) continue;
             if (m instanceof net.classicremastered.minecraft.player.Player) continue;
@@ -80,7 +81,9 @@ final class ClassicLevelNbtCodec {
 
             try {
                 java.lang.reflect.Field f = m.getClass().getField("persistent");
-                if (f.getType() == boolean.class && !f.getBoolean(m)) continue;
+                if (f.getType() == boolean.class && !f.getBoolean(m) && m.riding == null
+                        && m.rider == null)
+                    continue;
             } catch (Throwable ignored) {
             }
 
@@ -104,6 +107,7 @@ final class ClassicLevelNbtCodec {
 
             mobTag.putInt("Health", m.health);
             m.savePersistence(mobTag);
+            RidingLinks.save(all, m, mobTag);
             net.classicremastered.minecraft.level.itemstack.Equipment.save(m, mobTag);
             VillagerDoorManager.saveHome(m, mobTag);
             entities.add(mobTag);
@@ -112,6 +116,7 @@ final class ClassicLevelNbtCodec {
         level.villagerDoors().save(root);
         WorldStateNbtCodec.save(level, root);
 
+        net.classicremastered.minecraft.level.structure.CobblestoneTower.save(level, root);
         net.classicremastered.nbt.NBTIO.write(root, out);
     }
 
@@ -134,7 +139,7 @@ final class ClassicLevelNbtCodec {
         level.fogColor = map.getInt("FogColor");
         level.cloudColor = map.getInt("CloudColor");
         level.setTime(map.getInt("TimeOfDay"));
-        level.doDayNightCycle = map.getBoolean("DoDayNightCycle");
+        level.doDayNightCycle = !map.hasKey("DoDayNightCycle") || map.getBoolean("DoDayNightCycle");
 
         ListTag spawn = map.getList("Spawn");
         if (spawn.size() >= 3) {
@@ -178,7 +183,8 @@ final class ClassicLevelNbtCodec {
         }
 
         level.villagerDoors().load(root);
-        level.initTransient();
+        RidingLinks ridingLinks = new RidingLinks();
+        level.initTransient(ridingLinks);
 
         CompoundTag player = root.getCompound("Player");
         if (player.hasKey("Pos")) {
@@ -208,9 +214,12 @@ final class ClassicLevelNbtCodec {
             }
         }
         PlayerNbtCodec.load(player, level.player);
-        WorldStateNbtCodec.load(level, root);
+        ridingLinks.readPassenger(level.player, player);
+        WorldStateNbtCodec.load(level, root, ridingLinks);
+        ridingLinks.restore();
         level.updateDayNightColorsSmooth();
 
+        net.classicremastered.minecraft.level.structure.CobblestoneTower.load(level, root);
         return level;
     }
 

@@ -61,7 +61,7 @@ public final class PathNavigator {
         float reach =
                 Math.max(
                         0.035f,
-                        Math.min(0.18f, ((float) Math.ceil(mob.bbWidth) - mob.bbWidth) * 0.35f));
+                        Math.min(0.18f, ((float) Math.ceil(ground.width) - ground.width) * 0.35f));
         while (index < path.size()) {
             Pathfinder.Node next = path.get(index);
             float dx = next.x + ground.offset - mob.x, dz = next.z + ground.offset - mob.z;
@@ -84,13 +84,7 @@ public final class PathNavigator {
         lastY = mob.bb.y0;
         lastZ = mob.z;
         knownPosition = true;
-        GroundClearance ground =
-                new GroundClearance(
-                        level,
-                        mob.bbWidth,
-                        mob.bbHeight,
-                        Pathfinder.supportsSwimming(mob),
-                        Pathfinder.dropLimit(mob));
+        GroundClearance ground = new GroundClearance(level, mob);
         float feet = mob.bb.y0;
         if (aligning) {
             float lane = alignZAxis ? Math.abs(mob.z - alignZ) : Math.abs(mob.x - alignX);
@@ -134,7 +128,7 @@ public final class PathNavigator {
             List<Pathfinder.Node> planned =
                     goal == null
                             ? null
-                            : Pathfinder.findPath(level, mob, goal.x, goal.feetY, goal.z, 1024);
+                            : Pathfinder.findPath(ground, mob, goal.x, goal.feetY, goal.z, 1024);
             if (planned != null) {
                 path = planned;
                 index = 0;
@@ -160,11 +154,29 @@ public final class PathNavigator {
                 if (Math.abs(rise) > 0.2f
                         && Math.abs(rise) <= 1.01f
                         && horizontal <= 2.56f
+                        && !ground.ladderNode(successor.x, successor.feetY, successor.z)
                         && ground.bodyLineClear(
                                 mob.x, Math.max(feet, successor.feetY), mob.z, nx, nz)) index = 1;
             }
         }
         if (index >= path.size()) return Result.idle();
+        Pathfinder.Node rung = path.get(index);
+        Pathfinder.Node previous = rung.parent;
+        if (previous != null && (previous.x == rung.x && previous.z == rung.z
+                || ground.ladderNode(previous.x, previous.feetY, previous.z)
+                || ground.ladderNode(rung.x, rung.feetY, rung.z))) {
+            boolean vertical = previous.x == rung.x && previous.z == rung.z;
+            boolean clear = vertical ? ground.climbEdge(rung.x, previous.feetY, rung.z, rung.feetY)
+                    : ground.bodyLineClear(mob.x, Math.max(feet, rung.feetY), mob.z,
+                            rung.x + ground.offset, rung.z + ground.offset);
+            if (!clear) {
+                path = Collections.emptyList();
+                index = replanTicks = 0;
+                return Result.idle();
+            }
+            return Result.ladder(rung.x + ground.offset - mob.x, rung.feetY - feet,
+                    rung.z + ground.offset - mob.z);
+        }
         if (index == 0 && path.size() > 1 && mob.onGround && crowded(mob)) {
             Pathfinder.Node start = path.get(0), next = path.get(1);
             float upper = Math.max(feet, next.feetY);
@@ -194,6 +206,16 @@ public final class PathNavigator {
                 look > index;
                 look = look > index + 6 ? index + 6 : look - 1) {
             Pathfinder.Node candidate = path.get(look);
+            boolean ladderAhead = false;
+            for (int step = index; step <= look; step++) {
+                Pathfinder.Node node = path.get(step);
+                if (ground.ladderNode(node.x, node.feetY, node.z)) {
+                    ladderAhead = true;
+                    break;
+                }
+            }
+            if (ladderAhead)
+                continue;
             if (ground.walkableLine(
                     mob.x,
                     feet,
@@ -219,6 +241,7 @@ public final class PathNavigator {
                     && Math.abs(rise) > 0.2f
                     && Math.abs(rise) <= 1.01f
                     && horizontal <= 2.56f
+                    && !ground.ladderNode(successor.x, successor.feetY, successor.z)
                     && ground.bodyLineClear(mob.x, Math.max(feet, successor.feetY), mob.z, nx, nz))
                 index++;
         }
@@ -237,7 +260,10 @@ public final class PathNavigator {
         float yaw = (float) Math.toDegrees(Math.atan2(z - mob.z, x - mob.x)) - 90f;
         float distance = (x - mob.x) * (x - mob.x) + (z - mob.z) * (z - mob.z);
         boolean jump =
-                feetY > mob.bb.y0 + Math.max(0.25f, mob.footSize) + 0.01f && distance < 2.25f;
+                feetY > mob.bb.y0 + Math.max(0.25f, mob.footSize) + 0.01f && distance < 2.25f
+                        && !(net.classicremastered.minecraft.level.tile.Block.blocks[level.getTile(
+                                (int) Math.floor(x), (int) Math.floor(feetY - .01f), (int) Math.floor(
+                                        z))] instanceof net.classicremastered.minecraft.level.tile.StairBlock);
         return new Result(
                 yaw, true, jump, Math.max(0.15f, Math.min(1f, (float) Math.sqrt(distance) * 2f)));
     }
@@ -257,12 +283,27 @@ public final class PathNavigator {
         public final float targetYaw;
         public final boolean forward, wantJump;
         public final float speedFactor;
+        public final boolean ladder;
+        public final float ladderX, ladderY, ladderZ;
 
         private Result(float yaw, boolean forward, boolean jump, float speed) {
+            this(yaw, forward, jump, speed, false, 0f, 0f, 0f);
+        }
+
+        private Result(float yaw, boolean forward, boolean jump, float speed, boolean ladder,
+                float ladderX, float ladderY, float ladderZ) {
+            this.ladder = ladder;
+            this.ladderX = ladderX;
+            this.ladderY = ladderY;
+            this.ladderZ = ladderZ;
             targetYaw = yaw;
             this.forward = forward;
             wantJump = jump;
             speedFactor = speed;
+        }
+
+        private static Result ladder(float dx, float dy, float dz) {
+            return new Result(0f, false, false, 0f, true, dx, dy, dz);
         }
 
         public static Result idle() {

@@ -6,6 +6,7 @@ import java.net.*;
 import java.util.Iterator;
 import javax.imageio.*;
 import javax.imageio.stream.ImageInputStream;
+import net.classicremastered.launcher.Constants;
 
 /** Shared HTTPS skin loader for the classic 64 by 32 humanoid texture atlas. */
 public final class SkinDownloader {
@@ -28,7 +29,7 @@ public final class SkinDownloader {
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(8000);
-        connection.setRequestProperty("User-Agent", "ClassicReborn/0.45");
+        connection.setRequestProperty("User-Agent", "ClassicReborn/" + Constants.MINECRAFT_VERSION);
         try {
             if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
             byte[] bytes;

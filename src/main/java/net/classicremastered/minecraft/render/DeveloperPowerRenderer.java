@@ -56,7 +56,7 @@ public final class DeveloperPowerRenderer {
             GL11.glTranslatef(mob.xo + (mob.x - mob.xo) * partial,
                     mob.yo + (mob.y - mob.yo) * partial - mob.heightOffset + mob.bbHeight + (healthBar ? .85f : .35f),
                     mob.zo + (mob.z - mob.zo) * partial);
-            float yaw = minecraft.player.yRotO + (minecraft.player.yRot - minecraft.player.yRotO) * partial;
+            float yaw = minecraft.player.aimYaw(partial);
             float pitch = minecraft.player.xRotO + (minecraft.player.xRot - minecraft.player.xRotO) * partial;
             GL11.glRotatef(-yaw - (minecraft.cameraMode == 2 ? 180 : 0), 0, 1, 0);
             GL11.glRotatef(minecraft.cameraMode == 2 ? pitch : -pitch, 1, 0, 0);

@@ -13,52 +13,64 @@ public final class IronGolem extends Mob {
         super(level);
         this.setPos(x, y, z);
 
-        this.modelName   = "irongolem";             // mapped in ModelManager
-        this.textureName = "/mob/iron_golem.png";   // 128×128 texture atlas
+        this.modelName = "irongolem"; // mapped in ModelManager
+        this.textureName = "/mob/iron_golem.png"; // 128×128 texture atlas
 
-        this.health      = 100;
-        this.coinDrop    = 5;
-        this.bbWidth     = 1.4F;
-        this.bbHeight    = 2.9F;
-        this.footSize    = 0.9F;
-        this.speed       = 0.20F;
+        this.health = 100;
+        this.coinDrop = 5;
+        this.bbWidth = 1.4F;
+        this.bbHeight = 2.9F;
+        this.footSize = 0.9F;
+        this.speed = 0.20F;
         this.heightOffset = 1.0F;
         this.hurtPitchMin = 0.3F;
         this.hurtPitchMax = 0.3F;
-        this.soundHurt   = "random/anvil_land";
-        this.soundDeath  = "random/anvil_break";
+        this.soundHurt = "random/anvil_land";
+        this.soundDeath = "random/anvil_break";
     }
 
     @Override
     public void aiStep() {
         if (level == null) return;
         if (this.health <= 0) return;
-        Entity target=null;
+        Entity target = null;
         if (builtByPlayer) {
-            target=findNearestHostile(32.0f);
+            target = findNearestHostile(32.0f);
         } else {
-            Entity candidate=level.getPlayer();
-            if(candidate instanceof Player p && !p.removed && p.health>0 && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(p))target=p;
+            Entity previous =
+                    ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
+                            ? basic.attackTarget
+                            : null;
+            target =
+                    net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                            this, 32, previous);
         }
-        if(ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic)basic.attackTarget=target;
+        if (ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic)
+            basic.attackTarget = target;
         super.aiStep();
-        if(target!=null)attackNearby(target);
+        if (target != null) attackNearby(target);
     }
 
     // --- helper: move toward & attack any entity ---
     private void attackNearby(Entity e) {
         float dx = e.x - this.x;
         float dz = e.z - this.z;
-        float dist = (float)Math.sqrt(dx*dx + dz*dz);
+        float dist = (float) Math.sqrt(dx * dx + dz * dz);
 
-        if (dist < 2.0f && this.attackTime == 0 && level.clip(
-                new net.classicremastered.minecraft.model.Vec3D(x,bb.y0+bbHeight*0.7f,z),
-                new net.classicremastered.minecraft.model.Vec3D(e.x,e.bb.y0+e.bbHeight*0.5f,e.z))==null) {
+        if (dist < 2.0f
+                && this.attackTime == 0
+                && level.clip(
+                                new net.classicremastered.minecraft.model.Vec3D(
+                                        x, bb.y0 + bbHeight * 0.7f, z),
+                                new net.classicremastered.minecraft.model.Vec3D(
+                                        e.x, e.bb.y0 + e.bbHeight * 0.5f, e.z))
+                        == null) {
             this.attackTime = 40; // 2s cooldown
             e.hurt(this, 10);
 
             if (dist > 0.0f) {
-                dx /= dist; dz /= dist;
+                dx /= dist;
+                dz /= dist;
                 e.xd += dx * 1.0F;
                 e.yd += 0.5F;
                 e.zd += dz * 1.0F;
@@ -77,8 +89,12 @@ public final class IronGolem extends Mob {
             if (o instanceof Player) continue;
 
             Mob m = (Mob) o;
-            if (!(m instanceof Zombie || m instanceof Skeleton || m instanceof Creeper ||
-                  m instanceof Spider || m instanceof Enderman || m instanceof BabyZombie)) {
+            if (!(m instanceof Zombie
+                    || m instanceof Skeleton
+                    || m instanceof Creeper
+                    || m instanceof Spider
+                    || m instanceof Enderman
+                    || m instanceof BabyZombie)) {
                 continue; // only hostiles
             }
 
@@ -87,7 +103,7 @@ public final class IronGolem extends Mob {
             float dx = m.x - this.x;
             float dy = m.y - this.y;
             float dz = m.z - this.z;
-            float d2 = dx*dx + dy*dy + dz*dz;
+            float d2 = dx * dx + dy * dy + dz * dz;
             if (d2 < bestDist2) {
                 bestDist2 = d2;
                 best = m;
@@ -97,10 +113,14 @@ public final class IronGolem extends Mob {
     }
 
     @Override
-    public boolean isPickable() { return true; }
+    public boolean isPickable() {
+        return true;
+    }
 
     @Override
-    public boolean isPushable() { return true; }
+    public boolean isPushable() {
+        return true;
+    }
 
     @Override
     public void die(Entity killer) {

@@ -2,14 +2,48 @@ package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.util.MathHelper;
 
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 public final class LightEngine {
 
     private final Level level;
     private float lastDayFactor = -1f;
     private final SkyLightCache skyCache;
+
+    private record FireCell(int x, int y, int z) {
+    }
+
+    private Set<FireCell> burningMobs = Set.of();
+
+    void refreshBurningMobs() {
+        Set<FireCell> next = new HashSet<>();
+        synchronized (level.blockMap.all) {
+            for (var entity : level.blockMap.all)
+                if (entity instanceof Mob mob && !mob.removed && mob.remainingFireTicks > 0)
+                    next.add(new FireCell(MathHelper.floor(mob.x),
+                            MathHelper.floor((mob.bb.y0 + mob.bb.y1) * .5f), MathHelper.floor(mob.z)));
+        }
+        if (next.equals(burningMobs))
+            return;
+        for (FireCell source : burningMobs)
+            if (!next.contains(source))
+                queueGlow(source);
+        for (FireCell source : next)
+            if (!burningMobs.contains(source))
+                queueGlow(source);
+        burningMobs = next;
+        querySources.cx = querySources.cz = Integer.MIN_VALUE;
+    }
+
+    private void queueGlow(FireCell source) {
+        // Face lighting can sample one block beyond a mesh boundary.
+        level.queueLightRegion(source.x, source.y, source.z, 9);
+    }
 
     public void blockChanged(int x, int y, int z) {
         skyCache.invalidate(x, z);
@@ -130,6 +164,11 @@ public final class LightEngine {
                                 maxY);
                     }
                 }
+        }
+        for (FireCell source : burningMobs) {
+            int sx = source.x >> 4, sz = source.z >> 4;
+            if (sx >= minCx && sx <= maxCx && sz >= minCz && sz <= maxCz)
+                sources.add(source.x, source.y, source.z, Block.FIRE.getLightValue(), minY, maxY);
         }
     }
 

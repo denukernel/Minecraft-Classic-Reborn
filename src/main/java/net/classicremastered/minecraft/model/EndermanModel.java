@@ -2,7 +2,6 @@ package net.classicremastered.minecraft.model;
 
 import org.lwjgl.opengl.GL11;
 
-import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
@@ -16,7 +15,7 @@ public final class EndermanModel extends Model {
         int prevW = TexturedQuad.ATLAS_W, prevH = TexturedQuad.ATLAS_H;
         TexturedQuad.ATLAS_W = 64;
         TexturedQuad.ATLAS_H = 32;
-        this.groundOffset = 31;  // try 31–34 if your legs/boots differ
+        this.groundOffset = 25;
         // Head
         head = new ModelPart(0, 0);
         head.setBounds(-4, -8, -4, 8, 8, 8, 0.0F);
@@ -57,23 +56,28 @@ public final class EndermanModel extends Model {
         TexturedQuad.ATLAS_H = prevH;
     }
 
- // EndermanModel.java — REPLACE this method
+    // EndermanModel.java — REPLACE this method
     @Override
     public void preAnimate(Object entity) {
         // sync transient pose flags from the mob each frame
         this.isAttacking = false;
-        this.isCarrying  = false; // set true from your mob if/when you add carrying later
+        this.isCarrying = false; // set true from your mob if/when you add carrying later
 
         if (entity instanceof net.classicremastered.minecraft.mob.Enderman) {
-            net.classicremastered.minecraft.mob.Enderman e = (net.classicremastered.minecraft.mob.Enderman) entity;
+            net.classicremastered.minecraft.mob.Enderman e =
+                    (net.classicremastered.minecraft.mob.Enderman) entity;
             this.isAttacking = e.isAttacking;
         }
     }
 
-
     @Override
-    public void render(float limbSwing, float limbSwingAmount, float ageInTicks,
-                       float netHeadYaw, float headPitch, float scale) {
+    public void render(
+            float limbSwing,
+            float limbSwingAmount,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch,
+            float scale) {
         setRotationAngles(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, scale);
 
         // Base pass (black body)
@@ -99,21 +103,44 @@ public final class EndermanModel extends Model {
         GL11.glPopAttrib();
     }
 
- // EndermanModel.java — REPLACE this method
+    // EndermanModel.java — REPLACE this method
     @Override
-    public void setRotationAngles(float limbSwing, float limbSwingAmount, float ageInTicks,
-                                  float netHeadYaw, float headPitch, float scale) {
+    public void setRotationAngles(
+            float limbSwing,
+            float limbSwingAmount,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch,
+            float scale) {
         // --- Head look ---
         head.yaw = netHeadYaw / 57.295776F;
         head.pitch = headPitch / 57.295776F;
         head.roll = 0.0F;
 
         // --- Base walk (halved stride for Enderman) ---
-        rightLeg.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F) * 1.4F * limbSwingAmount * 0.5D);
-        leftLeg.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * 1.4F * limbSwingAmount * 0.5D);
+        rightLeg.pitch =
+                (float) (MathHelper.cos(limbSwing * 0.6662F) * 1.4F * limbSwingAmount * 0.5D);
+        leftLeg.pitch =
+                (float)
+                        (MathHelper.cos(limbSwing * 0.6662F + 3.1415927F)
+                                * 1.4F
+                                * limbSwingAmount
+                                * 0.5D);
 
-        rightArm.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * 2.0F * limbSwingAmount * 0.5F * 0.5D);
-        leftArm.pitch = (float) (MathHelper.cos(limbSwing * 0.6662F) * 2.0F * limbSwingAmount * 0.5F * 0.5D);
+        rightArm.pitch =
+                (float)
+                        (MathHelper.cos(limbSwing * 0.6662F + 3.1415927F)
+                                * 2.0F
+                                * limbSwingAmount
+                                * 0.5F
+                                * 0.5D);
+        leftArm.pitch =
+                (float)
+                        (MathHelper.cos(limbSwing * 0.6662F)
+                                * 2.0F
+                                * limbSwingAmount
+                                * 0.5F
+                                * 0.5D);
 
         // Clamping of arms and legs rotations like in ModelEnderman.java
         float var8 = 0.4F;
@@ -132,32 +159,35 @@ public final class EndermanModel extends Model {
 
         // --- Attack (two-hand punch, zombie-style), driven by Model.attackOffset (0..1) ---
         if (this.attackOffset > 0.001F) {
-            float a  = MathHelper.sin(this.attackOffset * 3.1415927F);
-            float a2 = MathHelper.sin((1.0F - (1.0F - this.attackOffset) * (1.0F - this.attackOffset)) * 3.1415927F);
+            float a = MathHelper.sin(this.attackOffset * 3.1415927F);
+            float a2 =
+                    MathHelper.sin(
+                            (1.0F - (1.0F - this.attackOffset) * (1.0F - this.attackOffset))
+                                    * 3.1415927F);
 
             float basePunchPitch = -1.5707964F; // -90 deg base
-            float punchPitchAdd  = (a * 1.3F - a2 * 0.4F);
+            float punchPitchAdd = (a * 1.3F - a2 * 0.4F);
 
-            rightArm.yaw   = -(0.10F - a * 0.55F);
-            leftArm .yaw   =  (0.10F - a * 0.55F);
+            rightArm.yaw = -(0.10F - a * 0.55F);
+            leftArm.yaw = (0.10F - a * 0.55F);
 
             rightArm.pitch = basePunchPitch - punchPitchAdd;
-            leftArm .pitch = basePunchPitch - punchPitchAdd;
+            leftArm.pitch = basePunchPitch - punchPitchAdd;
 
             rightArm.roll += MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.03F;
-            leftArm .roll -= MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.03F;
+            leftArm.roll -= MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.03F;
 
             rightArm.pitch += MathHelper.sin(ageInTicks * 0.067F) * 0.03F;
-            leftArm .pitch -= MathHelper.sin(ageInTicks * 0.067F) * 0.03F;
+            leftArm.pitch -= MathHelper.sin(ageInTicks * 0.067F) * 0.03F;
         }
 
         // --- Carry pose ---
         if (isCarrying) {
             rightArm.pitch = leftArm.pitch = -0.50F;
-            rightArm.roll  =  0.05F;
-            leftArm .roll  = -0.05F;
-            rightArm.yaw   = 0.0F;
-            leftArm .yaw   = 0.0F;
+            rightArm.roll = 0.05F;
+            leftArm.roll = -0.05F;
+            rightArm.yaw = 0.0F;
+            leftArm.yaw = 0.0F;
         }
 
         // Set rotation points (overrides values)

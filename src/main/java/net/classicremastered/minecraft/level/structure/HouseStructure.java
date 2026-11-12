@@ -4,7 +4,6 @@ import java.util.Arrays;
 import java.util.Random;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 
 public final class HouseStructure implements Structure {
@@ -172,66 +171,10 @@ public final class HouseStructure implements Structure {
         level.setTile(doorX, padY + 1, doorZ, 0);
         level.setTile(doorX, padY + 2, doorZ, 0);
 
-        // Villagers
-        int baseY = padY + 1;
-        int minX = x + 2, maxX = x + W - 3;
-        int minZ = z + 2, maxZ = z + D - 3;
-
-        int count = (maxX - minX + 1) * (maxZ - minZ + 1);
-        int[] cells = new int[count];
-        for (int i = 0, cx = minX; cx <= maxX; cx++)
-            for (int cz = minZ; cz <= maxZ; cz++, i++)
-                cells[i] = ((cx - minX) << 8) | (cz - minZ);
-
-        for (int i = count - 1; i > 0; i--) {
-            int j = rand.nextInt(i + 1);
-            int t = cells[i];
-            cells[i] = cells[j];
-            cells[j] = t;
-        }
-
-        int toSpawn = 1 + (rand.nextBoolean() ? (1 + rand.nextInt(2)) : 0);
-
-        // Villagers (replace the previous spawn block)
-        for (int idx = 0; idx < count && toSpawn > 0; idx++) {
-            int enc = cells[idx];
-            int sx = minX + (enc >> 8);
-            int sz = minZ + (enc & 0xFF);
-
-            if (level.getTile(sx, baseY - 1, sz) != Block.COBBLESTONE.id)
-                continue;
-            if (level.getTile(sx, baseY, sz) != 0)
-                continue;
-            if (level.getTile(sx, baseY + 1, sz) != 0)
-                continue;
-
-            Villager v = new Villager(level, sx + 0.5F, baseY + 1, sz + 0.5F);
-
-            // Set home anchor at the villager spawn point (center of house interior)
-            float homeX = x + W * 0.5f; // house center X
-            float homeZ = z + D * 0.5f; // house center Z
-            float homeY = baseY + 1; // ground-level inside house
-            float radius = 2.5f; // radius around home to consider "at home"
-
-            v.setHome(homeX, homeY, homeZ, radius); // persist home on the villager
-            v.setHomeDoor(doorX, baseY, doorZ);
-
-            // Give the villager a VillagerAI that enforces the home behaviour
-            net.classicremastered.minecraft.mob.ai.villager.VillagerAI vai = new net.classicremastered.minecraft.mob.ai.villager.VillagerAI(
-                    homeX, homeY, homeZ,
-                    radius);
-            vai.suppressRandomJump = true;
-            vai.runSpeed = 0.8f; // configurable
-            v.ai = vai;
-
-            level.addEntity(v);
-            toSpawn--;
-        }
-
         var occupants =
                 new java.util.ArrayList<net.classicremastered.minecraft.level.GeneratedOccupant>();
-        net.classicremastered.minecraft.level.GeneratedOccupant.offer(
-                occupants, rand.nextLong(), false, x + W / 2, baseY, z + D / 2);
+        net.classicremastered.minecraft.level.GeneratedOccupant.offerHouse(occupants, rand.nextLong(),
+                x + W / 2, padY + 1, z + D / 2);
         for (var occupant : occupants) occupant.spawn(level);
         return true;
     }

@@ -17,7 +17,25 @@ public final class BiomeLevelGenerator {
         DESERT,
         FOREST,
         HILLS,
-        WETLAND
+        WETLAND,
+        SNOWY_PLAINS,
+        SNOWY_FOREST;
+
+        boolean snowy() {
+            return this == SNOWY_PLAINS || this == SNOWY_FOREST;
+        }
+
+        int treeChance() {
+            return switch (this) {
+                case FOREST, SNOWY_FOREST -> 24;
+                case WETLAND -> 75;
+                default -> 240;
+            };
+        }
+
+        int leafId() {
+            return snowy() ? Block.SNOWY_LEAVES.id : Block.LEAVES.id;
+        }
     }
 
     private final long seed;
@@ -46,6 +64,7 @@ public final class BiomeLevelGenerator {
         double temperature = noise(x / 44.0, z / 44.0, 17);
         double moisture = noise(x / 38.0, z / 38.0, 41);
         if (temperature > 0.24 && moisture < 0.12) return Biome.DESERT;
+        if (temperature < -.27) return moisture > .05 ? Biome.SNOWY_FOREST : Biome.SNOWY_PLAINS;
         if (noise(x / 52.0, z / 52.0, 93) > 0.35) return Biome.HILLS;
         if (moisture > 0.3 && temperature < -0.15) return Biome.WETLAND;
         if (moisture > 0.2) return Biome.FOREST;
@@ -82,7 +101,7 @@ public final class BiomeLevelGenerator {
     }
 
     /** Each chunk samples world coordinates only, including neighboring tree roots. */
-    public void generateChunk(SimpleChunk chunk) {
+    public void generateChunk(SimpleChunk chunk, boolean flat) {
         int worldX = chunk.cx * SimpleChunk.SIZE;
         int worldZ = chunk.cz * SimpleChunk.SIZE;
         int sea = Math.max(1, chunk.height / 2 - 2);
@@ -90,7 +109,7 @@ public final class BiomeLevelGenerator {
         for (int z = 0; z < SimpleChunk.SIZE; z++) {
             for (int x = 0; x < SimpleChunk.SIZE; x++) {
                 int gx = worldX + x, gz = worldZ + z;
-                int top = groundHeight(gx, gz, chunk.height);
+                int top = flat ? 34 : groundHeight(gx, gz, chunk.height);
                 tops[x + z * SimpleChunk.SIZE] = top;
                 Biome biome = biomeAt(gx, gz);
                 Random random = new Random(seed ^ gx * 341873128712L ^ gz * 132897987541L);
@@ -101,22 +120,20 @@ public final class BiomeLevelGenerator {
                     else if (y <= top) {
                         if (y < top - 3) id = oreBlock(y, random);
                         else if (biome == Biome.DESERT || top <= sea + 1) id = Block.SAND.id;
-                        else id = y == top ? Block.GRASS.id : Block.DIRT.id;
+                        else id = y == top ? grassId(biome) : Block.DIRT.id;
                     }
                     chunk.blocks[SimpleChunk.idx(x, y, z, chunk.height)] = (byte) id;
                 }
             }
         }
-        net.classicremastered.minecraft.level.infinite.InfiniteTerrainGenerator carver =
-                caveGenerator(chunk.height);
-        carver.carveCaves(chunk, worldX, worldZ, tops, sea);
+        if (!flat) caveGenerator(chunk.height).carveCaves(chunk, worldX, worldZ, tops, sea);
         // Include roots outside this chunk so canopies do not stop at its edges.
         for (int z = worldZ - 2; z < worldZ + SimpleChunk.SIZE + 2; z++) {
             for (int x = worldX - 2; x < worldX + SimpleChunk.SIZE + 2; x++) {
                 if (Math.floorMod(x, 4) != 1 || Math.floorMod(z, 4) != 1) continue;
                 Biome biome = biomeAt(x, z);
-                int top = groundHeight(x, z, chunk.height);
-                int chance = biome == Biome.FOREST ? 24 : biome == Biome.WETLAND ? 75 : 240;
+                int top = flat ? 34 : groundHeight(x, z, chunk.height);
+                int chance = biome.treeChance();
                 Random random = new Random(seed ^ x * 341873128712L ^ z * 132897987541L ^ 71);
                 if (biome == Biome.DESERT || top <= sea + 1 || random.nextInt(chance) >= 16)
                     continue;
@@ -127,8 +144,7 @@ public final class BiomeLevelGenerator {
                     for (int dz = -radius; dz <= radius; dz++) {
                         for (int dx = -radius; dx <= radius; dx++) {
                             if (Math.abs(dx) != radius || Math.abs(dz) != radius)
-                                placeTreeBlock(
-                                        chunk, x + dx, top + 1 + dy, z + dz, Block.LEAVES.id);
+                                placeTreeBlock(chunk, x + dx, top + 1 + dy, z + dz, biome.leafId());
                         }
                     }
                 }
@@ -138,21 +154,26 @@ public final class BiomeLevelGenerator {
                     GeneratedOccupant.offer(chunk.generatedOccupants, seed, true, x, top + 1, z);
             }
         }
-        DesertPyramid.decorateChunk(chunk, seed);
+        DesertPyramid.decorateChunk(chunk, seed, flat);
+        ReadBlock read =
+                (x, y, z) ->
+                        chunk.blocks[SimpleChunk.idx(x - worldX, y, z - worldZ, chunk.height)]
+                                & 255;
+        WriteBlock write =
+                (x, y, z, id) ->
+                        chunk.blocks[SimpleChunk.idx(x - worldX, y, z - worldZ, chunk.height)] =
+                                (byte) id;
         decorateSurface(
                 worldX,
                 worldZ,
                 worldX + 16,
                 worldZ + 16,
                 chunk.height,
-                false,
+                flat,
                 chunk.generatedOccupants,
-                (x, y, z) ->
-                        chunk.blocks[SimpleChunk.idx(x - worldX, y, z - worldZ, chunk.height)]
-                                & 255,
-                (x, y, z, id) ->
-                        chunk.blocks[SimpleChunk.idx(x - worldX, y, z - worldZ, chunk.height)] =
-                                (byte) id);
+                read,
+                write);
+        coverVegetationAndSnow(worldX, worldZ, 16, chunk.height, read, write);
         chunk.meshed = false;
     }
 
@@ -164,6 +185,40 @@ public final class BiomeLevelGenerator {
     @FunctionalInterface
     private interface WriteBlock {
         void set(int x, int y, int z, int id);
+    }
+
+    private static int grassId(Biome biome) {
+        return biome.snowy() ? Block.SNOWY_GRASS.id : Block.GRASS.id;
+    }
+
+    private void coverVegetationAndSnow(
+            int minX, int minZ, int size, int depth, ReadBlock read, WriteBlock write) {
+        for (int z = minZ; z < minZ + size; z++) {
+            for (int x = minX; x < minX + size; x++) {
+                Biome biome = biomeAt(x, z);
+                if (!biome.snowy() && biome != Biome.PLAINS && biome != Biome.FOREST)
+                    continue;
+                for (int y = depth - 1; y >= 1; y--) {
+                    int id = read.get(x, y, z);
+                    if (id == 0) continue;
+                    if (y + 1 < depth) {
+                        if (biome.snowy()
+                                && (id == Block.SNOWY_GRASS.id || id == Block.SNOWY_LEAVES.id)) {
+                            write.set(x, y + 1, z, Block.SNOW_LAYER.id);
+                        } else if (id == Block.GRASS.id && sample(x, z, 131) > .96) {
+                            int flower = sample(x, z, 137) < .5 ? Block.DANDELION.id
+                                    : Block.ROSE.id;
+                            write.set(x, y + 1, z, flower);
+                        } else if (biome == Biome.PLAINS
+                                && id == Block.GRASS.id
+                                && sample(x, z, 123) > .64 - .28 * noise(x / 7.0, z / 7.0, 127)) {
+                            write.set(x, y + 1, z, Block.SHORT_GRASS.id);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     private void decorateSurface(
@@ -201,7 +256,7 @@ public final class BiomeLevelGenerator {
                         || maxX - minX > 16 && (x + 7 > maxX || z + 7 > maxZ)) continue;
                 int floor = (low + high) / 2;
                 if (x + 3 >= minX && x + 3 < maxX && z + 3 >= minZ && z + 3 < maxZ)
-                    GeneratedOccupant.offer(occupants, seed, false, x + 3, floor + 1, z + 3);
+                    GeneratedOccupant.offerHouse(occupants, seed, x + 3, floor + 1, z + 3);
                 for (int wz = Math.max(z, minZ); wz < Math.min(z + 7, maxZ); wz++) {
                     for (int wx = Math.max(x, minX); wx < Math.min(x + 7, maxX); wx++) {
                         int ground = flat ? 34 : groundHeight(wx, wz, depth);
@@ -280,7 +335,8 @@ public final class BiomeLevelGenerator {
         if (lx < 0 || lx >= SimpleChunk.SIZE || lz < 0 || lz >= SimpleChunk.SIZE) return;
         int index = SimpleChunk.idx(lx, y, lz, chunk.height);
         int existing = chunk.blocks[index] & 255;
-        if (existing == 0 || existing == Block.LEAVES.id) chunk.blocks[index] = (byte) id;
+        if (existing == 0 || existing == Block.LEAVES.id || existing == Block.SNOWY_LEAVES.id)
+            chunk.blocks[index] = (byte) id;
     }
 
     public Level generate(String creator, int size, boolean flat) {
@@ -303,7 +359,7 @@ public final class BiomeLevelGenerator {
                         id =
                                 biome == Biome.DESERT || top <= sea + 1
                                         ? Block.SAND.id
-                                        : y == top ? Block.GRASS.id : Block.DIRT.id;
+                                        : y == top ? grassId(biome) : Block.DIRT.id;
                     else {
                         id = oreBlock(y, random);
                     }
@@ -315,9 +371,9 @@ public final class BiomeLevelGenerator {
             for (int x = 3; x < size - 3; x++) {
                 Biome biome = biomeAt(x, z);
                 int top = surfaces[z * size + x];
-                int chance = biome == Biome.FOREST ? 24 : biome == Biome.WETLAND ? 75 : 240;
+                int chance = biome.treeChance();
                 if (top > sea + 1 && biome != Biome.DESERT && random.nextInt(chance) == 0) {
-                    plantTree(blocks, size, depth, x, top + 1, z, random);
+                    plantTree(blocks, size, depth, x, top + 1, z, random, biome.leafId());
                     GeneratedOccupant.offer(occupants, seed, true, x, top + 1, z);
                 }
             }
@@ -331,6 +387,11 @@ public final class BiomeLevelGenerator {
         DesertPyramid.placeInFinite(level, seed);
         decorateSurface(
                 0, 0, size, size, depth, flat, occupants, level::getTile, level::setTileNoUpdate);
+        if (!flat) {
+            net.classicremastered.minecraft.level.structure.CobblestoneTower.placeFinite(
+                    level, seed);
+        }
+        coverVegetationAndSnow(0, 0, size, depth, level::getTile, level::setTileNoUpdate);
         for (var occupant : occupants) occupant.spawn(level);
         level.creator = creator;
         level.createTime = System.currentTimeMillis();
@@ -339,7 +400,11 @@ public final class BiomeLevelGenerator {
             for (int x = size / 4; x < size * 3 / 4; x++) {
                 int top = surfaces[z * size + x];
                 if (top > sea
-                        && level.getTile(x, top + 1, z) == 0
+                        && (level.getTile(x, top + 1, z) == 0
+                                || level.getTile(x, top + 1, z) == Block.SNOW_LAYER.id
+                                || level.getTile(x, top + 1, z) == Block.SHORT_GRASS.id
+                                || level.getTile(x, top + 1, z) == Block.DANDELION.id
+                                || level.getTile(x, top + 1, z) == Block.ROSE.id)
                         && level.getTile(x, top + 2, z) == 0) {
                     level.xSpawn = x;
                     level.ySpawn = top + 2;
@@ -351,7 +416,8 @@ public final class BiomeLevelGenerator {
         return level;
     }
 
-    private void plantTree(byte[] blocks, int size, int depth, int x, int y, int z, Random random) {
+    private void plantTree(
+            byte[] blocks, int size, int depth, int x, int y, int z, Random random, int leafId) {
         int height = 4 + random.nextInt(2);
         if (y + height + 2 >= depth) return;
         for (int dy = 0; dy <= height + 1; dy++) {
@@ -367,7 +433,7 @@ public final class BiomeLevelGenerator {
             for (int dz = -radius; dz <= radius; dz++) {
                 for (int dx = -radius; dx <= radius; dx++) {
                     if (Math.abs(dx) != radius || Math.abs(dz) != radius)
-                        blocks[((y + dy) * size + z + dz) * size + x + dx] = (byte) Block.LEAVES.id;
+                        blocks[((y + dy) * size + z + dz) * size + x + dx] = (byte) leafId;
                 }
             }
         }

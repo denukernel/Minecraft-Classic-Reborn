@@ -52,7 +52,7 @@ public class BucketItem extends ToolItem {
         if (player == null || level == null) return;
 
         // Custom raycast that checks for liquid blocks
-        float yaw = player.yRot, pitch = player.xRot;
+        float yaw = player.aimYaw(1f), pitch = player.xRot;
         float cy = net.classicremastered.util.MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
         float sy = net.classicremastered.util.MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
         float cp = net.classicremastered.util.MathHelper.cos(-pitch * 0.017453292F);

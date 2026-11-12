@@ -13,6 +13,13 @@ public class DroppedItem extends Entity {
     public int itemId;
     public int life = 6000; // ~5 mins
     public int count = 1;
+    public net.classicremastered.minecraft.level.itemstack.PackedTurret crate;
+
+    public DroppedItem withCrate(
+            net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
+        this.crate = crate;
+        return this;
+    }
 
     public DroppedItem(Level level, float x, float y, float z, int itemId) {
         this(level, x, y, z, itemId, 1);
@@ -63,8 +70,8 @@ public class DroppedItem extends Entity {
         }
 
         int added = 0;
-        for (int i = 0; i < this.count; i++) {
-            if (p.inventory.addResource(idToAdd)) {
+        for (int i = 0; i < (crate == null ? this.count : 1); i++) {
+            if (crate != null ? p.inventory.addCrate(crate) : p.inventory.addResource(idToAdd)) {
                 added++;
             } else {
                 break;
@@ -77,7 +84,7 @@ public class DroppedItem extends Entity {
                 this.level.playSound("random/pop", this.x, this.y, this.z, 0.2F, pitch);
                 this.level.addEntity(new TakeEntityAnim(this.level, this, p));
             }
-            this.count -= added;
+            this.count = crate == null ? this.count - added : 0;
             if (this.count <= 0) {
                 remove();
             }

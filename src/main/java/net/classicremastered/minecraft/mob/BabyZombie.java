@@ -24,22 +24,26 @@ public class BabyZombie extends Zombie {
         this.modelName = "zombie_baby";
         this.textureName = "/mob/zombie.png"; // reuse texture
 
-        // Hitbox that matches the scaled render
-        this.setSize(BABY_W, BABY_H);
-        this.heightOffset = 1.69F;
-        this.idlePitchMin = 1.5F;
-        this.idlePitchMax = 1.5F;
+        configureBaby(this, x, y, z);
+    }
 
-        this.hurtPitchMin = 1.5F;
-        this.hurtPitchMax = 1.5F;
-        this.deathPitchMin = 1.5F;
-        this.deathPitchMax = 1.5F;
+    static void configureBaby(Zombie baby, float x, float y, float z) {
+        // Hitbox that matches the scaled render
+        baby.setSize(BABY_W, BABY_H);
+        baby.heightOffset = 1.69F;
+        baby.idlePitchMin = 1.5F;
+        baby.idlePitchMax = 1.5F;
+
+        baby.hurtPitchMin = 1.5F;
+        baby.hurtPitchMax = 1.5F;
+        baby.deathPitchMin = 1.5F;
+        baby.deathPitchMax = 1.5F;
         // Optional: tiny upward nudge on spawn to avoid uneven-ground clipping
-        this.setPos(x, y + 0.03F, z);
+        baby.setPos(x, y + 0.03F, z);
 
         // Speed boost if AI is BasicAttackAI
-        if (this.ai instanceof net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) {
-            net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI a = (net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) this.ai;
+        if (baby.ai instanceof net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) {
+            net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI a = (net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI) baby.ai;
             a.runSpeed *= 1.35F; // ~35% faster
         }
 

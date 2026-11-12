@@ -4,10 +4,12 @@ import net.classicremastered.minecraft.level.Level;
 
 public class LeavesBaseBlock extends Block {
 
-    private boolean showNeighborSides = true;
-
     protected LeavesBaseBlock(int var1, int var2, boolean var3) {
-        super(var1, var2, "Leaves");
+        this(var1, var2, "Leaves");
+    }
+
+    protected LeavesBaseBlock(int id, int texture, String name) {
+        super(id, texture, name);
     }
 
     public final boolean isSolid() {
@@ -15,8 +17,12 @@ public class LeavesBaseBlock extends Block {
     }
 
     public final boolean canRenderSide(Level level, int x, int y, int z, int side) {
-        int var6 = level.getTile(x, y, z);
-        return !this.showNeighborSides && var6 == this.id ? false : super.canRenderSide(level, x, y, z, side);
+        Block neighbor = blocks[level.getTile(x, y, z)];
+        if (neighbor instanceof LeavesBaseBlock
+                && level.minecraft != null
+                && level.minecraft.settings != null
+                && level.minecraft.settings.fastGraphics()) return false;
+        return super.canRenderSide(level, x, y, z, side);
     }
 
     public final boolean isOpaque() {

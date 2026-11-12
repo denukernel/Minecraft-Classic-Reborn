@@ -5,7 +5,9 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.render.BlockItemRenderer;
+import net.classicremastered.minecraft.render.ItemMeshRenderer;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.opengl.GL11;
@@ -79,12 +81,21 @@ public class DroppedBlock extends Entity {
 
         GL11.glPushMatrix();
         try {
-            GL11.glTranslatef(xo + (x - xo) * partial, yo + (y - yo) * partial - heightOffset + .0625f + hover,
+            GL11.glTranslatef(
+                    xo + (x - xo) * partial,
+                    yo + (y - yo) * partial - heightOffset + .0625f + hover,
                     zo + (z - zo) * partial);
             GL11.glRotatef(rot + ageInTicks * 3, 0, 1, 0);
             GL11.glScalef(.25f, .25f, .25f);
-            GL11.glTranslatef(-.5f, 0, -.5f);
-            BlockItemRenderer.render(block, textures, getRenderBrightness(partial));
+            int icon = Item.iconId(resource) - 256;
+            float brightness = getRenderBrightness(partial);
+            if (icon != Item.LEVER_ICON_ID && Item.isBlockIcon(icon) && Item.items[icon] != null) {
+                GL11.glTranslatef(0, .5f, 0);
+                ItemMeshRenderer.renderItem(textures, Item.items[icon], brightness);
+            } else {
+                GL11.glTranslatef(-.5f, 0, -.5f);
+                BlockItemRenderer.render(block, textures, brightness);
+            }
         } finally {
             GL11.glPopMatrix();
         }

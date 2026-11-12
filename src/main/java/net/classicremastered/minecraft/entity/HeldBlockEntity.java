@@ -4,6 +4,7 @@ package net.classicremastered.minecraft.entity;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -21,7 +22,9 @@ public final class HeldBlockEntity extends Entity {
     public static final long serialVersionUID = 0L;
 
     public enum State {
-        HELD, THROWN
+        HELD,
+        THROWN,
+        DROPPED
     }
 
     private final Player owner;
@@ -76,17 +79,17 @@ public final class HeldBlockEntity extends Entity {
     }
 
     public void dropGently() {
-        if (removed)
-            return;
-        tryPlaceBlockSimple();
-        this.removed = true;
-        net.classicremastered.minecraft.level.itemstack.GravityGunItem.forgetBlock(owner, this);
+        if (removed || !isHeld()) return;
+        state = State.DROPPED;
+        xd = yd = zd = 0;
+        age = 0;
+        GravityGunItem.forgetBlock(owner, this);
     }
 
     public void throwNow(float power) {
-        if (state == State.THROWN)
-            return;
-        Vec3D direction = net.classicremastered.minecraft.level.itemstack.GravityGunItem.look(owner);
+        if (removed || !isHeld()) return;
+        Vec3D direction =
+                net.classicremastered.minecraft.level.itemstack.GravityGunItem.look(owner);
         this.xd = direction.x * power;
         this.yd = direction.y * power;
         this.zd = direction.z * power;
@@ -96,8 +99,7 @@ public final class HeldBlockEntity extends Entity {
 
     @Override
     public void tick() {
-        if (removed)
-            return;
+        if (removed) return;
         ++age;
 
         // spin every tick
@@ -110,7 +112,7 @@ public final class HeldBlockEntity extends Entity {
 
         if (state == State.HELD) {
             if (owner == null || owner.removed || owner.health <= 0 || owner.level != level
-                    || (owner.inventory.getSelected() - 256 != 11)) {
+                    || owner.inventory.getSelected() != GravityGunItem.RAW_ID) {
                 dropGently();
                 return;
             }
@@ -130,7 +132,6 @@ public final class HeldBlockEntity extends Entity {
             return;
         }
 
-        // THROWN
         this.yd -= gravity;
         this.move(this.xd, this.yd, this.zd);
         boolean submerged =
@@ -140,10 +141,24 @@ public final class HeldBlockEntity extends Entity {
         this.yd *= submerged ? .8f : .98f;
         this.zd *= submerged ? .75f : drag;
 
+        if (state == State.DROPPED) {
+            if (onGround) {
+                int bx = MathHelper.floor(x),
+                        by = MathHelper.floor(bb.y0 + .01f),
+                        bz = MathHelper.floor(z);
+                AABB support = new AABB(bx + .01f, by - .02f, bz + .01f, bx + .99f, by, bz + .99f);
+                if (level.getCubes(support).isEmpty() || !place(bx, by, bz)) dropPickup();
+                removed = true;
+            } else if (age > life) {
+                dropPickup();
+                removed = true;
+            }
+            return;
+        }
+
         // world contact via ray last->now or collision flags
         MovingObjectPosition hit = rayFromLast();
-        if (damageMobsOnHit(8))
-            return;
+        if (damageMobsOnHit(8)) return;
         if (hit != null || this.collision || this.onGround || this.horizontalCollision) {
             if (hit != null && hit.vec != null) {
                 this.x = (float) hit.vec.x;
@@ -214,25 +229,32 @@ public final class HeldBlockEntity extends Entity {
         Vec3D start = new Vec3D(lastX, lastY, lastZ), end = new Vec3D(x, y, z);
         MovingObjectPosition wall = level.clip(new Vec3D(lastX, lastY, lastZ), end, true);
         float nearest = wall == null ? Float.MAX_VALUE : start.distance(wall.vec);
-        Entity target = null;
+        Mob target = null;
         List list = level.findEntities(this, this.bb.expand(lastX - x, lastY - y, lastZ - z).grow(.6f, .6f, .6f));
         for (int i = 0; i < list.size(); ++i) {
             Object o = list.get(i);
-            if (!(o instanceof Entity))
-                continue;
+            if (!(o instanceof Entity)) continue;
             Entity e = (Entity) o;
-            if (e == this || e == owner)
-                continue;
+            if (e == this || e == owner) continue;
             if (e instanceof Mob m && m.health > 0 && !m.removed) {
                 AABB expanded = e.bb.grow(.5f, .5f, .5f);
                 MovingObjectPosition intersection = expanded.clip(start, end);
-                float distance = expanded.intersects(
-                        new AABB(lastX - .01f, lastY - .01f, lastZ - .01f, lastX + .01f, lastY + .01f, lastZ + .01f))
+                float distance =
+                        expanded.intersects(
+                                        new AABB(
+                                                lastX - .01f,
+                                                lastY - .01f,
+                                                lastZ - .01f,
+                                                lastX + .01f,
+                                                lastY + .01f,
+                                                lastZ + .01f))
                                 ? 0
-                                : intersection == null ? Float.MAX_VALUE : start.distance(intersection.vec);
+                                : intersection == null
+                                        ? Float.MAX_VALUE
+                                        : start.distance(intersection.vec);
                 if (distance < nearest) {
                     nearest = distance;
-                    target = e;
+                    target = m;
                 }
             }
         }
@@ -240,14 +262,17 @@ public final class HeldBlockEntity extends Entity {
             float length = start.distance(end);
             if (length > .0001f) {
                 float fraction = Math.min(1, nearest / length);
-                setPos(lastX + (x - lastX) * fraction, lastY + (y - lastY) * fraction, lastZ + (z - lastZ) * fraction);
+                setPos(
+                        lastX + (x - lastX) * fraction,
+                        lastY + (y - lastY) * fraction,
+                        lastZ + (z - lastZ) * fraction);
             }
-            Entity e = target;
-            e.hurt(this, dmg);
+            target.hurt(this, dmg);
             float kb = 0.35f;
-            e.xd += this.xd * kb;
-            e.yd += 0.08f;
-            e.zd += this.zd * kb;
+            target.xd += this.xd * kb;
+            target.yd += 0.08f;
+            target.zd += this.zd * kb;
+            if (target.health > 0) target.markForcedFall(owner);
             Block block = Block.blocks[blockId];
             if (block != null && level.particleEngine != null) {
                 block.spawnBreakParticles(level, MathHelper.floor(this.x), MathHelper.floor(this.y),
@@ -265,16 +290,18 @@ public final class HeldBlockEntity extends Entity {
     }
 
     private void tryPlaceBlockSimple() {
-        if (level == null || blockId <= 0)
-            return;
+        if (level == null || blockId <= 0) return;
         int bx = MathHelper.floor(this.x);
         int by = MathHelper.floor(this.y + 0.1f); // slight lift
         int bz = MathHelper.floor(this.z);
         for (int dy = 0; dy <= 2; dy++) {
             int y = by + dy;
-            if (place(bx, y, bz))
-                return;
+            if (place(bx, y, bz)) return;
         }
+        dropPickup();
+    }
+
+    private void dropPickup() {
         float dropX = x, dropY = Math.max(.5f, Math.min(level.depth - 1f, y)), dropZ = z;
         if (!(level instanceof net.classicremastered.minecraft.level.LevelInfiniteFlat)
                 && !(level instanceof net.classicremastered.minecraft.level.LevelInfiniteTerrain)) {

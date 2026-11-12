@@ -11,6 +11,8 @@ public final class SimpleChunk {
 
     public final java.util.List<Runnable> residents = new java.util.ArrayList<>();
     public boolean residentsPublished;
+    public net.classicremastered.minecraft.level.structure.CobblestoneTower.Entrance
+            cobblestoneTower;
     public final java.util.List<net.classicremastered.minecraft.level.GeneratedOccupant>
             generatedOccupants = new java.util.ArrayList<>();
     public byte[] blocks;

@@ -7,8 +7,8 @@ import net.classicremastered.minecraft.mob.Skeleton;
 import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.mob.Zombie;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.mob.ai.goal.MobGoal;
-import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 import java.util.EnumSet;
@@ -28,6 +28,12 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
             ai.attackTarget = battleTarget;
             return;
         }
+        if (CombatRules.difficulty(ai.level)
+                == net.classicremastered.minecraft.Difficulty.PEACEFUL) {
+            ai.attackTarget = null;
+            ai.retaliationTicks = 0;
+            return;
+        }
         if (ai.attackTarget != null
                 && (!isAliveEntity(ai.attackTarget)
                         || CreativeModeHelper.shouldIgnoreTarget(ai.attackTarget))) {
@@ -37,12 +43,9 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
         if (ai.mob instanceof Zombie && !(ai.mob instanceof Skeleton)) {
             selectZombieTarget();
         } else {
-            Entity player = ai.level.getPlayer();
-            if (ai.attackTarget == null
-                    && isAliveEntity(player)
-                    && !CreativeModeHelper.shouldIgnoreTarget(player)
-                    && distanceSquared(player) <= ai.getSightRange() * ai.getSightRange())
-                ai.attackTarget = player;
+            if (!ai.hasRetaliationTarget())
+                ai.attackTarget =
+                        HostileTargets.nearest(ai.mob, ai.getSightRange(), ai.attackTarget);
         }
         if (ai.attackTarget == null) {
             ai.running = false;
@@ -73,7 +76,7 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
                     case PEACEFUL -> 0;
                     case EASY -> 10;
                     case NORMAL -> 12;
-                    case HARD -> 14;
+                    case HARD, VERY_HARD, EXTREME -> 14;
                 };
         if (villagerRange == 0) {
             ai.attackTarget = null;
@@ -88,8 +91,8 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
             return;
         ai.retaliationTicks = 0;
         float range = ai.getSightRange();
-        if (ai.attackTarget instanceof Player && distanceSquared(ai.attackTarget) <= range * range)
-            return;
+        if (HostileTargets.eligible(ai.attackTarget)
+                && distanceSquared(ai.attackTarget) <= range * range) return;
         Entity player = ai.level.getPlayer();
         Entity nearestPlayer = null;
         float playerDistance = range * range;
@@ -107,7 +110,7 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
                     || candidate == stalledTarget
                     || !isAliveEntity(candidate)) continue;
             float distance = distanceSquared(candidate);
-            if (candidate instanceof Player
+            if (HostileTargets.eligible(candidate)
                     && distance <= playerDistance
                     && !CreativeModeHelper.shouldIgnoreTarget(candidate)) {
                 nearestPlayer = candidate;

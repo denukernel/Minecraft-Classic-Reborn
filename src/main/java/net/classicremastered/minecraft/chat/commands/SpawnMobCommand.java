@@ -1,46 +1,110 @@
-// File: src/com/mojang/minecraft/chat/commands/SpawnMobCommand.java
 package net.classicremastered.minecraft.chat.commands;
 
-import java.util.List;
-import java.util.Locale;
-
-import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.mob.CrossbowTurret;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.MobRegistry;
-import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.mob.TurretVariant;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.render.entity.RenderManager;
+
+import java.util.ArrayDeque;
+import java.util.Locale;
 
 public class SpawnMobCommand implements Command, AliasedCommand {
+    private static final int TICK_BATCH = 64;
+    private static final ArrayDeque<Request> pending = new ArrayDeque<>();
 
-    // ===== Lag guards =====
-    private static final int PER_CALL_CAP = 20;
-    private static final int NEARBY_CAP = 40;
-    private static final float NEARBY_RADIUS = 24.0f;
+    private record Type(String name, short id, TurretVariant variant) {}
 
-    // ---- Global rate limit ----
-    private static final int BUCKET_CAPACITY = 30;
-    private static final long REFILL_MS = 120_000L;
-    private static double bucket = BUCKET_CAPACITY;
-    private static long lastRefill = System.currentTimeMillis();
+    private static final class Request {
+        final Minecraft client;
+        final Level level;
+        final Type type, mount;
+        final String owner;
+        final float x, y, z;
+        final int count;
+        final boolean spread;
+        int spawned;
 
-    private static synchronized int consumeTokens(int requested) {
-        refillBucket();
-        int granted = (int) Math.min(bucket, requested);
-        bucket -= granted;
-        return granted;
-    }
+        Request(
+                Minecraft client,
+                Type type,
+                Type mount,
+                String owner,
+                float x,
+                float y,
+                float z,
+                int count,
+                boolean spread) {
+            this.client = client;
+            this.level = client.level;
+            this.type = type;
+            this.mount = mount;
+            this.owner = owner;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.count = count;
+            this.spread = spread;
+        }
 
-    private static synchronized void refillBucket() {
-        long now = System.currentTimeMillis();
-        long elapsed = now - lastRefill;
-        if (elapsed <= 0)
-            return;
-        double toAdd = BUCKET_CAPACITY * (elapsed / (double) REFILL_MS);
-        if (toAdd > 0) {
-            bucket = Math.min(BUCKET_CAPACITY, bucket + toAdd);
-            lastRefill = now;
+        int spawn(int budget) {
+            int attempted = 0;
+            while (spawned < count && attempted < budget) {
+                attempted++;
+                float px = x + (spread ? level.random.nextFloat() * 2 - 1 : 0);
+                float pz = z + (spread ? level.random.nextFloat() * 2 - 1 : 0);
+                Mob mob = create(type, px, pz);
+                Mob vehicle = mount == null ? null : create(mount, px, pz);
+                if (mob == null || mount != null && vehicle == null) {
+                    finish("&cCould not create the requested mob or mount.");
+                    return -attempted;
+                }
+                if (vehicle != null) {
+                    mob.mount(vehicle);
+                    if (mob.riding != vehicle) {
+                        finish(
+                                "&cThe rider could not mount here. Check clearance and mount requirements.");
+                        return -attempted;
+                    }
+                    level.addEntity(vehicle);
+                }
+                level.addEntity(mob);
+                spawned++;
+            }
+            if (spawned == count) finish("");
+            return attempted;
+        }
+
+        private Mob create(Type type, float x, float z) {
+            Mob mob = MobRegistry.create(type.id(), level, x, y, z);
+            if (mob == null
+                    || mob.getRegistryId() < 0
+                    || RenderManager.getRenderer(mob) == null
+                            && (mob.modelName == null || mob.modelName.isEmpty())) return null;
+            if (mob instanceof CrossbowTurret turret && type.variant() != null) {
+                turret.variant = type.variant();
+                turret.owner = owner;
+                turret.setGuardPost();
+            }
+            if (mob instanceof Defender defender) defender.owner = owner;
+            return mob;
+        }
+
+        private void finish(String error) {
+            if (!error.isEmpty()) hud(client, error);
+            String amount = spawned == count ? Integer.toString(spawned) : spawned + " of " + count;
+            hud(
+                    client,
+                    "&aSpawned &f"
+                            + amount
+                            + "&a x &f"
+                            + type.name()
+                            + (mount == null ? "" : "&a riding &f" + mount.name())
+                            + "&a.");
         }
     }
 
@@ -51,36 +115,12 @@ public class SpawnMobCommand implements Command, AliasedCommand {
 
     @Override
     public String[] getAliases() {
-        return new String[] { "spawn", "summon", "sm" };
+        return new String[] {"spawn", "summon", "sm"};
     }
 
     @Override
     public String getUsage() {
-        return "/spawn <mob> [count] [x y z] [mount]";
-    }
-
-    // HUD-safe text
-    private static String safeAscii(String s) {
-        if (s == null)
-            return "";
-        s = s.replace('§', '?').replace('&', '?');
-        return s.replaceAll("[^\\u0020-\\u007E]", "");
-    }
-
-    // Reject list of abstract / reserved mob names
- // Reject list of abstract / reserved mob names
-    private static final String[] DISALLOWED_NAMES = {
-        "entity", "mob", "human", "humanoid", "humanoidmob",
-        "quadrupedmob", "player", "bot", "playerclone" // added
-    };
-
-    private static boolean isDisallowedName(String name) {
-        String key = name.toLowerCase(Locale.ROOT);
-        for (String s : DISALLOWED_NAMES) {
-            if (s.equals(key))
-                return true;
-        }
-        return false;
+        return "/summon <mob> [count] [x y z] [mount]";
     }
 
     @Override
@@ -89,186 +129,145 @@ public class SpawnMobCommand implements Command, AliasedCommand {
             hud(mc, "&cNo level/player loaded.");
             return;
         }
-        if (args.length < 1) {
+        if (args.length < 1 || args.length > 6) {
             hud(mc, "&cUsage: " + getUsage());
             return;
         }
-
+        MobRegistry.bootstrapDefaults();
         try {
-            MobRegistry.bootstrapDefaults();
-        } catch (Throwable ignored) {
-        }
-
-        String rawName = safeAscii(args[0]);
-        if (isDisallowedName(rawName)) {
-            hud(mc, "&cYou cannot spawn this entity type: &f" + rawName);
-            return;
-        }
-
-     // === NEW: Special case for bots ===
-     if ("bot".equalsIgnoreCase(rawName) || "playerclone".equalsIgnoreCase(rawName)) {
-         hud(mc, "&cBots cannot be spawned via /spawnmob.");
-         hud(mc, "&7Use &e/bot spawn <count> <goal> &7instead.");
-         return;
-     }
-
-        short mobId = MobRegistry.idOfName(rawName);
-        if (mobId < 0) {
-            hud(mc, "&cUnknown mob: &f" + rawName);
-            hud(mc, "&7Available: " + String.join(", ", MobRegistry.allNames()));
-            return;
-        }
-
-        int idx = 1;
-        int requested = 1;
-        if (idx < args.length && isInt(args[idx])) {
-            try {
-                requested = clampInt(Integer.parseInt(args[idx]), 1, 64);
-            } catch (Exception ignored) {
+            Type type = resolve(args[0]);
+            int count = 1;
+            int index = 1;
+            int remaining = args.length - 1;
+            // Three arguments are coordinates. Four can be count + coordinates or
+            // coordinates + mount, so the final token resolves the ambiguity.
+            boolean hasCount =
+                    remaining == 5
+                            || remaining == 4 && isCoordinate(args[4])
+                            || remaining <= 2 && remaining > 0 && isCountToken(args[1]);
+            if (hasCount) count = parseCount(args[index++]);
+            Player origin = sender == null ? mc.player : sender;
+            float x = origin.x, y = origin.y, z = origin.z;
+            boolean explicitPosition = args.length - index >= 3;
+            if (explicitPosition) {
+                x = parseCoord(args[index++], x);
+                y = parseCoord(args[index++], y);
+                z = parseCoord(args[index++], z);
             }
-            idx++;
-        }
-
-        float px = mc.player.x, py = mc.player.y, pz = mc.player.z;
-
-        if (idx + 2 < args.length) {
-            Float fx = parseCoord(args[idx], px);
-            Float fy = parseCoord(args[idx + 1], py);
-            Float fz = parseCoord(args[idx + 2], pz);
-            if (fx != null && fy != null && fz != null) {
-                px = fx;
-                py = fy;
-                pz = fz;
-                idx += 3;
+            if (args.length - index > 1)
+                throw new IllegalArgumentException("Expected x y z coordinates.");
+            Type mount = index < args.length ? resolve(args[index]) : null;
+            Request request =
+                    new Request(
+                            mc,
+                            type,
+                            mount,
+                            CrossbowTurret.playerName(origin),
+                            x,
+                            y,
+                            z,
+                            count,
+                            !explicitPosition);
+            if (!pending.isEmpty()) {
+                pending.addLast(request);
+            } else if (request.spawn(TICK_BATCH) > 0 && request.spawned < count) {
+                pending.addLast(request);
             }
+        } catch (IllegalArgumentException ex) {
+            hud(mc, "&c" + ex.getMessage());
         }
+    }
 
-        String mountName = (idx < args.length ? safeAscii(args[idx]).toLowerCase(Locale.ROOT) : null);
-        if (mountName != null && isDisallowedName(mountName)) {
-            hud(mc, "&cYou cannot spawn this entity type as a mount: &f" + mountName);
-            mountName = null;
-        }
-        short mountId = (mountName != null && !mountName.isEmpty()) ? MobRegistry.idOfName(mountName) : -1;
-
-        int nearby = countNearbyMobs(mc);
-        int roomNearby = Math.max(0, NEARBY_CAP - nearby);
-        if (roomNearby <= 0) {
-            hud(mc, "&eToo many mobs nearby (" + nearby + "/" + NEARBY_CAP + ").");
-            return;
-        }
-
-        int allowedByBucket = consumeTokens(requested);
-        int toSpawn = Math.min(requested, Math.min(allowedByBucket, Math.min(roomNearby, PER_CALL_CAP)));
-        if (toSpawn <= 0) {
-            hud(mc, "&eSpawn limit reached for now.");
-            return;
-        }
-
-        int spawned = 0;
-        for (int i = 0; i < toSpawn; i++) {
-            float ox = (mc.renderer.random.nextFloat() - 0.5f) * 2.0f;
-            float oz = (mc.renderer.random.nextFloat() - 0.5f) * 2.0f;
-
-            Mob mob = MobRegistry.create(mobId, mc.level, px + ox, py, pz + oz);
-
-            // --- NEW: renderer OR legacy modelName check ---
-            boolean hasRenderer = (net.classicremastered.minecraft.render.entity.RenderManager
-                    .getRenderer(mob) != null);
-            boolean hasLegacy = (mob != null && mob.modelName != null && !mob.modelName.isEmpty());
-
-            if (mob == null || mob.getRegistryId() < 0 || (!hasRenderer && !hasLegacy)) {
-                hud(mc, "&eSkipped invalid mob: &f" + rawName);
+    public static void tick(Minecraft mc) {
+        int budget = TICK_BATCH;
+        while (budget > 0 && !pending.isEmpty()) {
+            Request request = pending.peekFirst();
+            if (request.client != mc || request.level != mc.level) {
+                pending.removeFirst();
                 continue;
             }
-
-            mc.level.addEntity(mob);
-
-            if (mountId >= 0) {
-                Mob mount = MobRegistry.create(mountId, mc.level, px + ox, py, pz + oz);
-                boolean mountRenderer = (net.classicremastered.minecraft.render.entity.RenderManager
-                        .getRenderer(mount) != null);
-                boolean mountLegacy = (mount != null && mount.modelName != null && !mount.modelName.isEmpty());
-
-                if (mount != null && mount.getRegistryId() >= 0 && (mountRenderer || mountLegacy)) {
-                    mc.level.addEntity(mount);
-                    mob.mount(mount);
-                    mob.xo = mount.xo;
-                    mob.yo = mount.yo + mount.bbHeight * 0.75f;
-                    mob.zo = mount.zo;
-                    mob.x = mount.x;
-                    mob.y = mount.y + mount.bbHeight * 0.75f;
-                    mob.z = mount.z;
-                    mob.yRot = mount.yRot;
-                    mob.yRotO = mount.yRotO;
-                } else {
-                    hud(mc, "&eSkipped invalid mount: &f" + mountName);
-                }
-            }
-            spawned++;
-        }
-
-        if (spawned == requested) {
-            hud(mc, "&aSpawned &f" + spawned + "&a x &f" + rawName
-                    + (mountName != null ? "&a riding &f" + mountName : "") + "&a.");
-        } else {
-            hud(mc, "&aSpawned &f" + spawned + "&a of &f" + requested + "&a x &f" + rawName
-                    + (mountName != null ? "&a riding &f" + mountName : "") + "&a (&7nearby " + nearby + "/"
-                    + NEARBY_CAP + ").");
+            int attempted = request.spawn(budget);
+            budget -= Math.abs(attempted);
+            if (attempted < 0 || request.spawned == request.count) pending.removeFirst();
         }
     }
 
-    private int countNearbyMobs(Minecraft mc) {
-        Player p = mc.player;
-        float r = NEARBY_RADIUS;
-        AABB box = p.bb.expand(r, r, r);
-        @SuppressWarnings("rawtypes")
-        List list = mc.level.blockMap.getEntities(p, box);
-        int count = 0;
-        for (int i = 0; i < list.size(); i++) {
-            Object o = list.get(i);
-            if (o instanceof Mob)
-                count++;
+    public static void worldChanged(Minecraft mc) {
+        pending.removeIf(request -> request.client == mc);
+    }
+
+    private static Type resolve(String input) {
+        String name = input.toLowerCase(Locale.ROOT);
+        switch (name) {
+            case "entity",
+                    "mob",
+                    "human",
+                    "humanoid",
+                    "humanoidmob",
+                    "quadrupedmob",
+                    "player",
+                    "bot",
+                    "playerclone":
+                throw new IllegalArgumentException("This entity type cannot be summoned.");
+            default:
+                break;
         }
-        return count;
+        TurretVariant variant =
+                switch (name) {
+                    case "rover" -> TurretVariant.ROVER;
+                    case "arrow_shotgun" -> TurretVariant.SHOTGUN;
+                    case "bullet" -> TurretVariant.BULLET;
+                    case "bullet_shotgun" -> TurretVariant.BULLET_SHOTGUN;
+                    default -> null;
+                };
+        short id = variant == null ? MobRegistry.idOfName(name) : CrossbowTurret.REGISTRY_ID;
+        if (id < 0)
+            throw new IllegalArgumentException(
+                    "Unknown mob or mount: " + name.replaceAll("[^a-z0-9_.-]", "?"));
+        return new Type(name, id, variant);
     }
 
-    // ---------- helpers ----------
-    private static void hud(Minecraft mc, String msg) {
-        if (mc != null && mc.hud != null)
-            mc.hud.addChat(msg);
+    private static boolean isCountToken(String token) {
+        return token.matches("[+-]?[0-9].*");
     }
 
-    private static int clampInt(int v, int lo, int hi) {
-        return (v < lo ? lo : (v > hi ? hi : v));
-    }
-
-    private static boolean isInt(String s) {
+    private static int parseCount(String token) {
         try {
-            Integer.parseInt(s);
+            int count = Integer.parseInt(token);
+            if (count > 0) return count;
+        } catch (NumberFormatException ignored) {
+        }
+        throw new IllegalArgumentException("Count must be a positive integer.");
+    }
+
+    private static boolean isCoordinate(String token) {
+        if (token.startsWith("~")) return true;
+        try {
+            Float.parseFloat(token);
             return true;
-        } catch (Exception e) {
+        } catch (NumberFormatException ex) {
             return false;
         }
     }
 
-    private static Float parseCoord(String token, float origin) {
-        if (token == null || token.isEmpty())
-            return null;
-        token = token.trim();
-        if (token.charAt(0) == '~') {
-            if (token.length() == 1)
-                return origin;
-            try {
-                return origin + Float.parseFloat(token.substring(1));
-            } catch (Exception e) {
-                return null;
-            }
-        } else {
-            try {
-                return Float.parseFloat(token);
-            } catch (Exception e) {
-                return null;
-            }
+    private static float parseCoord(String token, float origin) {
+        try {
+            boolean relative = token.startsWith("~");
+            float coordinate =
+                    token.equals("~")
+                            ? origin
+                            : relative
+                                    ? origin + Float.parseFloat(token.substring(1))
+                                    : Float.parseFloat(token);
+            if (Float.isFinite(coordinate)) return coordinate;
+        } catch (NumberFormatException ignored) {
         }
+        throw new IllegalArgumentException(
+                "Coordinates must be finite numbers or relative offsets.");
+    }
+
+    private static void hud(Minecraft mc, String msg) {
+        if (mc != null && mc.hud != null) mc.hud.addChat(msg);
     }
 }
+

@@ -15,9 +15,9 @@ public class EnderPearlItem extends Item {
 
         // Start at the camera so a throw cannot spawn across a nearby wall.
         if (!level.isNetworkMode()) {
-            level.addEntity(
-                    new ThrownEnderPearl(level, player, player.x, player.y, player.z, player.yRot, player.xRot, 1.5f));
-            level.playSound("random/click", player, 0.8f, 1.2f);
+            level.addEntity(new ThrownEnderPearl(level, player, 1.5f));
+            float pitch = .4f / (.8f + level.random.nextFloat() * .4f);
+            level.playSound("item/ender_pearl/throw", player, .5f, pitch);
         }
 
         // Reduce item stack

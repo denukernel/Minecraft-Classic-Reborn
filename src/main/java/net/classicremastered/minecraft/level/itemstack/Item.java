@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level.itemstack;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
@@ -10,7 +11,7 @@ public class Item {
 
     public final int id;
     public final String name;
-    protected String texture;  // <- made non-final so subclasses can swap textures
+    protected String texture; // <- made non-final so subclasses can swap textures
 
     /** Stack cap per item (tools set this to 1). */
     public final int maxStackSize;
@@ -24,11 +25,32 @@ public class Item {
     public static final int COAL_ID = 45;
 
     public static final int LEVER_ICON_ID = 46;
+    static final int TORCH_ICON_ID = 74;
+    static final int REDSTONE_TORCH_ICON_ID = 75;
+    static final int REPEATER_ICON_ID = 76;
+    static final int COMPARATOR_ICON_ID = 77;
+    static final int LADDER_ICON_ID = 78;
+
+    public static int stackLimit(int raw) {
+        int id = inventoryId(raw) - 256;
+        return id >= 0 && id < items.length && items[id] != null
+                ? Math.min(64, items[id].maxStackSize)
+                : 64;
+    }
 
     public static int iconId(int id) {
-        return id == net.classicremastered.minecraft.level.tile.Block.LEVER.id
-                ? LEVER_ICON_ID + 256
-                : inventoryId(id);
+        if (id == Block.LEVER.id) return LEVER_ICON_ID + 256;
+        if (id == Block.TORCH.id) return TORCH_ICON_ID + 256;
+        if (id == Block.REDSTONE_TORCH.id) return REDSTONE_TORCH_ICON_ID + 256;
+        if (id == Block.REPEATER.id) return REPEATER_ICON_ID + 256;
+        if (id == Block.COMPARATOR.id) return COMPARATOR_ICON_ID + 256;
+        if (net.classicremastered.minecraft.level.tile.LadderBlock.isLadder(id))
+            return LADDER_ICON_ID + 256;
+        return inventoryId(id);
+    }
+
+    public static boolean isBlockIcon(int itemId) {
+        return itemId == LEVER_ICON_ID || itemId >= TORCH_ICON_ID && itemId <= LADDER_ICON_ID;
     }
 
     public static int inventoryId(int id) {
@@ -37,12 +59,18 @@ public class Item {
                 : id;
     }
 
-	public static FeatherItem FEATHER;
+    public static FeatherItem FEATHER;
 
     public static Item BUCKET_EMPTY, BUCKET_WATER, BUCKET_LAVA;
     public static GravityGunItem GRAVITYGUN;
     public static PhysicsGunItem PHYSICS_GUN;
-    public static Item BAG_OF_SALT, HEALTH_DRINK, DAMAGE_BOTTLE, GRAPPLING_HOOK, GLASS_LOOKER, ENDER_PEARL;
+    public static Item SNOWBALL, OAK_SIGN;
+    public static Item BAG_OF_SALT,
+            HEALTH_DRINK,
+            DAMAGE_BOTTLE,
+            GRAPPLING_HOOK,
+            GLASS_LOOKER,
+            ENDER_PEARL;
 
     // --- Constructors ---
     public Item(int id, String name, String texture) {
@@ -75,12 +103,12 @@ public class Item {
     /** Right-click action (food, bow draw, etc). */
     public void use(Player player, Level level) {}
 
-    protected final void consumeSelected(Player player,Level level) {
-        if(player==null || level==null || level.creativeMode || level.isNetworkMode())return;
-        int slot=player.inventory.selected;
-        if(player.inventory.getId(slot)==id+256 && player.inventory.getCount(slot)>0) {
-            int count=player.inventory.getCount(slot)-1;
-            player.inventory.setIdCount(slot,count>0?id+256:-1,count);
+    protected final void consumeSelected(Player player, Level level) {
+        if (player == null || level == null || level.creativeMode || level.isNetworkMode()) return;
+        int slot = player.inventory.selected;
+        if (player.inventory.getId(slot) == id + 256 && player.inventory.getCount(slot) > 0) {
+            int count = player.inventory.getCount(slot) - 1;
+            player.inventory.setIdCount(slot, count > 0 ? id + 256 : -1, count);
         }
     }
 
@@ -95,12 +123,22 @@ public class Item {
         return this.texture;
     }
 
-    public float getModelTextureU0() { return 0; }
-    public float getModelTextureU1() { return 1; }
-    public int getModelTint() { return 0xffffff; }
+    public float getModelTextureU0() {
+        return 0;
+    }
+
+    public float getModelTextureU1() {
+        return 1;
+    }
+
+    public int getModelTint() {
+        return 0xffffff;
+    }
 
     /** Convenience: non-stackable tools report true. */
-    public boolean isTool() { return this.maxStackSize == 1; }
+    public boolean isTool() {
+        return this.maxStackSize == 1;
+    }
 
     // --- Legacy entry point: now delegates to the registry ---
     public static void initItems() {

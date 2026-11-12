@@ -1,7 +1,6 @@
 package net.classicremastered.minecraft.particle;
 
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.render.ShapeRenderer;
 
 public class WaterDropParticle extends Particle {
 
@@ -18,10 +17,6 @@ public class WaterDropParticle extends Particle {
         this.tex = 16;
         this.setSize(0.01F, 0.01F);
         this.lifetime = (int) (8.0D / (Math.random() * 0.8D + 0.2D));
-    }
-
-    public void render(ShapeRenderer var1, float var2, float var3, float var4, float var5, float var6, float var7) {
-        super.render(var1, var2, var3, var4, var5, var6, var7);
     }
 
     public void tick() {

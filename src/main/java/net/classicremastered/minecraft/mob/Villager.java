@@ -17,16 +17,13 @@ public class Villager extends Mob {
     public int homeDoorX, homeDoorY, homeDoorZ;
 
     public void setHomeDoor(int x, int y, int z) {
-        if (!hasHome)
-            throw new IllegalStateException("assign a home before its doorway");
-        if (hasHomeDoor && level != null)
-            level.villagerDoors().unregister(this);
+        if (!hasHome) throw new IllegalStateException("assign a home before its doorway");
+        if (hasHomeDoor && level != null) level.villagerDoors().unregister(this);
         homeDoorX = x;
         homeDoorY = y;
         homeDoorZ = z;
         hasHomeDoor = true;
-        if (level != null)
-            level.villagerDoors().register(this);
+        if (level != null) level.villagerDoors().register(this);
     }
 
     // --- Trading ---
@@ -46,14 +43,30 @@ public class Villager extends Mob {
         this.health = 20;
         this.textureName = "/mob/villager.png";
         this.modelName = "villager";
+        initSounds();
 
         this.coinDrop = -2;
         this.setPos(x, y, z);
     }
 
+    private void initSounds() {
+        soundIdle = "mob/villager/idle";
+        soundHurt = "mob/villager/hit";
+        soundDeath = "mob/villager/death";
+        float pitch = this instanceof BabyVillager ? 1.5f : 1f;
+        idlePitchMin = idlePitchMax = pitch;
+        hurtPitchMin = hurtPitchMax = pitch;
+        deathPitchMin = deathPitchMax = pitch;
+    }
+
+    private void readObject(java.io.ObjectInputStream input)
+            throws java.io.IOException, ClassNotFoundException {
+        input.defaultReadObject();
+        initSounds();
+    }
+
     public void setHome(float x, float y, float z, float radius) {
-        if (hasHomeDoor && level != null)
-            level.villagerDoors().unregister(this);
+        if (hasHomeDoor && level != null) level.villagerDoors().unregister(this);
         hasHomeDoor = false;
         this.homeX = x;
         this.homeY = y;
@@ -64,16 +77,14 @@ public class Villager extends Mob {
     }
 
     public void clearHome() {
-        if (hasHomeDoor && level != null)
-            level.villagerDoors().unregister(this);
+        if (hasHomeDoor && level != null) level.villagerDoors().unregister(this);
         hasHomeDoor = false;
         this.hasHome = false;
     }
 
     // --- Trading logic ---
     public void onRightClick(Player p) {
-        if (this.health <= 0 || hostile)
-            return;
+        if (this.health <= 0 || hostile) return;
 
         if (tradeCooldown > 0) {
             if (p.minecraft != null && p.minecraft.hud != null) {
@@ -82,27 +93,10 @@ public class Villager extends Mob {
             return;
         }
 
-        int cost = 5;
-        int give = net.classicremastered.minecraft.level.itemstack.Item.APPLE.id + 256;
-
-        if (p.villagerReputation < 0) {
-            cost += 10;
-            give = net.classicremastered.minecraft.level.itemstack.Item.FEATHER.id + 256;
-        }
-
-        if (p.coins >= cost) {
-            p.coins -= cost;
-            p.inventory.addResource(give);
-            if (!this.level.creativeMode && p.villagerReputation < 100) {
-                p.villagerReputation++;
-            }
-            if (p.minecraft != null && p.minecraft.hud != null) {
-                p.minecraft.hud.addChat("&aVillager traded with you!");
-            }
-        } else {
-            if (p.minecraft != null && p.minecraft.hud != null) {
-                p.minecraft.hud.addChat("&cNot enough coins to trade!");
-            }
+        if (net.classicremastered.minecraft.level.itemstack.VillagerTrades.available(this, p)
+                && p.minecraft != null) {
+            p.minecraft.setCurrentScreen(
+                    new net.classicremastered.minecraft.gui.VillagerTradingScreen(this));
         }
     }
 
@@ -111,13 +105,16 @@ public class Villager extends Mob {
         if (hostile
                 && ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
                 && !(ai instanceof net.classicremastered.minecraft.mob.ai.villager.VillagerAI)) {
-            Player target = level.getNearestPlayer(x, y, z, 32);
-            basic.attackTarget = target != null
-                    && target.health > 0
-                    && !net.classicremastered.minecraft.util.CreativeModeHelper
-                            .shouldIgnoreTarget(target)
-                                    ? target
-                                    : null;
+            Mob target =
+                    net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                            this, 32, basic.attackTarget);
+            basic.attackTarget =
+                    target != null
+                                    && target.health > 0
+                                    && !net.classicremastered.minecraft.util.CreativeModeHelper
+                                            .shouldIgnoreTarget(target)
+                            ? target
+                            : null;
         }
         super.aiStep();
     }
@@ -134,22 +131,25 @@ public class Villager extends Mob {
                 this.xd = this.yd = this.zd = 0.0F;
                 this.noPhysics = true;
             }
-            if (++this.deathTicks >= 20)
-                this.remove();
+            if (++this.deathTicks >= 20) this.remove();
             return;
         }
 
-        if (tradeCooldown > 0)
-            tradeCooldown--;
+        if (tradeCooldown > 0) tradeCooldown--;
 
         Player p = (this.level != null) ? (Player) this.level.player : null;
+        if (p != null && p.isSpectator()) return;
 
         // --- Flip to hostile if reputation <= -100 (skip in Creative) ---
         if (p != null && p.villagerReputation <= -100 && !this.level.creativeMode) {
             hostile = true;
         }
 
-        if (hostile && p != null && p.health > 0) {
+        Entity combatTarget =
+                ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
+                        ? basic.attackTarget
+                        : p;
+        if (hostile && combatTarget instanceof Mob living && living.health > 0) {
             // --- Skip hostile logic in Creative ---
             if (this.level.creativeMode) {
                 hostile = false; // reset, so Creative player never stays flagged
@@ -158,7 +158,10 @@ public class Villager extends Mob {
 
             bossBattleCounter++;
 
-            if (!murderMessageShown && p.minecraft != null && p.minecraft.hud != null) {
+            if (!murderMessageShown
+                    && p != null
+                    && p.minecraft != null
+                    && p.minecraft.hud != null) {
                 p.minecraft.hud.addChat("&4You are chosen as a murderer, suffer the consequences!");
                 murderMessageShown = true;
             }
@@ -170,9 +173,10 @@ public class Villager extends Mob {
                 if (step < 8) {
                     basePitch = (step % 2 == 0) ? 0.6f : 0.6f * (float) Math.pow(2.0, 3.0 / 12.0);
                 } else {
-                    basePitch = (step % 2 == 0)
-                            ? 0.6f * (float) Math.pow(2.0, 3.0 / 12.0)
-                            : 0.6f * (float) Math.pow(2.0, 6.0 / 12.0);
+                    basePitch =
+                            (step % 2 == 0)
+                                    ? 0.6f * (float) Math.pow(2.0, 3.0 / 12.0)
+                                    : 0.6f * (float) Math.pow(2.0, 6.0 / 12.0);
                 }
 
                 safePlaySound("note/pling", 0.5f, basePitch);
@@ -196,9 +200,14 @@ public class Villager extends Mob {
                 }
             }
 
+            Entity target =
+                    ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
+                            ? basic.attackTarget
+                            : p;
+            if (target == null || target.removed) return;
             // Chase the player
-            float dx = p.x - this.x;
-            float dz = p.z - this.z;
+            float dx = target.x - this.x;
+            float dz = target.z - this.z;
             float dist2 = dx * dx + dz * dz;
             if (dist2 < 16 * 16) {
                 float mag = (float) Math.sqrt(dist2);
@@ -207,13 +216,16 @@ public class Villager extends Mob {
                 if (mag < 2.0f
                         && this.attackTime <= 0
                         && level.clip(
-                                new net.classicremastered.minecraft.model.Vec3D(
-                                        x, bb.y0 + bbHeight * 0.85f, z),
-                                new net.classicremastered.minecraft.model.Vec3D(
-                                        p.x, p.bb.y0 + p.bbHeight * 0.5f, p.z)) == null) {
+                                        new net.classicremastered.minecraft.model.Vec3D(
+                                                x, bb.y0 + bbHeight * 0.85f, z),
+                                        new net.classicremastered.minecraft.model.Vec3D(
+                                                target.x,
+                                                target.bb.y0 + target.bbHeight * 0.5f,
+                                                target.z))
+                                == null) {
                     // ✅ Skip hurting Creative players
                     if (!this.level.creativeMode) {
-                        p.hurt(this, 2);
+                        target.hurt(this, 2);
                     }
                     this.attackTime = 20;
                 }
@@ -222,13 +234,13 @@ public class Villager extends Mob {
     }
 
     private void safePlaySound(String key, float volume, float pitch) {
+        if (this instanceof BabyVillager) return;
         if (health <= 0
                 || removed
                 || (level != null
                         && level.minecraft != null
                         && level.minecraft.settings != null
-                        && !level.minecraft.settings.allowMobSounds))
-            return;
+                        && !level.minecraft.settings.allowMobSounds)) return;
         if (this.level != null
                 && this.level.minecraft != null
                 && this.level.minecraft.soundPC != null) {
@@ -240,16 +252,18 @@ public class Villager extends Mob {
 
     @Override
     public void hurt(Entity attacker, int damage) {
-        if (health <= 0 || dead || removed)
-            return;
+        if (health <= 0 || dead || removed) return;
         if (attacker != null) {
             Entity actualAttacker = attacker;
             if (attacker instanceof net.classicremastered.minecraft.entity.Arrow) {
-                actualAttacker = ((net.classicremastered.minecraft.entity.Arrow) attacker).getOwner();
+                actualAttacker =
+                        ((net.classicremastered.minecraft.entity.Arrow) attacker).getOwner();
             }
 
             if (actualAttacker instanceof Mob && !(actualAttacker instanceof Player)) {
-                boolean allowed = actualAttacker instanceof Zombie && !(actualAttacker instanceof Skeleton);
+                boolean allowed =
+                        actualAttacker instanceof Zombie && !(actualAttacker instanceof Skeleton)
+                                || actualAttacker instanceof Defender && hostile;
                 if (!allowed) {
                     return;
                 }
@@ -278,11 +292,11 @@ public class Villager extends Mob {
 
     @Override
     public void die(Entity killer) {
-        if (dead || removed)
-            return;
+        if (dead || removed) return;
         super.die(killer);
 
-        if (killer instanceof Player p) {
+        if (net.classicremastered.minecraft.player.DeathMessages.resolveAttacker(killer)
+                instanceof Player p) {
             if (!this.level.creativeMode) {
                 p.villagerReputation = Math.max(-100, p.villagerReputation - 7);
                 if (p.minecraft != null && p.minecraft.hud != null) {

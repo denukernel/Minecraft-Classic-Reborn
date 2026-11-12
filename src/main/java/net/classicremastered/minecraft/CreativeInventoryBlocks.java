@@ -26,6 +26,12 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.WOOD);
         allowedBlocks.add(Block.LOG);
         allowedBlocks.add(Block.LEAVES);
+        allowedBlocks.add(Block.SNOWY_GRASS);
+        allowedBlocks.add(Block.SNOWY_LEAVES);
+        allowedBlocks.add(Block.SNOW_LAYER);
+        allowedBlocks.add(Block.SNOW_BLOCK);
+        allowedBlocks.add(Block.SHORT_GRASS);
+        allowedBlocks.add(Block.LADDER);
         allowedBlocks.add(Block.GLASS);
         allowedBlocks.add(Block.SLAB);
         allowedBlocks.add(Block.MOSSY_COBBLESTONE);
@@ -75,6 +81,10 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.LUCKY_BLOCK);
         allowedBlocks.add(Block.GRASS);
         allowedBlocks.add(Block.WORKBENCH);
+        allowedBlocks.add(Block.OAK_STAIRS);
+        allowedBlocks.add(Block.COBBLESTONE_STAIRS);
+        allowedBlocks.add(Block.STONE_BRICKS);
+        allowedBlocks.add(Block.STONE_BRICK_STAIRS);
         for (int id = 64; id <= 89; id++)
             if (Block.blocks[id] != null && id != 73 && id != 75)
                 allowedBlocks.add(Block.blocks[id]);

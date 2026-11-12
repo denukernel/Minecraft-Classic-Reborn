@@ -26,6 +26,7 @@ public class CreativeGameMode extends GameMode {
 
     @Override
     public void apply(Player player) {
+        super.apply(player);
         player.canFly = true;
         player.isFlying = false; // start grounded; user toggles with V
         player.creativeInvulnerable = false;

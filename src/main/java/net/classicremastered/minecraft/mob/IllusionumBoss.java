@@ -122,8 +122,7 @@ public final class IllusionumBoss extends BossZombieBase {
 
     private void tryHotbarScramble() {
         try {
-            if (level != null && level.player instanceof Player) {
-                Player p = (Player) level.player;
+            if (level != null && level.player instanceof Player p && !p.isSpectator()) {
                 if (p.inventory != null && p.inventory.slots != null && p.inventory.slots.length >= 9) {
                     int a = level.random.nextInt(9), b = level.random.nextInt(9);
                     int tmp = p.inventory.slots[a];

@@ -8,23 +8,28 @@ import net.classicremastered.minecraft.player.Player;
 
 public final class HeldItemRenderer {
     public static void renderWorld(Player player, float partial) {
+        if (player.isSpectator())
+            return;
         if (GunModel.isGun(player.inventory.getSelected() - 256)) {
             GunRenderer.renderWorld(player, partial);
         }
     }
 
-    public static void renderInHand(Player player, HumanoidModel model, TextureManager textures, float scale,
+    public static void renderInHand(
+            Player player,
+            HumanoidModel model,
+            TextureManager textures,
+            float scale,
             float brightness) {
         int selected = player.inventory.getSelected();
-        if (GunModel.isGun(selected - 256))
-            return;
+        if (GunModel.isGun(selected - 256)) return;
         float armPitch = model.rightArm.pitch;
-        if (player.developerPowers().aimingBlock(player))
-            model.rightArm.pitch = -2.5f;
+        if (player.developerPowers().aimingBlock(player)) model.rightArm.pitch = -2.5f;
         try {
             if (selected == 262) {
                 BowItem bow = (BowItem) Item.BOW;
-                HandItemRenderer.renderBow(model.rightArm, textures, bow.getTexture(player), scale, brightness, 0);
+                HandItemRenderer.renderBow(
+                        model.rightArm, textures, bow.getTexture(player), scale, brightness, 0);
             } else {
                 HandItemRenderer.renderStack(model.rightArm, textures, selected, scale, brightness);
             }
@@ -34,8 +39,9 @@ public final class HeldItemRenderer {
     }
 
     public static void render(Renderer renderer, float partial) {
-        if (renderer.minecraft == null || renderer.minecraft.player == null || renderer.minecraft.cameraMode != 0)
-            return;
+        if (renderer.minecraft == null
+                || renderer.minecraft.player == null
+                || renderer.minecraft.cameraMode != 0) return;
         Player player = renderer.minecraft.player;
         HeldBlock held = renderer.heldBlock;
         int selected = held.getRenderedId(player.inventory.getSelected());
@@ -53,7 +59,7 @@ public final class HeldItemRenderer {
         float reach = (float) Math.sin(attack * Math.PI);
         float turn = (float) Math.sin(attack * attack * Math.PI);
         TextureManager textures = renderer.minecraft.textureManager;
-        int displayId = selected == Block.LEVER.id ? Item.iconId(selected) : selected;
+        int displayId = Item.iconId(selected);
         Block block =
                 displayId > 0 && displayId < Block.blocks.length ? Block.blocks[displayId] : null;
         Item item =
@@ -68,8 +74,7 @@ public final class HeldItemRenderer {
             GL11.glTranslatef(.06f * dodge * powers.dodgeSide(), -.08f * dodge, .04f * dodge);
             GL11.glRotatef(10 * dodge * powers.dodgeSide(), 0, 0, 1);
             float kick = powers.kickPose(player, partial);
-            if (kick > 0)
-                renderKick(player, textures, brightness, kick);
+            if (kick > 0) renderKick(player, textures, brightness, kick);
             if (block == null && item == null) {
                 float punch = powers.punchPose(player, partial);
                 if (powers.active(player)) {
@@ -80,7 +85,8 @@ public final class HeldItemRenderer {
                     renderArm(player, textures, brightness);
                     return;
                 }
-                GL11.glTranslatef(.64f - .3f * swing, -.6f - equipDrop + .4f * rise, -.72f - .4f * reach);
+                GL11.glTranslatef(
+                        .64f - .3f * swing, -.6f - equipDrop + .4f * rise, -.72f - .4f * reach);
                 GL11.glRotatef(45 + 70 * swing, 0, 1, 0);
                 GL11.glRotatef(-20 * turn, 0, 0, 1);
                 renderArm(player, textures, brightness);
@@ -141,10 +147,10 @@ public final class HeldItemRenderer {
         }
     }
 
-    private static void renderKick(Player player, TextureManager textures, float brightness, float kick) {
+    private static void renderKick(
+            Player player, TextureManager textures, float brightness, float kick) {
         HumanoidModel model = player.getModel();
-        if (model == null)
-            return;
+        if (model == null) return;
         GL11.glPushMatrix();
         GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT | GL11.GL_TEXTURE_BIT);
         try {
@@ -154,8 +160,7 @@ public final class HeldItemRenderer {
             GL11.glTranslatef(.22f, -1.1f + .55f * kick, -.35f - .3f * kick);
             GL11.glRotatef(-75 * kick, 1, 0, 0);
             ModelPart leg = model.rightLeg;
-            if (!leg.hasList)
-                leg.generateList(.0625f);
+            if (!leg.hasList) leg.generateList(.0625f);
             GL11.glCallList(leg.list);
         } finally {
             GL11.glPopAttrib();
@@ -165,8 +170,7 @@ public final class HeldItemRenderer {
 
     private static void renderArm(Player player, TextureManager textures, float brightness) {
         HumanoidModel model = player.getModel();
-        if (model == null)
-            return;
+        if (model == null) return;
         GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT | GL11.GL_TEXTURE_BIT);
         try {
             player.bindTexture(textures);
@@ -183,8 +187,7 @@ public final class HeldItemRenderer {
             GL11.glTranslatef(-5f / 16, 2f / 16, 0);
             GL11.glRotatef((float) Math.toDegrees(.1), 0, 0, 1);
             ModelPart arm = model.rightArm;
-            if (!arm.hasList)
-                arm.generateList(.0625f);
+            if (!arm.hasList) arm.generateList(.0625f);
             GL11.glCallList(arm.list);
         } finally {
             GL11.glPopAttrib();

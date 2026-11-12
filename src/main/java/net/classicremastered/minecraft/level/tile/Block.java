@@ -72,7 +72,7 @@ public class Block {
     public static final Block STICKY_PISTON, PISTON_HEAD;
     public static final Block SANDSTONE, CUT_SANDSTONE, CHISELED_SANDSTONE, SMOOTH_SANDSTONE;
     public static final Block SANDSTONE_SLAB,
-            SANDSTONE_STAIRS,
+            SANDSTONE_STAIRS, OAK_STAIRS, COBBLESTONE_STAIRS, STONE_BRICK_STAIRS, STONE_BRICKS,
             ORANGE_TERRACOTTA,
             BLUE_TERRACOTTA,
             CHEST,
@@ -80,6 +80,11 @@ public class Block {
     public static final Block WORKBENCH;
     public static final Block DIRT;
     public static final Block COBBLESTONE;
+    public static final Block LADDER;
+    public static final Block LADDER_NORTH, LADDER_SOUTH, LADDER_WEST;
+    public static final Block TOWER_LADDER;
+    public static final Block SNOWY_GRASS, SNOWY_LEAVES, SNOW_LAYER, SNOW_BLOCK;
+    public static final Block SHORT_GRASS;
     public static final Block WOOD;
     public static final Block SAPLING;
     public static final Block BEDROCK;
@@ -135,7 +140,7 @@ public class Block {
     public static final Block LUCKY_BLOCK;
     public int textureId;
     public final int id;
-    public Tile$SoundType stepsound;
+    public Tile$SoundType stepsound = Tile$SoundType.none;
     private int hardness; // scaled by *20 in setData
     protected boolean explodes;
     public float x1, y1, z1, x2, y2, z2;
@@ -421,31 +426,29 @@ public class Block {
 
     public void spawnBreakParticles(
             Level level, int x, int y, int z, ParticleManager particleManager) {
-        for (int a = 0; a < 4; ++a)
-            for (int b = 0; b < 4; ++b)
-                for (int c = 0; c < 4; ++c) {
-                    float px = (float) x + ((float) a + 0.5F) / 4F;
-                    float py = (float) y + ((float) b + 0.5F) / 4F;
-                    float pz = (float) z + ((float) c + 0.5F) / 4F;
+        float width = x2 - x1, height = y2 - y1, depth = z2 - z1;
+        int columns = Math.max(2, (int) Math.ceil(width * 4));
+        int rows = Math.max(2, (int) Math.ceil(height * 4));
+        int layers = Math.max(2, (int) Math.ceil(depth * 4));
+        for (int a = 0; a < columns; ++a)
+            for (int b = 0; b < rows; ++b)
+                for (int c = 0; c < layers; ++c) {
+                    float dx = (a + 0.5F) / columns;
+                    float dy = (b + 0.5F) / rows;
+                    float dz = (c + 0.5F) / layers;
                     particleManager.spawnParticle(
-                            new TerrainParticle(
-                                    level,
-                                    px,
-                                    py,
-                                    pz,
-                                    px - (float) x - 0.5F,
-                                    py - (float) y - 0.5F,
-                                    pz - (float) z - 0.5F,
-                                    this));
+                            new TerrainParticle(level, x + x1 + dx * width, y + y1 + dy * height,
+                                    z + z1 + dz * depth, dx - 0.5F, dy - 0.5F, dz - 0.5F, this)
+                                    .scale(0.65F));
                 }
     }
 
     public final void spawnBlockParticles(
             Level level, int x, int y, int z, int side, ParticleManager pm) {
         float s = 0.1F;
-        float px = (float) x + random.nextFloat() * (this.x2 - this.x1 - s * 2.0F) + s + this.x1;
-        float py = (float) y + random.nextFloat() * (this.y2 - this.y1 - s * 2.0F) + s + this.y1;
-        float pz = (float) z + random.nextFloat() * (this.z2 - this.z1 - s * 2.0F) + s + this.z1;
+        float px = x + particleCoordinate(x1, x2, s);
+        float py = y + particleCoordinate(y1, y2, s);
+        float pz = z + particleCoordinate(z1, z2, s);
         if (side == 0) py = (float) y + this.y1 - s;
         if (side == 1) py = (float) y + this.y2 + s;
         if (side == 2) pz = (float) z + this.z1 - s;
@@ -456,6 +459,11 @@ public class Block {
                 (new TerrainParticle(level, px, py, pz, 0.0F, 0.0F, 0.0F, this))
                         .setPower(0.2F)
                         .scale(0.6F));
+    }
+
+    private static float particleCoordinate(float min, float max, float margin) {
+        float inset = Math.min(margin, (max - min) * 0.5F);
+        return min + inset + random.nextFloat() * (max - min - inset * 2);
     }
 
     public LiquidType getLiquidType() {
@@ -624,6 +632,16 @@ public class Block {
         var1 = var10000;
         var10000.explodes = false;
         COBBLESTONE = var1;
+        LADDER = new TowerLadderBlock(91);
+        TOWER_LADDER = LADDER;
+        LADDER_NORTH = new LadderBlock(97, 2);
+        LADDER_SOUTH = new LadderBlock(98, 3);
+        LADDER_WEST = new LadderBlock(99, 4);
+        SNOWY_GRASS = new SnowBlock(92, "Snowy Grass Block", SnowBlock.Kind.GRASS);
+        SNOWY_LEAVES = new LeavesBlock(93, 24).setData(Tile$SoundType.grass, 1, 1, .2f);
+        SNOW_LAYER = new SnowBlock(SnowBlock.LAYER_ID, "Snow Layer", SnowBlock.Kind.LAYER);
+        SNOW_BLOCK = new SnowBlock(95, "Snow Block", SnowBlock.Kind.FULL);
+        SHORT_GRASS = new ShortGrassBlock(96, 26);
         WOOD = (new Block(5, 4, "Wood")).setData(Tile$SoundType.wood, 1.0F, 1.0F, 1.5F);
         SAPLING = (new SaplingBlock(6, 15)).setData(Tile$SoundType.none, 0.7F, 1.0F, 0.0F);
         var10000 =
@@ -702,7 +720,12 @@ public class Block {
                 new PyramidBlock(82, "Chiseled Sandstone", 132, PyramidBlock.Shape.CUBE);
         SMOOTH_SANDSTONE = new PyramidBlock(83, "Smooth Sandstone", 129, PyramidBlock.Shape.CUBE);
         SANDSTONE_SLAB = new PyramidBlock(84, "Sandstone Slab", 129, PyramidBlock.Shape.SLAB);
-        SANDSTONE_STAIRS = new PyramidBlock(85, "Sandstone Stairs", 128, PyramidBlock.Shape.STAIRS);
+        STONE_BRICKS = new Block(159, 158, "Stone Bricks").setData(Tile$SoundType.stone, 1f, 1f, 1.5f);
+        Block[] stairs = StairBlock.register(SANDSTONE, WOOD, COBBLESTONE, STONE_BRICKS);
+        SANDSTONE_STAIRS = stairs[0];
+        OAK_STAIRS = stairs[1];
+        COBBLESTONE_STAIRS = stairs[2];
+        STONE_BRICK_STAIRS = stairs[3];
         ORANGE_TERRACOTTA = new PyramidBlock(86, "Orange Terracotta", 133, PyramidBlock.Shape.CUBE);
         BLUE_TERRACOTTA = new PyramidBlock(87, "Blue Terracotta", 134, PyramidBlock.Shape.CUBE);
         CHEST = new PyramidBlock(88, "Chest", 152, PyramidBlock.Shape.CHEST);
@@ -723,7 +746,7 @@ public class Block {
         ROSE = (new FlowerBlock(38, 12)).setData(Tile$SoundType.none, 0.7F, 1.0F, 0.0F);
         BROWN_MUSHROOM = (new MushroomBlock(39, 29)).setData(Tile$SoundType.none, 0.7F, 1.0F, 0.0F);
         RED_MUSHROOM = (new MushroomBlock(40, 28)).setData(Tile$SoundType.none, 0.7F, 1.0F, 0.0F);
-        var10000 = (new MetalBlock(41, 40)).setData(Tile$SoundType.metal, 0.7F, 1.0F, 3.0F);
+        var10000 = (new MetalBlock(41, 41, 40, 42)).setData(Tile$SoundType.metal, 0.7F, 1.0F, 3.0F);
         var0 = false;
         // Block.java (static init)
         STRUCTURE_ALPHA = new StructureBlock(60, 208, "Structure Alpha", StructureBlock.Type.ALPHA);
@@ -731,11 +754,11 @@ public class Block {
         STRUCTURE_GAMMA = new StructureBlock(62, 210, "Structure Gamma", StructureBlock.Type.GAMMA);
         STRUCTURE_DELTA = new StructureBlock(63, 211, "Structure Delta", StructureBlock.Type.DELTA);
         JUKEBOX = (new Block(212, 212, "Jukebox")).setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.0F);
-        WORKBENCH = new WorkbenchBlock(228, 35);
+        WORKBENCH = new WorkbenchBlock(228);
         var1 = var10000;
         var10000.explodes = false;
         GOLD_BLOCK = var1;
-        var10000 = (new MetalBlock(42, 39)).setData(Tile$SoundType.metal, 0.7F, 1.0F, 5.0F);
+        var10000 = (new MetalBlock(42, 44, 43, 39)).setData(Tile$SoundType.metal, 0.7F, 1.0F, 5.0F);
         var0 = false;
         var1 = var10000;
         var10000.explodes = false;

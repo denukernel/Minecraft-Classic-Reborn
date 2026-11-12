@@ -1,10 +1,12 @@
 package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.entity.BoatEntity;
 import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.entity.FallingBlockEntity;
 import net.classicremastered.minecraft.entity.PrimedTnt;
+import net.classicremastered.minecraft.entity.SignEntity;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.nbt.CompoundTag;
 import net.classicremastered.nbt.ListTag;
@@ -17,7 +19,9 @@ final class WorldStateNbtCodec {
     private WorldStateNbtCodec() {}
 
     static void save(Level level, CompoundTag root) {
+        root.putInt("GameMode", level.spectatorMode ? 3 : level.creativeMode ? 1 : 0);
         level.saveBlockState(root);
+        net.classicremastered.minecraft.level.structure.GeneratedHouse.save(level, root);
         level.redstone().save(root);
         if (level.biomeSeed != null) root.putLong("BiomeSeed", level.biomeSeed);
         if (level.flatBiomes) root.putBoolean("FlatBiomes", true);
@@ -26,10 +30,26 @@ final class WorldStateNbtCodec {
         root.putBoolean("KeepInventory", level.keepInventory);
         ListTag drops = new ListTag("DroppedEntities", (byte) 10);
         ListTag moving = new ListTag("MovingBlocks", (byte) 10);
+        ListTag signs = new ListTag("Signs", (byte) 10);
+        ListTag boats = new ListTag("Boats", (byte) 10);
         if (level.blockMap != null) {
-            for (Entity entity : new ArrayList<>(level.blockMap.all)) {
+            var entities = new ArrayList<>(level.blockMap.all);
+            for (int index = 0; index < entities.size(); index++) {
+                Entity entity = entities.get(index);
                 if (entity.removed) continue;
                 CompoundTag tag = new CompoundTag(null);
+                if (entity instanceof BoatEntity) {
+                    tag.putInt("MountKey", index);
+                    tag.putFloat("Yaw", entity.yRot);
+                    saveMotion(entity, tag);
+                    tag.putFloat("Y", entity.bb.y0);
+                    boats.add(tag);
+                    continue;
+                }
+                if (entity instanceof SignEntity sign) {
+                    signs.add(sign.save());
+                    continue;
+                }
                 if (entity instanceof FallingBlockEntity falling) {
                     tag.putInt("Id", falling.blockId);
                     tag.putInt("Age", falling.age);
@@ -57,6 +77,7 @@ final class WorldStateNbtCodec {
                     tag.putInt("Id", item.itemId);
                     count = item.count;
                     life = item.life;
+                    if (item.crate != null) tag.put(item.crate.save());
                 } else {
                     continue;
                 }
@@ -70,6 +91,8 @@ final class WorldStateNbtCodec {
         }
         root.put(drops);
         root.put(moving);
+        root.put(signs);
+        root.put(boats);
     }
 
     private static void saveMotion(Entity entity, CompoundTag tag) {
@@ -81,8 +104,14 @@ final class WorldStateNbtCodec {
         tag.putFloat("MotionZ", entity.zd);
     }
 
-    static void load(Level level, CompoundTag root) throws IOException {
+    static void load(Level level, CompoundTag root, RidingLinks ridingLinks) throws IOException {
+        if (root.hasKey("GameMode")) {
+            int mode = root.getInt("GameMode");
+            level.spectatorMode = mode == 3;
+            level.creativeMode = mode == 1;
+        }
         level.loadBlockState(root);
+        net.classicremastered.minecraft.level.structure.GeneratedHouse.load(level, root);
         if (root.hasKey("BiomeSeed")) level.biomeSeed = root.getLong("BiomeSeed");
         level.flatBiomes = root.getBoolean("FlatBiomes");
         level.redstone().load(root);
@@ -109,6 +138,11 @@ final class WorldStateNbtCodec {
                 case "Item":
                     DroppedItem item = new DroppedItem(level, x, y, z, id, count);
                     item.life = life;
+                    if (id == net.classicremastered.minecraft.level.itemstack.TurretItems.PACKED) {
+                        item.crate =
+                                net.classicremastered.minecraft.level.itemstack.PackedTurret.load(
+                                        tag);
+                    }
                     entity = item;
                     break;
                 default:
@@ -116,6 +150,27 @@ final class WorldStateNbtCodec {
             }
             entity.setCactusStackHits(tag.getByte("CactusHits"));
             restoreMotion(level, entity, tag);
+        }
+        ListTag signs = root.getList("Signs");
+        for (int i = 0; i < signs.size(); i++) {
+            SignEntity sign = SignEntity.load(level, (CompoundTag) signs.get(i));
+            if (sign != null) level.addEntity(sign);
+        }
+        ListTag boats = root.getList("Boats");
+        for (int i = 0; i < boats.size(); i++) {
+            CompoundTag tag = (CompoundTag) boats.get(i);
+            float x = tag.getFloat("X"), feet = tag.getFloat("Y"), z = tag.getFloat("Z");
+            float yaw = tag.getFloat("Yaw");
+            if (!Float.isFinite(x)
+                    || !Float.isFinite(feet)
+                    || !Float.isFinite(z)
+                    || !Float.isFinite(yaw)
+                    || !Float.isFinite(tag.getFloat("MotionX"))
+                    || !Float.isFinite(tag.getFloat("MotionY"))
+                    || !Float.isFinite(tag.getFloat("MotionZ"))) continue;
+            BoatEntity boat = new BoatEntity(level, x, feet, z, yaw);
+            restoreMotion(level, boat, tag);
+            ridingLinks.readMount(boat, tag);
         }
         ListTag moving = root.getList("MovingBlocks");
         for (int i = 0; i < moving.size(); i++) {

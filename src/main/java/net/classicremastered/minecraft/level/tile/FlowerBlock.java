@@ -1,6 +1,8 @@
 package net.classicremastered.minecraft.level.tile;
 
+import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.util.MathHelper;
@@ -10,20 +12,72 @@ import java.util.Random;
 public class FlowerBlock extends Block {
 
     protected FlowerBlock(int var1, int var2) {
-        super(var1, "Flower");
+        this(var1, var2, "Flower");
+    }
+
+    protected FlowerBlock(int var1, int var2, String name) {
+        super(var1, name);
         this.textureId = var2;
         this.setPhysics(true);
         float var3 = 0.2F;
         this.setBounds(0.5F - var3, 0.0F, 0.5F - var3, var3 + 0.5F, var3 * 3.0F, var3 + 0.5F);
     }
 
-    public void update(Level level, int x, int y, int z, Random rand) {
-        if (!level.growTrees) {
-            int var6 = level.getTile(x, y - 1, z);
-            if (!level.isLit(x, y, z) || var6 != DIRT.id && var6 != GRASS.id) {
-                level.setTile(x, y, z, 0);
-            }
+    public static boolean isFlower(int id) {
+        return id == DANDELION.id || id == ROSE.id;
+    }
 
+    public final boolean canBeWashedAway() {
+        return isFlower(id) || this instanceof MushroomBlock;
+    }
+
+    protected boolean supports(int blockId) {
+        return blockId == GRASS.id;
+    }
+
+    public final boolean dropsWhenPlacedOnWater(Level level, int x, int y, int z) {
+        if (!isFlower(id) || level.isNetworkMode()) return false;
+        return level.getLiquid(x, y, z) == LiquidType.WATER
+                || level.getTile(x, y, z) == 0 && level.getLiquid(x, y - 1, z) == LiquidType.WATER;
+    }
+
+    @Override
+    public boolean canPlaceOnFace(Level level, int x, int y, int z, int face) {
+        return !canBeWashedAway()
+                || level.getTile(x, y, z) == 0 && supports(level.getTile(x, y - 1, z))
+                || dropsWhenPlacedOnWater(level, x, y, z);
+    }
+
+    public final void dropFromWater(Level level, int x, int y, int z) {
+        level.addEntity(new DroppedBlock(level, x + 0.5F, y + 0.5F, z + 0.5F, id));
+    }
+
+    @Override
+    public void onRemoved(Level level, int x, int y, int z) {
+        if (canBeWashedAway()
+                && !level.isNetworkMode()
+                && level.getLiquid(x, y, z) == LiquidType.WATER) {
+            dropFromWater(level, x, y, z);
+        }
+    }
+
+    @Override
+    public void onNeighborChange(Level level, int x, int y, int z, int changedId) {
+        if (canBeWashedAway()) checkSupport(level, x, y, z);
+    }
+
+    @Override
+    public void update(Level level, int x, int y, int z, Random rand) {
+        checkSupport(level, x, y, z);
+    }
+
+    private void checkSupport(Level level, int x, int y, int z) {
+        if (!level.isNetworkMode()
+                && level.getTile(x, y, z) == id
+                && !supports(level.getTile(x, y - 1, z))
+                && level.setTile(x, y, z, 0)
+                && level.getLiquid(x, y, z) != LiquidType.WATER) {
+            dropItems(level, x, y, z, 1.0F);
         }
     }
 
@@ -37,8 +91,14 @@ public class FlowerBlock extends Block {
         float var18 = ((float) var6 + 15.99F) / 256.0F;
 
         for (int var8 = 0; var8 < 2; ++var8) {
-            float var9 = (float) ((double) MathHelper.sin((float) var8 * 3.1415927F / 2.0F + 0.7853982F) * 0.5D);
-            float var10 = (float) ((double) MathHelper.cos((float) var8 * 3.1415927F / 2.0F + 0.7853982F) * 0.5D);
+            float var9 =
+                    (float)
+                            ((double) MathHelper.sin((float) var8 * 3.1415927F / 2.0F + 0.7853982F)
+                                    * 0.5D);
+            float var10 =
+                    (float)
+                            ((double) MathHelper.cos((float) var8 * 3.1415927F / 2.0F + 0.7853982F)
+                                    * 0.5D);
             float var11 = var2 + 0.5F - var9;
             var9 += var2 + 0.5F;
             float var13 = var3 + 1.0F;
@@ -53,7 +113,6 @@ public class FlowerBlock extends Block {
             var1.vertexUV(var11, var3, var14, var16, var18);
             var1.vertexUV(var9, var3, var10, var17, var18);
         }
-
     }
 
     public final boolean isOpaque() {

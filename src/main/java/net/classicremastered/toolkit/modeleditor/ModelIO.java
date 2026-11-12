@@ -74,7 +74,18 @@ public final class ModelIO {
 
     public static EditableModel load(File file) throws IOException {
         try {
-            Map<?, ?> root = object(ModelJson.parse(Files.readString(file.toPath(), StandardCharsets.UTF_8)));
+            return parse(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new IOException("Cannot load " + file.getName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    public static EditableModel load(InputStream input) throws IOException {
+        return parse(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+    }
+
+    private static EditableModel parse(String json) throws IOException {
+        Map<?, ?> root = object(ModelJson.parse(json));
             EditableModel model = new EditableModel();
             model.name = string(root, "name", model.name);
             model.atlasW = integer(root, "atlasW", model.atlasW);
@@ -84,10 +95,7 @@ public final class ModelIO {
             model.setRotationAnglesCode = string(root, "setRotationAngles", null);
             for (Object part : list(root, "parts"))
                 model.parts.add(readPart(object(part)));
-            return model;
-        } catch (IOException e) {
-            throw new IOException("Cannot load " + file.getName() + ": " + e.getMessage(), e);
-        }
+        return model;
     }
 
     private static EditablePart readPart(Map<?, ?> data) throws IOException {

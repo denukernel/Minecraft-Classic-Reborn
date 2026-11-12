@@ -1,0 +1,58 @@
+package net.classicremastered.minecraft.gui;
+
+import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.MobWandItem;
+import net.classicremastered.minecraft.level.itemstack.PackedTurret;
+import net.classicremastered.minecraft.level.itemstack.TurretItems;
+import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
+import net.classicremastered.minecraft.mob.TurretVariant;
+
+final class ItemTooltip {
+    private ItemTooltip() {}
+
+    static void draw(GuiScreen screen, int raw, PackedTurret crate, int x, int y) {
+        String name = BlockSelectScreen.displayName(raw);
+        String detail = description(raw, crate);
+        var font = screen.fontRenderer;
+        int width = Math.max(font.getWidth(name), font.getWidth(detail));
+        int left = Math.max(3, Math.min(screen.width - width - 5, x + 9));
+        int top = Math.max(3, Math.min(screen.height - (detail.isEmpty() ? 15 : 27), y + 10));
+        Screen.drawBox(
+                left - 3,
+                top - 3,
+                left + width + 3,
+                top + (detail.isEmpty() ? 11 : 23),
+                0xF0100010);
+        Screen.drawString(font, name, left, top, 0xFFFF80);
+        if (!detail.isEmpty()) Screen.drawString(font, detail, left, top + 12, 0xFFFFFF);
+    }
+
+    static String description(int raw, PackedTurret crate) {
+        if (crate != null) {
+            return TurretVariant.fromSave(crate.variantId()).label + " | HP " + crate.health()
+                    + " | Ammo " + crate.ammo() + (crate.enabled() ? " | On" : " | Off");
+        }
+        int id = raw - 256;
+        var variant = TurretVariant.fromItem(raw);
+        if (variant != null && Item.items[variant.ammo] != null) {
+            return "Uses " + Item.items[variant.ammo].name;
+        }
+        TurretUpgrade upgrade = TurretUpgrade.fromItem(raw);
+        if (upgrade != null)
+            return upgrade.description();
+        if (id == TurretItems.BOLT)
+            return "Crossbow, Predictable, and Rover turret ammunition";
+        if (id == 64)
+            return "Legacy Arrow Shotgun Turret ammunition";
+        if (id == 98)
+            return "Bullet and Bullet Shotgun turret ammunition";
+        if (id == 65)
+            return "Harpoon Turret ammunition";
+        if (id == 66)
+            return "Converts eligible hostiles into defenders";
+        if (id >= 0 && id < Item.items.length && Item.items[id] instanceof MobWandItem wand)
+            return wand.instructions();
+        return Equipment.description(raw);
+    }
+}

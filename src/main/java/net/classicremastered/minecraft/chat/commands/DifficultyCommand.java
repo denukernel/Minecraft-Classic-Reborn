@@ -18,7 +18,7 @@ public class DifficultyCommand implements Command, AliasedCommand {
 
     @Override
     public String getUsage() {
-        return "/difficulty [peaceful|easy|normal|hard]";
+        return "/difficulty [peaceful|easy|normal|hard|very_hard|extreme]";
     }
 
     @Override
@@ -30,14 +30,17 @@ public class DifficultyCommand implements Command, AliasedCommand {
             return;
         }
 
-        String arg = args[0].toUpperCase();
+        String arg = String.join(" ", args).toUpperCase(java.util.Locale.ROOT);
         Difficulty newDiff;
         if (arg.startsWith("PEACE")) newDiff = Difficulty.PEACEFUL;
         else if (arg.startsWith("EAS")) newDiff = Difficulty.EASY;
         else if (arg.startsWith("NOR")) newDiff = Difficulty.NORMAL;
         else if (arg.startsWith("HAR")) newDiff = Difficulty.HARD;
+        else if (Difficulty.fromString(arg, null) != null)
+            newDiff = Difficulty.fromString(arg, null);
         else {
-            mc.hud.addChat("&cUnknown difficulty. Use: peaceful, easy, normal, hard");
+            mc.hud.addChat(
+                    "&cUnknown difficulty. Use: peaceful, easy, normal, hard, very_hard, extreme");
             return;
         }
 

@@ -21,7 +21,12 @@ public final class LevelInfiniteTerrain extends Level {
     }
 
     public LevelInfiniteTerrain(long seed, int depthY, boolean biomesEnabled) {
+        this(seed, depthY, biomesEnabled, false);
+    }
+
+    public LevelInfiniteTerrain(long seed, int depthY, boolean biomesEnabled, boolean flatBiomes) {
         super();
+        this.flatBiomes = biomesEnabled && flatBiomes;
         this.randomSeed = seed;
         this.biomesEnabled = biomesEnabled;
         this.biomeSeed = biomesEnabled ? seed : null;
@@ -325,15 +330,9 @@ public final class LevelInfiniteTerrain extends Level {
                 }
             }
 
-            // --- 26M+ day/night glitch ---
-            if (dist >= 26_000_000L) {
-                this.timeOfDay = (this.timeOfDay + random.nextInt(200) - 100) & 23999;
-                if (random.nextInt(20) == 0) {
-                    this.doDayNightCycle = !this.doDayNightCycle;
-                }
-            } else {
-                // 🔹 restore normal cycle if back under 26M
-                this.doDayNightCycle = true;
+            // Keep the distant-world lighting effect subordinate to the world gamerule.
+            if (dist >= 26_000_000L && doDayNightCycle) {
+                this.timeOfDay = Math.floorMod(this.timeOfDay + random.nextInt(200) - 100, dayLength);
             }
 
             // --- 30M+ boss soundtrack messages ---

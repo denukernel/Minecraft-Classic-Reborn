@@ -10,7 +10,8 @@ final class ClientFirstPersonRenderer {
     private ClientFirstPersonRenderer() {}
 
     static void render(Renderer renderer, float partial, int stereoEye) {
-        if (renderer.minecraft.cameraMode != 0) return;
+        if (renderer.minecraft.cameraMode != 0 || renderer.minecraft.gamemode.isSpectator())
+            return;
         GL11.glClear(256);
         GL11.glLoadIdentity();
         if (renderer.minecraft.settings.anaglyph) {
@@ -22,11 +23,13 @@ final class ClientFirstPersonRenderer {
             renderer.applyBobbing(partial);
         }
 
-        if (renderer.minecraft.cameraMode == 0) {
+        if (!renderer.minecraft.hudHidden) {
             renderer.setLighting(true);
             renderer.renderHeldItem(partial);
             renderer.setLighting(false);
-            if (renderer.minecraft.player.remainingFireTicks > 0) renderFireOverlay(renderer);
+        }
+        if (renderer.minecraft.player.remainingFireTicks > 0) {
+            renderFireOverlay(renderer);
         }
     }
 

@@ -22,4 +22,8 @@ public final class GlassBlock extends Block {
     public final boolean isOpaque() {
         return false;
     }
+
+    public static void playShatter(Level level, float x, float y, float z) {
+        level.playSound("block/glass/break", x, y, z, .9f, 1f);
+    }
 }

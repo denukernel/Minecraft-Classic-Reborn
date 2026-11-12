@@ -11,11 +11,11 @@ public class PlayerInputAI extends BasicAI {
 
     @Override
     protected void update() {
-        this.jumping = player.input.jumping;
+        boolean autoJump = player.consumeAutoJump();
+        this.jumping = player.input.jumping || autoJump;
 
-        // If A/D still feel flipped, use: this.xxa = -player.input.xxa;
-        this.xxa = player.input.xxa; // strafe stays as-is
-        this.yya = player.input.yya; // flip forward ONCE (W -> positive forward)
+        this.xxa = player.movementStrafe();
+        this.yya = player.input.yya;
 
         this.running = player.input.running;
     }

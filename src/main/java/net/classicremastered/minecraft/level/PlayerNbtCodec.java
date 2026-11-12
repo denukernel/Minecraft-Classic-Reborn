@@ -14,6 +14,12 @@ final class PlayerNbtCodec {
         net.classicremastered.minecraft.level.itemstack.Equipment.save(player,tag);
         tag.putInt("Health", player.health);
         tag.putInt("Coins", player.coins);
+        tag.putInt("Score", player.score);
+        if (player.packedTurretHealth > 0) {
+            tag.putInt("PackedTurretHealth", player.packedTurretHealth);
+            tag.putInt("PackedTurretAmmo", player.packedTurretAmmo);
+            tag.putBoolean("PackedTurretEnabled", player.packedTurretEnabled);
+        }
         var inventory = player.inventory;
         tag.putInt("InventorySize", inventory.totalSize());
         tag.putInt("SelectedSlot", inventory.selected);
@@ -24,6 +30,8 @@ final class PlayerNbtCodec {
             stack.putInt("Slot", slot);
             stack.putInt("Id", inventory.getId(slot));
             stack.putInt("Count", inventory.getCount(slot));
+            var crate = inventory.crate(slot);
+            if (crate != null) stack.put(crate.save());
             stacks.add(stack);
         }
         tag.put(stacks);
@@ -36,8 +44,11 @@ final class PlayerNbtCodec {
         // Older saves have only position and rotation. Keep their player defaults.
         if (tag.hasKey("Health"))
             player.health = tag.getInt("Health");
-        if (tag.hasKey("Coins"))
-            player.coins = tag.getInt("Coins");
+        if (tag.hasKey("Coins")) player.coins = tag.getInt("Coins");
+        player.score = tag.getInt("Score");
+        player.packedTurretHealth = tag.getInt("PackedTurretHealth");
+        player.packedTurretAmmo = tag.getInt("PackedTurretAmmo");
+        player.packedTurretEnabled = tag.getBoolean("PackedTurretEnabled");
         if (tag.hasKey("Inventory")) {
             var inventory = new Inventory();
             ListTag stacks = tag.getList("Inventory");
@@ -55,14 +66,27 @@ final class PlayerNbtCodec {
             inventory.resizeGrid(size - Inventory.HOTBAR_SIZE);
             for (int i = 0; i < stacks.size(); i++) {
                 CompoundTag stack = (CompoundTag) stacks.get(i);
-                inventory.setIdCount(stack.getInt("Slot"), stack.getInt("Id"),
-                        stack.getInt("Count"));
+                inventory.setLoadedStack(
+                        stack.getInt("Slot"), stack.getInt("Id"), stack.getInt("Count"));
+                var crate =
+                        net.classicremastered.minecraft.level.itemstack.PackedTurret.load(stack);
+                if (crate != null
+                        && stack.getInt("Id")
+                                == net.classicremastered.minecraft.level.itemstack.TurretItems
+                                                .PACKED
+                                        + 256) inventory.setCrate(stack.getInt("Slot"), crate);
             }
             if (tag.hasKey("SelectedSlot")) {
                 inventory.selected = Math.max(0,
                         Math.min(Inventory.HOTBAR_SIZE - 1, tag.getInt("SelectedSlot")));
             }
+            Inventory.splitOversized(
+                    inventory.totalSize(),
+                    inventory::getId,
+                    inventory::getCount,
+                    inventory::setLoadedStack);
             player.inventory = inventory;
+            net.classicremastered.minecraft.level.itemstack.TurretItems.migrateLegacyCrate(player);
         }
     }
 }

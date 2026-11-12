@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.entity;
 import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.GlassBlock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.render.*;
@@ -10,10 +11,17 @@ import org.lwjgl.opengl.GL11;
 
 public final class FlyingPlank extends Entity {
     private final Entity owner;
+    private final boolean glass;
     private int age;
     public FlyingPlank(Level l, Entity owner, float x, float y, float z, float dx, float dy, float dz) {
+        this(l, owner, x, y, z, dx, dy, dz, false);
+    }
+
+    public FlyingPlank(Level l, Entity owner, float x, float y, float z, float dx, float dy, float dz,
+            boolean glass) {
         super(l);
         this.owner = owner;
+        this.glass = glass;
         setSize(.7f, .7f);
         heightOffset = 0;
         setPos(x, y, z);
@@ -46,7 +54,7 @@ public final class FlyingPlank extends Entity {
                 }
             }
         if (target != null) {
-            target.hurt(owner, 4);
+            target.hurt(owner, glass ? 3 : 4);
             shatter();
             return;
         }
@@ -61,10 +69,15 @@ public final class FlyingPlank extends Entity {
             return;
         removed = true;
         if (level.particleEngine != null)
-            Block.WOOD.spawnBreakParticles(level, (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z),
+            (glass ? Block.GLASS : Block.WOOD).spawnBreakParticles(level, (int) Math.floor(x),
+                    (int) Math.floor(y), (int) Math.floor(z),
                     level.particleEngine);
-        level.playSound("step/wood", this, .8f, 1.1f);
-        level.addEntity(new DroppedBlock(level, x, y, z, Block.WOOD.id));
+        if (glass) {
+            GlassBlock.playShatter(level, x, y, z);
+        } else {
+            level.playSound("step/wood", this, .8f, 1.1f);
+            level.addEntity(new DroppedBlock(level, x, y, z, Block.WOOD.id));
+        }
     }
 
     @Override
@@ -75,7 +88,8 @@ public final class FlyingPlank extends Entity {
             GL11.glRotatef(yRot, 1, 1, 0);
             GL11.glScalef(.7f, .7f, .7f);
             GL11.glTranslatef(-.5f, -.5f, -.5f);
-            BlockItemRenderer.render(Block.WOOD, tm, getRenderBrightness(partial));
+            BlockItemRenderer.render(glass ? Block.GLASS : Block.WOOD, tm,
+                    getRenderBrightness(partial));
         } finally {
             GL11.glPopMatrix();
         }

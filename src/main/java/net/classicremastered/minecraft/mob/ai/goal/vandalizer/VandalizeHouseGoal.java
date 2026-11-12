@@ -56,23 +56,29 @@ public final class VandalizeHouseGoal extends MobGoal<HouseVandalizerAI> {
             return;
         }
         if (tearCooldown == 0) {
-            int px = (int) Math.floor(ai.mob.x), py = (int) Math.floor(ai.mob.bb.y0 + 1),
-                    pz = (int) Math.floor(ai.mob.z);
-            for (int y = py - 1; y <= py + 2; y++)
-                for (int z = pz - 2; z <= pz + 2; z++)
-                    for (int x = px - 2; x <= px + 2; x++) {
-                        if (Math.abs(x - home.homeX) > home.homeRadius + 2
-                                || Math.abs(z - home.homeZ) > home.homeRadius + 2)
-                            continue;
-                        if (ai.level.getTile(x, y, z) == Block.WOOD.id
-                                && ((HouseVandalizer) ai.mob).tearPlank(x, y, z)) {
-                            tearCooldown = 60;
-                            approachTicks = 0;
-                            return;
-                        }
-                    }
+            if (throwNearby(Block.GLASS) || throwNearby(Block.WOOD)) {
+                tearCooldown = 60;
+                approachTicks = 0;
+            }
         }
     }
+
+    private boolean throwNearby(Block material) {
+        int px = (int) Math.floor(ai.mob.x), py = (int) Math.floor(ai.mob.bb.y0 + 1),
+                pz = (int) Math.floor(ai.mob.z);
+        for (int y = py - 1; y <= py + 2; y++)
+            for (int z = pz - 2; z <= pz + 2; z++)
+                for (int x = px - 2; x <= px + 2; x++) {
+                    if (Math.abs(x - home.homeX) > home.homeRadius + 2
+                            || Math.abs(z - home.homeZ) > home.homeRadius + 2
+                            || ai.level.getTile(x, y, z) != material.id)
+                        continue;
+                    if (((HouseVandalizer) ai.mob).tearHouseBlock(x, y, z, material))
+                        return true;
+                }
+        return false;
+    }
+
     private int searchTicks, tearCooldown;
     private Villager home;
     private int approachTicks;
@@ -89,7 +95,8 @@ public final class VandalizeHouseGoal extends MobGoal<HouseVandalizerAI> {
                 int x = hx + dx, z = hz + dz;
                 boolean wood = false;
                 for (int y = feet; y <= feet + 2; y++)
-                    if (ai.level.getTile(x, y, z) == Block.WOOD.id) {
+                    if (ai.level.getTile(x, y, z) == Block.WOOD.id
+                            || ai.level.getTile(x, y, z) == Block.GLASS.id) {
                         wood = true;
                         break;
                     }

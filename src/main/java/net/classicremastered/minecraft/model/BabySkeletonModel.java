@@ -16,8 +16,7 @@ public final class BabySkeletonModel extends SkeletonModel {
         body.render(scale);
         rightArm.render(scale);
         leftArm.render(scale);
-        rightLeg.render(scale);
-        leftLeg.render(scale);
+        renderSeatedLegs(scale);
     }
 
     @Override

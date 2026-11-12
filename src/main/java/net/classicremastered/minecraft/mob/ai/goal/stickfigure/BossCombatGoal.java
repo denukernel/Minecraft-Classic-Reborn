@@ -25,10 +25,9 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
             ai.running = false;
             return;
         }
-        if (ai.movement().isLeaping()) {
+        if (ai.movement().isLeaping() && !ai.powers.blocksNavigation()) {
             ai.specialMovement = ai.movement().chase(ai, boss, ai.attackTarget);
-            if (ai.specialMovement)
-                return;
+            if (ai.specialMovement) return;
         }
         if (ai.powers.tick(boss, ai.attackTarget, ai.random)) {
             ai.movement().cancel();
@@ -72,10 +71,6 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
             }
         }
         ai.defaultAttack();
-        if (ai.powers.rushTicks > 0) {
-            ai.running = true;
-            ai.runMultiplier = 1.65f;
-        }
         if (boss.dodgeTicks > 0) {
             ai.xxa = ai.yya = ai.yRotA = 0;
             ai.jumping = false;
@@ -83,5 +78,4 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
             ai.specialMovement = ai.movement().chase(ai, boss, ai.attackTarget);
         }
     }
-
 }

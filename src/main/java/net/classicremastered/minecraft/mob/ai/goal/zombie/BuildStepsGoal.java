@@ -170,7 +170,8 @@ public final class BuildStepsGoal extends Goal {
                 && !builder.level.isSolidTile(x + 1, y, z)
                 && !builder.level.isSolidTile(x, y, z - 1) && !builder.level.isSolidTile(x, y, z + 1))
             return false;
-        if (!builder.level.setTile(x, y, z, Block.STONE.id))
+        if (net.classicremastered.minecraft.level.structure.GeneratedHouse.protects(builder.level, x, y,
+                z) || !builder.level.setTile(x, y, z, Block.STONE.id))
             return false;
         cooldown = 6;
         poseTicks = 6;

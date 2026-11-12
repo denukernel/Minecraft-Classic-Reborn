@@ -113,6 +113,50 @@ public final class MobRegistry {
         return id == null ? (short) -1 : id;
     }
 
+    public static String displayName(short id) {
+        Entry entry = byId.get(id);
+        if (entry == null) return "Unknown Mob";
+        return entry.name.replaceAll("(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z0-9])(?=[A-Z])", " ");
+    }
+
+    public static java.util.Map<Short, String> turretTargets() {
+        bootstrapDefaults();
+        java.util.Map<Short, String> result = new java.util.TreeMap<>();
+        for (Entry entry : byId.values()) {
+            if (Zombie.class.isAssignableFrom(entry.type)
+                    || Creeper.class.isAssignableFrom(entry.type)
+                    || Spider.class.isAssignableFrom(entry.type)
+                    || Enderman.class.isAssignableFrom(entry.type)
+                    || extraTurretTarget(entry.type)) {
+                result.put(entry.id, displayName(entry.id));
+            }
+        }
+        return result;
+    }
+
+    private static boolean extraTurretTarget(Class<?> type) {
+        return type == TNTThrower.class
+                || type == LeggedMonster.class
+                || type == LongNeckMan.class
+                || type == ShulkerMan.class
+                || type == StickFigure.class;
+    }
+
+    public static boolean defaultTurretTarget(short id) {
+        Entry entry = byId.get(id);
+        return entry != null
+                && (Zombie.class.isAssignableFrom(entry.type)
+                        || Creeper.class.isAssignableFrom(entry.type)
+                        || Spider.class.isAssignableFrom(entry.type)
+                        || Enderman.class.isAssignableFrom(entry.type)
+                        || extraTurretTarget(entry.type));
+    }
+
+    public static boolean isTurretHostile(Mob mob) {
+        return net.classicremastered.minecraft.level.MobSpawner.isMonster(mob)
+                || extraTurretTarget(mob.getClass());
+    }
+
     /** Get all registered mob names. */
     public static String[] allNames() {
         return idOfName.keySet().toArray(new String[0]);
@@ -127,6 +171,8 @@ public final class MobRegistry {
     // MobRegistry.java — replace the entire bootstrapDefaults() with this
     public static synchronized void bootstrapDefaults() {
         if (bootstrapped) return;
+
+        register(Defender.REGISTRY_ID, "Defender", Defender.class, Defender::new);
 
         // --- Hostiles / undead / bosses ---
         tryRegister((short) 1, "Zombie", Zombie.class, (l, x, y, z) -> new Zombie(l, x, y, z));
@@ -150,7 +196,19 @@ public final class MobRegistry {
                 (l, x, y, z) -> new ScaryMindZombie(l, x, y, z));
         tryRegister(
                 (short) 7, "Enderman", Enderman.class, (l, x, y, z) -> new Enderman(l, x, y, z));
-        tryRegister((short) 8, "Husk", Husk.class, (l, x, y, z) -> new Husk(l, x, y, z)); // NEW
+        tryRegister(
+                BabyFrostbite.REGISTRY_ID,
+                "BabyFrostbite",
+                BabyFrostbite.class,
+                BabyFrostbite::new);
+        tryRegister(BabyHusk.REGISTRY_ID, "BabyHusk", BabyHusk.class, BabyHusk::new);
+        tryRegister(Frostbite.REGISTRY_ID, "Frostbite", Frostbite.class, Frostbite::new);
+        tryRegister(
+                ZombieIgniter.REGISTRY_ID,
+                "ZombieIgniter",
+                ZombieIgniter.class,
+                ZombieIgniter::new);
+        tryRegister(Husk.REGISTRY_ID, "Husk", Husk.class, (l, x, y, z) -> new Husk(l, x, y, z));
         tryRegister((short) 26, "Bee", Bee.class, (l, x, y, z) -> new Bee(l, x, y, z));
         tryRegister(
                 (short) 27,
@@ -195,6 +253,11 @@ public final class MobRegistry {
                 ShulkerMan.class,
                 (l, x, y, z) -> new ShulkerMan(l, x, y, z));
 
+        tryRegister(
+                CrossbowTurret.REGISTRY_ID,
+                "CrossbowTurret",
+                CrossbowTurret.class,
+                CrossbowTurret::new);
         tryRegister((short) 43, "Cow", Cow.class, Cow::new);
 
         // --- Neutrals / animals / villagers ---

@@ -64,7 +64,8 @@ final class ClientNetworkHandler {
                                     if (var6 == PacketType.IDENTIFICATION) {
                                         var42.minecraft.progressBar.setTitle(var7[1].toString());
                                         var42.minecraft.progressBar.setText(var7[2].toString());
-                                        var42.minecraft.player.userType = ((Byte) var7[3]).byteValue();
+                                        var42.minecraft.player.userType =
+                                                ((Byte) var7[3]).byteValue();
                                     } else if (var6 == PacketType.LEVEL_INIT) {
                                         var42.minecraft.setLevel((Level) null);
                                         var42.levelData = new ByteArrayOutputStream();
@@ -73,7 +74,9 @@ final class ClientNetworkHandler {
                                         byte[] var12 = (byte[]) ((byte[]) var7[1]);
                                         byte var13 = ((Byte) var7[2]).byteValue();
                                         var42.minecraft.progressBar.setProgress(var13);
-                                        if (var42.levelData == null || var11 < 0 || var11 > 1024
+                                        if (var42.levelData == null
+                                                || var11 < 0
+                                                || var11 > 1024
                                                 || var42.levelData.size() + var11 > 8 * 1024 * 1024)
                                             throw new IOException("Invalid map data packet");
                                         var42.levelData.write(var12, 0, var11);
@@ -84,13 +87,17 @@ final class ClientNetworkHandler {
                                             var14.printStackTrace();
                                         }
 
-                                        byte[] var51 = LevelIO
-                                                .decompress(new ByteArrayInputStream(var42.levelData.toByteArray()));
+                                        byte[] var51 =
+                                                LevelIO.decompress(
+                                                        new ByteArrayInputStream(
+                                                                var42.levelData.toByteArray()));
                                         var42.levelData = null;
                                         short var55 = ((Short) var7[0]).shortValue();
                                         short var63 = ((Short) var7[1]).shortValue();
                                         short var21 = ((Short) var7[2]).shortValue();
-                                        if (var55 <= 0 || var63 <= 0 || var21 <= 0
+                                        if (var55 <= 0
+                                                || var63 <= 0
+                                                || var21 <= 0
                                                 || (long) var55 * var63 * var21 != var51.length)
                                             throw new IOException("Invalid map dimensions");
                                         Level var30;
@@ -106,27 +113,66 @@ final class ClientNetworkHandler {
                                             short bz = ((Short) var7[2]).shortValue();
                                             byte blockId = ((Byte) var7[3]).byteValue();
 
-                                            int oldBlockId = var42.minecraft.level.getTile(bx, by, bz);
+                                            int oldBlockId =
+                                                    var42.minecraft.level.getTile(bx, by, bz);
 
-                                            if (var42.minecraft.level.netSetTile(bx, by, bz, blockId)) {
+                                            if (var42.minecraft.level.netSetTile(
+                                                    bx, by, bz, blockId)) {
                                                 if (oldBlockId > 0 && blockId == 0) { // Broken
                                                     Block block = Block.blocks[oldBlockId];
                                                     if (block != null) {
-                                                        if (block.stepsound != net.classicremastered.minecraft.level.tile.Tile$SoundType.none) {
-                                                            float vol = (block.stepsound.getVolume() + 1.0F) / 2.0F;
-                                                            float pitch = block.stepsound.getPitch() * 0.8F;
-                                                            var42.minecraft.level.playSound(block.stepsound.pool, (float)bx + 0.5F, (float)by + 0.5F, (float)bz + 0.5F, vol, pitch);
+                                                        if (block.stepsound != null
+                                                                && block.stepsound
+                                                                        != net.classicremastered
+                                                                                .minecraft.level
+                                                                                .tile.Tile$SoundType
+                                                                                .none) {
+                                                            float vol =
+                                                                    (block.stepsound.getVolume()
+                                                                                    + 1.0F)
+                                                                            / 2.0F;
+                                                            float pitch =
+                                                                    block.stepsound.getPitch()
+                                                                            * 0.8F;
+                                                            var42.minecraft.level.playSound(
+                                                                    block.stepsound.pool,
+                                                                    (float) bx + 0.5F,
+                                                                    (float) by + 0.5F,
+                                                                    (float) bz + 0.5F,
+                                                                    vol,
+                                                                    pitch);
                                                         }
-                                                        if (var42.minecraft.particleManager != null) {
-                                                            block.spawnBreakParticles(var42.minecraft.level, bx, by, bz, var42.minecraft.particleManager);
+                                                        if (var42.minecraft.particleManager
+                                                                != null) {
+                                                            block.spawnBreakParticles(
+                                                                    var42.minecraft.level,
+                                                                    bx,
+                                                                    by,
+                                                                    bz,
+                                                                    var42.minecraft
+                                                                            .particleManager);
                                                         }
                                                     }
                                                 } else if (blockId > 0) { // Placed
                                                     Block block = Block.blocks[blockId];
-                                                    if (block != null && block.stepsound != net.classicremastered.minecraft.level.tile.Tile$SoundType.none) {
-                                                        float vol = (block.stepsound.getVolume() + 1.0F) / 2.0F;
-                                                        float pitch = block.stepsound.getPitch() * 0.8F;
-                                                        var42.minecraft.level.playSound(block.stepsound.pool, (float)bx + 0.5F, (float)by + 0.5F, (float)bz + 0.5F, vol, pitch);
+                                                    if (block != null
+                                                            && block.stepsound != null
+                                                            && block.stepsound
+                                                                    != net.classicremastered
+                                                                            .minecraft.level.tile
+                                                                            .Tile$SoundType.none) {
+                                                        float vol =
+                                                                (block.stepsound.getVolume() + 1.0F)
+                                                                        / 2.0F;
+                                                        float pitch =
+                                                                block.stepsound.getPitch() * 0.8F;
+                                                        var42.minecraft.level.playSound(
+                                                                block.stepsound.pool,
+                                                                (float) bx + 0.5F,
+                                                                (float) by + 0.5F,
+                                                                (float) bz + 0.5F,
+                                                                vol,
+                                                                pitch);
                                                     }
                                                 }
                                             }
@@ -157,21 +203,36 @@ final class ClientNetworkHandler {
                                             if (var5 >= 0) {
                                                 var9 = (byte) (var9 + 128);
                                                 var47 = (short) (var47 - 22);
-                                                var33 = new NetworkPlayer(var42.minecraft, var5, var34, var36, var47,
-                                                        var10, (float) (var9 * 360) / 256.0F,
-                                                        (float) (var58 * 360) / 256.0F);
-                                                NetworkPlayer previous = var42.players.put(Byte.valueOf(var5), var33);
+                                                var33 =
+                                                        new NetworkPlayer(
+                                                                var42.minecraft,
+                                                                var5,
+                                                                var34,
+                                                                var36,
+                                                                var47,
+                                                                var10,
+                                                                (float) (var9 * 360) / 256.0F,
+                                                                (float) (var58 * 360) / 256.0F);
+                                                NetworkPlayer previous =
+                                                        var42.players.put(
+                                                                Byte.valueOf(var5), var33);
                                                 if (previous != null) {
                                                     previous.clear();
                                                     var42.minecraft.level.removeEntity(previous);
                                                 }
                                                 var42.minecraft.level.addEntity(var33);
                                             } else {
-                                                var42.minecraft.level.setSpawnPos(var36 / 32, var47 / 32, var10 / 32,
+                                                var42.minecraft.level.setSpawnPos(
+                                                        var36 / 32,
+                                                        var47 / 32,
+                                                        var10 / 32,
                                                         (float) (var9 * 320 / 256));
-                                                var42.minecraft.player.moveTo((float) var36 / 32.0F,
-                                                        (float) var47 / 32.0F, (float) var10 / 32.0F,
-                                                        (float) (var9 * 360) / 256.0F, (float) (var58 * 360) / 256.0F);
+                                                var42.minecraft.player.moveTo(
+                                                        (float) var36 / 32.0F,
+                                                        (float) var47 / 32.0F,
+                                                        (float) var10 / 32.0F,
+                                                        (float) (var9 * 360) / 256.0F,
+                                                        (float) (var58 * 360) / 256.0F);
                                             }
                                         } else {
                                             byte var53;
@@ -190,16 +251,25 @@ final class ClientNetworkHandler {
                                                 short var38 = var66;
                                                 var5 = var10001;
                                                 if (var5 < 0) {
-                                                    var42.minecraft.player.moveTo((float) var38 / 32.0F,
-                                                            (float) var36 / 32.0F, (float) var47 / 32.0F,
+                                                    var42.minecraft.player.moveTo(
+                                                            (float) var38 / 32.0F,
+                                                            (float) var36 / 32.0F,
+                                                            (float) var47 / 32.0F,
                                                             (float) (var53 * 360) / 256.0F,
                                                             (float) (var9 * 360) / 256.0F);
                                                 } else {
                                                     var53 = (byte) (var53 + 128);
                                                     var36 = (short) (var36 - 22);
-                                                    if ((var61 = (NetworkPlayer) var42.players
-                                                            .get(Byte.valueOf(var5))) != null) {
-                                                        var61.teleport(var38, var36, var47,
+                                                    if ((var61 =
+                                                                    (NetworkPlayer)
+                                                                            var42.players.get(
+                                                                                    Byte.valueOf(
+                                                                                            var5)))
+                                                            != null) {
+                                                        var61.teleport(
+                                                                var38,
+                                                                var36,
+                                                                var47,
                                                                 (float) (var53 * 360) / 256.0F,
                                                                 (float) (var9 * 360) / 256.0F);
                                                     }
@@ -224,9 +294,17 @@ final class ClientNetworkHandler {
                                                     var5 = var10001;
                                                     if (var5 >= 0) {
                                                         var53 = (byte) (var53 + 128);
-                                                        if ((var61 = (NetworkPlayer) var42.players
-                                                                .get(Byte.valueOf(var5))) != null) {
-                                                            var61.queue(var37, var44, var49,
+                                                        if ((var61 =
+                                                                        (NetworkPlayer)
+                                                                                var42.players.get(
+                                                                                        Byte
+                                                                                                .valueOf(
+                                                                                                        var5)))
+                                                                != null) {
+                                                            var61.queue(
+                                                                    var37,
+                                                                    var44,
+                                                                    var49,
                                                                     (float) (var53 * 360) / 256.0F,
                                                                     (float) (var9 * 360) / 256.0F);
                                                         }
@@ -240,9 +318,15 @@ final class ClientNetworkHandler {
                                                     if (var5 >= 0) {
                                                         var37 = (byte) (var37 + 128);
                                                         NetworkPlayer var54;
-                                                        if ((var54 = (NetworkPlayer) var42.players
-                                                                .get(Byte.valueOf(var5))) != null) {
-                                                            var54.queue((float) (var37 * 360) / 256.0F,
+                                                        if ((var54 =
+                                                                        (NetworkPlayer)
+                                                                                var42.players.get(
+                                                                                        Byte
+                                                                                                .valueOf(
+                                                                                                        var5)))
+                                                                != null) {
+                                                            var54.queue(
+                                                                    (float) (var37 * 360) / 256.0F,
                                                                     (float) (var44 * 360) / 256.0F);
                                                         }
                                                     }
@@ -255,14 +339,28 @@ final class ClientNetworkHandler {
                                                     var37 = var67;
                                                     var5 = var10001;
                                                     NetworkPlayer var59;
-                                                    if (var5 >= 0 && (var59 = (NetworkPlayer) var42.players
-                                                            .get(Byte.valueOf(var5))) != null) {
+                                                    if (var5 >= 0
+                                                            && (var59 =
+                                                                            (NetworkPlayer)
+                                                                                    var42.players
+                                                                                            .get(
+                                                                                                    Byte
+                                                                                                            .valueOf(
+                                                                                                                    var5)))
+                                                                    != null) {
                                                         var59.queue(var37, var44, var49);
                                                     }
                                                 } else if (var6 == PacketType.DESPAWN_PLAYER) {
                                                     var5 = ((Byte) var7[0]).byteValue();
-                                                    if (var5 >= 0 && (var33 = (NetworkPlayer) var42.players
-                                                            .remove(Byte.valueOf(var5))) != null) {
+                                                    if (var5 >= 0
+                                                            && (var33 =
+                                                                            (NetworkPlayer)
+                                                                                    var42.players
+                                                                                            .remove(
+                                                                                                    Byte
+                                                                                                            .valueOf(
+                                                                                                                    var5)))
+                                                                    != null) {
                                                         var33.clear();
                                                         var42.minecraft.level.removeEntity(var33);
                                                     }
@@ -277,10 +375,12 @@ final class ClientNetworkHandler {
                                                         var42.minecraft.hud.addChat(var34);
                                                     }
                                                 } else if (var6 == PacketType.DISCONNECT) {
-                                                    var42.disconnect("Connection lost", (String) var7[0]);
+                                                    var42.disconnect(
+                                                            "Connection lost", (String) var7[0]);
                                                     return;
                                                 } else if (var6 == PacketType.UPDATE_PLAYER_TYPE) {
-                                                    var42.minecraft.player.userType = ((Byte) var7[0]).byteValue();
+                                                    var42.minecraft.player.userType =
+                                                            ((Byte) var7[0]).byteValue();
                                                 }
                                             }
                                         }
@@ -314,9 +414,16 @@ final class ClientNetworkHandler {
                     var40 = (int) (var28.z * 32.0F);
                     var46 = (int) (var28.yRot * 256.0F / 360.0F) & 255;
                     var45 = (int) (var28.xRot * 256.0F / 360.0F) & 255;
-                    var20.netHandler.send(PacketType.POSITION_ROTATION,
-                            new Object[] { Integer.valueOf(-1), Integer.valueOf(var24), Integer.valueOf(var4),
-                                    Integer.valueOf(var40), Integer.valueOf(var46), Integer.valueOf(var45) });
+                    var20.netHandler.send(
+                            PacketType.POSITION_ROTATION,
+                            new Object[] {
+                                Integer.valueOf(-1),
+                                Integer.valueOf(var24),
+                                Integer.valueOf(var4),
+                                Integer.valueOf(var40),
+                                Integer.valueOf(var46),
+                                Integer.valueOf(var45)
+                            });
                 }
             }
         }

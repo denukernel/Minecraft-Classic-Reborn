@@ -1,11 +1,11 @@
 package net.classicremastered.minecraft.level.tile;
 
-import java.util.Random;
-
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.ShapeRenderer;
+
+import java.util.Random;
 
 public class LiquidBlock extends Block {
 
@@ -46,7 +46,8 @@ public class LiquidBlock extends Block {
 
     @Override
     public void onAdded(Level level, int x, int y, int z) {
-        if (this.id == this.movingId || (this.type == LiquidType.WATER && usesLevelledFlow(level))) {
+        if (this.id == this.movingId || this.type == LiquidType.LAVA
+                || this.type == LiquidType.WATER && usesLevelledFlow(level)) {
             level.addToTickNextTick(x, y, z, this.id);
         }
     }
@@ -79,6 +80,12 @@ public class LiquidBlock extends Block {
     }
 
     protected final void tryIgniteNearLava(Level level, int x, int y, int z, Random random) {
+        // Fuel directly above lava can catch on its top face even when its sides are enclosed.
+        if (tryIgniteFuelTop(level, x, y + 1, z) || tryIgniteFuelTop(level, x - 1, y, z)
+                || tryIgniteFuelTop(level, x + 1, y, z) || tryIgniteFuelTop(level, x, y, z - 1)
+                || tryIgniteFuelTop(level, x, y, z + 1)) {
+            return;
+        }
         for (int i = 0; i < 3; i++) {
             int rx = x + random.nextInt(3) - 1;
             int ry = y + random.nextInt(3) - 1;
@@ -88,6 +95,11 @@ public class LiquidBlock extends Block {
                 level.setTile(rx, ry, rz, Block.FIRE.id);
             }
         }
+    }
+
+    private static boolean tryIgniteFuelTop(Level level, int x, int y, int z) {
+        return level.isInBounds(x, y + 1, z) && FireBlock.isFlammable(level.getTile(x, y, z))
+                && level.getTile(x, y + 1, z) == 0 && level.setTile(x, y + 1, z, Block.FIRE.id);
     }
 
     private void updateClassic(Level level, int x, int y, int z) {
@@ -294,7 +306,11 @@ public class LiquidBlock extends Block {
             return false;
         }
         int tile = level.getTile(x, y, z);
-        if (tile != 0 && (this.type != LiquidType.WATER || tile != Block.FIRE.id)) {
+        if (tile != 0
+                && (this.type != LiquidType.WATER
+                        || (tile != Block.FIRE.id
+                                && !(Block.blocks[tile] instanceof FlowerBlock plant
+                                        && plant.canBeWashedAway())))) {
             return false;
         }
         if (this.type == LiquidType.WATER) {
@@ -382,6 +398,16 @@ public class LiquidBlock extends Block {
             renderWaterWall(renderer, x + 1, z, ne, x + 1, z + 1, se, y, u0, v0, uvSize);
         }
         return true;
+    }
+
+    public static float waterSurface(Level level, int x, int y, int z) {
+        if (level.getLiquid(x, y, z) != LiquidType.WATER) return Float.NEGATIVE_INFINITY;
+        return y
+                + (cornerWaterHeight(level, x, y, z)
+                                + cornerWaterHeight(level, x + 1, y, z)
+                                + cornerWaterHeight(level, x, y, z + 1)
+                                + cornerWaterHeight(level, x + 1, y, z + 1))
+                        * .25f;
     }
 
     private static float cornerWaterHeight(Level level, int x, int y, int z) {

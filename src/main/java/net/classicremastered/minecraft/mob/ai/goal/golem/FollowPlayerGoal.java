@@ -17,7 +17,8 @@ public final class FollowPlayerGoal extends MobGoal<ForestGolemFollowAI> {
         ai.jumping = ai.running = false;
         ai.attackTarget = null;
         Entity candidate = ai.level.getPlayer();
-        if (!(candidate instanceof Player player) || player.removed || player.health <= 0) {
+        if (!(candidate instanceof Player player) || player.isSpectator() || player.removed
+                || player.health <= 0) {
             ai.following = false;
             return;
         }

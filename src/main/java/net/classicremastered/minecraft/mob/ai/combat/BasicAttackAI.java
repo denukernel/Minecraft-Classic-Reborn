@@ -5,7 +5,7 @@ import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.goal.GoalSelector;
 import net.classicremastered.minecraft.mob.ai.goal.combat.AvoidTntGoal;
-import net.classicremastered.minecraft.mob.ai.goal.combat.DodgeProjectileGoal;
+
 import net.classicremastered.minecraft.mob.ai.goal.combat.HostileMeleeGoal;
 import net.classicremastered.minecraft.mob.ai.goal.combat.HostileThreats;
 import net.classicremastered.minecraft.mob.ai.goal.combat.MeleeAttackGoal;
@@ -19,7 +19,7 @@ public class BasicAttackAI extends BasicAI {
     public static final long serialVersionUID = 0L;
     public int damage = 6;
     public boolean evading;
-    private final boolean arrowDodgingEnabled;
+
     private final boolean tntAvoidanceEnabled;
     private final boolean recoverStalledTargets;
     private transient HostileThreats threats;
@@ -37,13 +37,13 @@ public class BasicAttackAI extends BasicAI {
             boolean arrowDodgingEnabled,
             boolean tntAvoidanceEnabled,
             boolean recoverStalledTargets) {
-        this.arrowDodgingEnabled = arrowDodgingEnabled;
+
         this.tntAvoidanceEnabled = tntAvoidanceEnabled;
         this.recoverStalledTargets = recoverStalledTargets;
     }
 
     public final boolean isArrowDodgingEnabled() {
-        return arrowDodgingEnabled;
+        return false;
     }
 
     public final boolean isTntAvoidanceEnabled() {
@@ -91,18 +91,27 @@ public class BasicAttackAI extends BasicAI {
     }
 
     protected void doAttack() {
-        if (!arrowDodgingEnabled && !tntAvoidanceEnabled) {
+        if (!tntAvoidanceEnabled) {
             tickCombatGoals();
             return;
         }
         threats().scan(this);
         if (avoidance == null) {
             avoidance = createGoalSelector();
-            if (arrowDodgingEnabled) avoidance.addGoal(0, new DodgeProjectileGoal(this));
+
             if (tntAvoidanceEnabled) avoidance.addGoal(1, new AvoidTntGoal(this));
             avoidance.addGoal(2, new HostileMeleeGoal(this));
         }
         avoidance.tick();
+    }
+
+    public void tickMountedCombat(net.classicremastered.minecraft.mob.Mob rider) {
+        bind(rider.level, rider);
+        if (retaliationTicks > 0)
+            retaliationTicks--;
+        if (attackDelay > 0)
+            attackDelay--;
+        tickCombatGoals();
     }
 
     /** Runs the common targeting and melee goals after optional avoidance. */
@@ -144,7 +153,12 @@ public class BasicAttackAI extends BasicAI {
         if (src instanceof Arrow) {
             src = ((Arrow) src).getOwner();
         }
-        if (src != null && !src.getClass().equals(this.mob.getClass())) {
+        boolean defenderHit =
+                src instanceof net.classicremastered.minecraft.mob.Mob defender
+                        && defender.corruptedToDefendPlayer
+                        && !mob.corruptedToDefendPlayer
+                        && net.classicremastered.minecraft.mob.MobRegistry.isTurretHostile(mob);
+        if (src != null && (defenderHit || !src.getClass().equals(this.mob.getClass()))) {
             this.attackTarget = src;
             retaliationTicks = 200;
         }

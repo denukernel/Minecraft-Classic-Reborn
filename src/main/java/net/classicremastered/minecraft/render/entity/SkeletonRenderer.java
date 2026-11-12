@@ -14,6 +14,7 @@ public final class SkeletonRenderer<T extends Skeleton> extends MobRenderer<T> {
         AnimInputs a = animInputs(mob, partial);
         bind(tm, texture);
         ((SkeletonModel) model).setRenderTextures(tm);
+        ((SkeletonModel) model).setRenderPartial(partial);
         model.preAnimate(mob);
         model.setRotationAngles(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
         model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);

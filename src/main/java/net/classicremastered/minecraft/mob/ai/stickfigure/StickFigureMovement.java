@@ -23,7 +23,9 @@ public final class StickFigureMovement {
     private float leapX, leapZ;
     private List<Vec3D> leapPath = List.of();
     private List<ShoreNavigator.Step> shorePath = List.of();
-    private Entity shoreTarget;
+    private Entity shoreTarget, chaseTarget;
+    private boolean swimming;
+    private int noRouteTicks;
     private int shoreIndex;
 
     public boolean isLeaping() {
@@ -57,6 +59,14 @@ public final class StickFigureMovement {
             cancel();
             return false;
         }
+        boolean inWater = boss.isInWater();
+        if (target != chaseTarget || inWater != swimming) {
+            ai.clearNavigation();
+            cancel();
+            chaseTarget = target;
+            swimming = inWater;
+            noRouteTicks = 0;
+        }
         if (isLeaping()) {
             if ((leapAge > 1 && (boss.onGround || boss.horizontalCollision)) || --leapTicks <= 0) {
                 boss.fallDistance = 0;
@@ -84,16 +94,21 @@ public final class StickFigureMovement {
         float z = target.z + Math.max(-2, Math.min(2, target.zd * lead));
         if (Math.abs(target.bb.y0 - boss.bb.y0) < 1.25f
                 && Pathfinder.canWalkStraight(boss.level, boss, x, boss.bb.y0, z)) {
+            ai.clearNavigation();
+            noRouteTicks = 0;
             steer(ai, boss, x, z, distance < 2 ? .35f : 1f);
             return true;
         }
-        if (boss.onGround && leapCooldown == 0 && scanCooldown == 0) {
+        ai.navigateTo(target.x, target.bb.y0, target.z, ai.runSpeed * .75f);
+        if (ai.hasActiveRoute()) {
+            noRouteTicks = 0;
+            return false;
+        }
+        if (++noRouteTicks >= 12 && boss.onGround && leapCooldown == 0 && scanCooldown == 0) {
             scanCooldown = 8;
             if (findLeap(ai, boss, target.x, target.bb.y0, target.z))
                 return true;
         }
-        // Keep the existing obstacle routing when a supported shortcut is unavailable.
-        ai.navigateTo(target.x, target.bb.y0, target.z, ai.runSpeed);
         return false;
     }
 

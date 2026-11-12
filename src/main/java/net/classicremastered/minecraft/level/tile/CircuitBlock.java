@@ -71,6 +71,7 @@ public class CircuitBlock extends Block {
     }
 
     public static int horizontalFacing(Player player) {
+        if (player == null) return 3;
         return new int[] {3, 4, 2, 5}[Math.floorMod((int) Math.floor(player.yRot / 90f + .5f), 4)];
     }
 
@@ -82,14 +83,21 @@ public class CircuitBlock extends Block {
         return kind == Kind.PISTON || kind == Kind.STICKY_PISTON;
     }
 
+    public boolean needsFloorSupport() {
+        return kind == Kind.WIRE
+                || kind == Kind.PLATE
+                || kind == Kind.REPEATER
+                || kind == Kind.COMPARATOR;
+    }
+
     public boolean needsSupport() {
-        return isTorch() || kind == Kind.BUTTON || kind == Kind.WIRE || kind == Kind.LEVER;
+        return isTorch() || kind == Kind.BUTTON || kind == Kind.LEVER || needsFloorSupport();
     }
 
     @Override
     public boolean canPlaceOnFace(Level level, int x, int y, int z, int face) {
         if (!needsSupport()) return true;
-        if (isTorch() && face == 0 || kind == Kind.WIRE && face != 1) return false;
+        if ((isTorch() && face == 0) || (needsFloorSupport() && face != 1)) return false;
         Pos support = new Pos(x, y, z).step(face ^ 1);
         Block block = blocks[level.getTile(support.x(), support.y(), support.z())];
         return block != null
@@ -127,6 +135,22 @@ public class CircuitBlock extends Block {
         if (kind == Kind.LEVER)
             return new AABB[] {BlockModels.leverBounds(x, y, z, state.mount, facing)};
         if (isTorch()) return new AABB[] {BlockModels.torchBounds(x, y, z, facing)};
+        if (kind == Kind.REPEATER || kind == Kind.COMPARATOR) {
+            AABB base = BlockModels.bounds(x, y, z, 0, 0, 0, 16, 2, 16, facing);
+            if (kind == Kind.COMPARATOR)
+                return new AABB[] {
+                    base,
+                    BlockModels.bounds(x, y, z, 7, 2, 2, 9, state.on ? 7 : 5, 4, facing),
+                    BlockModels.bounds(x, y, z, 4, 2, 11, 6, 7, 13, facing),
+                    BlockModels.bounds(x, y, z, 10, 2, 11, 12, 7, 13, facing)
+                };
+            int post = BlockModels.repeaterPostZ(state.delay);
+            return new AABB[] {
+                base,
+                BlockModels.bounds(x, y, z, 7, 2, 2, 9, 7, 4, facing),
+                BlockModels.bounds(x, y, z, 7, 2, post, 9, 7, post + 2, facing)
+            };
+        }
         return new AABB[] {super.getSelectionBox(x, y, z)};
     }
 
@@ -164,7 +188,7 @@ public class CircuitBlock extends Block {
         RedstoneEngine.State state = level.redstone().state(x, y, z);
         state.facing = horizontalFacing(player);
         if (kind == Kind.LEVER) state.mount = face;
-        else if (needsSupport()) state.facing = face;
+        else if (needsSupport() && !needsFloorSupport()) state.facing = face;
         if (isPiston()) {
             Vec3D look = GravityGunItem.look(player);
             if (Math.abs(look.y) > Math.max(Math.abs(look.x), Math.abs(look.z))) {
@@ -218,7 +242,7 @@ public class CircuitBlock extends Block {
     public void renderFullbright(ShapeRenderer renderer) {
         RedstoneEngine.State preview = new RedstoneEngine.State(id);
         preview.power = kind == Kind.TORCH ? 15 : 0;
-        preview.facing = isPiston() || kind == Kind.LEVER ? 2 : 1;
+        preview.facing = isTorch() || kind == Kind.BUTTON ? 1 : 2;
         draw(renderer, -2, 0, 0, preview, 1);
     }
 
@@ -227,7 +251,7 @@ public class CircuitBlock extends Block {
         renderer.begin();
         RedstoneEngine.State preview = new RedstoneEngine.State(id);
         preview.power = kind == Kind.TORCH ? 15 : 0;
-        preview.facing = isPiston() || kind == Kind.LEVER ? 3 : 1;
+        preview.facing = isTorch() || kind == Kind.BUTTON ? 1 : 3;
         draw(renderer, 0, 0, 0, preview, 1);
         renderer.end();
     }
@@ -281,9 +305,18 @@ public class CircuitBlock extends Block {
                         kind == Kind.REPEATER
                                 ? (s.power > 0 ? 144 : 143)
                                 : (s.power > 0 ? 146 : 145);
-                box(r, x, y, z, 0, 0, 0, 1, .125f, 1, tex, light);
-                box(r, x, y, z, .25f, .125f, .3f, .35f, .35f, .4f, s.power > 0 ? 140 : 141, light);
-                box(r, x, y, z, .65f, .125f, .3f, .75f, .35f, .4f, s.power > 0 ? 140 : 141, light);
+                BlockModels.logicGate(
+                        r,
+                        x,
+                        y,
+                        z,
+                        s.facing,
+                        tex,
+                        kind == Kind.COMPARATOR,
+                        s.power > 0,
+                        s.on,
+                        s.delay,
+                        light);
             }
             case PISTON, STICKY_PISTON -> {
                 BlockModels.piston(

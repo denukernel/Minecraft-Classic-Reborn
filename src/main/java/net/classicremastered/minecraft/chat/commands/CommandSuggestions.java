@@ -81,10 +81,10 @@ public final class CommandSuggestions {
                     out.addAll(CommandManager.getRegisteredNames());
                     break;
                 case "difficulty":
-                    out.addAll(List.of("peaceful", "easy", "normal", "hard"));
+                    out.addAll(List.of("peaceful", "easy", "normal", "hard", "very_hard", "extreme"));
                     break;
                 case "gamemode":
-                    out.addAll(List.of("creative", "survival"));
+                    out.addAll(List.of("creative", "survival", "spectator"));
                     break;
                 case "time":
                     out.addAll(List.of("set", "day", "noon", "night", "midnight"));

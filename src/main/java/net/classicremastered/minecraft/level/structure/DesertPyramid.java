@@ -1,12 +1,16 @@
 package net.classicremastered.minecraft.level.structure;
 
+import net.classicremastered.minecraft.level.GeneratedOccupant;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.RedstoneEngine;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.itemstack.*;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.StairBlock;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 /** Chunk-order-independent sandstone temple, with a buried four-chest TNT chamber. */
@@ -59,11 +63,18 @@ public final class DesertPyramid implements Structure {
             return 0;
         }
         if (y < 0) return x >= 9 && x <= 11 && z >= 9 && z <= 11 ? 0 : Block.SANDSTONE.id;
+        if (y == 0 && z == 0 && (x == 2 || x >= 9 && x <= 11 || x == 18))
+            return StairBlock.id(0, 3, false);
         if (y == 0) {
             if (x == 10 && z == 10) return Block.BLUE_TERRACOTTA.id;
-            if (Math.abs(x - 10) + Math.abs(z - 10) <= 3) return Block.ORANGE_TERRACOTTA.id;
+            int dx = Math.abs(x - 10), dz = Math.abs(z - 10);
+            if (dx == 1 && dz == 1 || dx + dz >= 2 && dx + dz <= 3 && (dx == 0 || dz == 0))
+                return Block.ORANGE_TERRACOTTA.id;
             return Block.SANDSTONE.id;
         }
+        int interior = interiorAt(x, y, z);
+        if (interior >= 0)
+            return interior;
         if ((x <= 4 || x >= 16) && z <= 4 && y <= 10) {
             if (y == 10) return Block.CHISELED_SANDSTONE.id;
             if (z == 0
@@ -80,17 +91,77 @@ public final class DesertPyramid implements Structure {
         if (z <= 3 && (x == 8 || x == 12) && y <= 3) return Block.CUT_SANDSTONE.id;
         if (x >= 9 && x <= 11 && z <= 7 && y <= 3) return 0;
         if ((x == 8 || x == 12) && (z == 8 || z == 12) && y <= 3) return Block.CUT_SANDSTONE.id;
+        if (z >= 5 && z <= 17 && (x == 4 || x == 16)) {
+            if (y == 3) return Block.SANDSTONE.id;
+            if (y <= 2)
+                return isGalleryOpening(z)
+                        ? 0
+                        : y == 1 ? Block.CUT_SANDSTONE.id : Block.CHISELED_SANDSTONE.id;
+        }
+        if (y <= 2 && z >= 5 && z <= 16 && (x == 3 || x == 17)) return 0;
+        if (y == 4 && x >= 5 && x <= 15 && z >= 5 && z <= 15)
+            return x >= 9 && x <= 11 && z >= 9 && z <= 11 ? 0 : Block.SANDSTONE.id;
         if (y <= 9 && x >= y && x <= 20 - y && z >= y && z <= 20 - y)
             return x == y || x == 20 - y || z == y || z == 20 - y || y == 9
                     ? Block.SANDSTONE.id
                     : 0;
-        if (y == 1 && z == 1 && (x == 8 || x == 12)) return Block.SANDSTONE_STAIRS.id;
         return y <= 10 ? 0 : -1;
     }
 
-    public static void decorateChunk(SimpleChunk chunk, long seed) {
+    private static int interiorAt(int x, int y, int z) {
+        if ((x == 2 || x == 18) && z >= 3 && z <= 7) {
+            int stairY = z - 2;
+            if (y == stairY)
+                return StairBlock.id(0, 3, false);
+            if (y > stairY && y <= stairY + 3)
+                return 0;
+        }
+        if ((x == 2 || x == 18) && z >= 8 && z <= 12) {
+            if (y == 5)
+                return Block.CUT_SANDSTONE.id;
+            if (y >= 6 && y <= 8)
+                return 0;
+        }
+        if (z >= 11 && z <= 12 && (x >= 3 && x <= 7 || x >= 13 && x <= 17)) {
+            if (y == 5)
+                return Block.CUT_SANDSTONE.id;
+            if (y >= 6 && y <= 8)
+                return 0;
+        }
+        if (x >= 7 && x <= 13 && z >= 5 && z <= 15 && y >= 1 && y <= 5) {
+            if ((x == 8 || x == 12) && (z == 8 || z == 12) && y <= 3)
+                return Block.CHISELED_SANDSTONE.id;
+            if (y == 5 && (x == 7 || x == 13) && z >= 11 && z <= 12)
+                return Block.CUT_SANDSTONE.id;
+            return 0;
+        }
+        return -1;
+    }
+
+    private static boolean isGalleryOpening(int z) {
+        return z >= 6 && z <= 16 && z % 2 == 0;
+    }
+
+    private static void offerIronmocks(
+            List<GeneratedOccupant> pending, long seed, Site site, SimpleChunk owner) {
+        for (int side = 4; side <= 16; side += 12) {
+            int x = site.x + side;
+            for (int offset = 6; offset <= 16; offset += 2) {
+                int z = site.z + offset;
+                if (owner == null || owner.cx == x >> 4 && owner.cz == z >> 4)
+                    GeneratedOccupant.offerIronmock(pending, seed, x, site.y + 1, z);
+            }
+        }
+    }
+
+    public static void decorateChunk(SimpleChunk chunk, long seed, boolean flat) {
         Site site =
-                site(seed, chunk.height, Math.floorDiv(chunk.cx, 4), Math.floorDiv(chunk.cz, 4));
+                site(
+                        seed,
+                        chunk.height,
+                        Math.floorDiv(chunk.cx, 4),
+                        Math.floorDiv(chunk.cz, 4),
+                        flat);
         if (site == null) return;
         for (int z = 0; z < 16; z++)
             for (int x = 0; x < 16; x++)
@@ -104,6 +175,7 @@ public final class DesertPyramid implements Structure {
                                     chunk.cz * 16 + z - site.z);
                     if (id >= 0) chunk.blocks[SimpleChunk.idx(x, y, z, chunk.height)] = (byte) id;
                 }
+        offerIronmocks(chunk.generatedOccupants, seed, site, chunk);
     }
 
     public static void placeInFinite(Level level, long seed) {
@@ -137,6 +209,9 @@ public final class DesertPyramid implements Structure {
                     int id = blockAt(dx, dy, dz);
                     if (id >= 0) level.setTileNoUpdate(x + dx, y - 1 + dy, z + dz, id);
                 }
+        List<GeneratedOccupant> occupants = new ArrayList<>();
+        offerIronmocks(occupants, level.biomeSeed, new Site(x, y - 1, z), null);
+        for (GeneratedOccupant occupant : occupants) occupant.spawn(level);
         return true;
     }
 

@@ -13,11 +13,11 @@ public class InputHandlerImpl extends InputHandler {
         yya = 0.0F;
 
         if (keyStates[0]) {
-            yya--;
+            yya++;
         }
 
         if (keyStates[1]) {
-            yya++;
+            yya--;
         }
 
         if (keyStates[2]) {

@@ -3,10 +3,36 @@ package net.classicremastered.minecraft.gui;
 import org.lwjgl.opengl.GL11;
 
 import net.classicremastered.minecraft.render.ShapeRenderer;
+import net.classicremastered.minecraft.render.TextureManager;
 
 public class Screen {
 
     protected float imgZ = 0.0F;
+
+    protected static void drawMinecoinIcon(TextureManager textures, int x, int y) {
+        GL11.glPushAttrib(
+                GL11.GL_ENABLE_BIT
+                        | GL11.GL_CURRENT_BIT
+                        | GL11.GL_TEXTURE_BIT
+                        | GL11.GL_COLOR_BUFFER_BIT);
+        try {
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glColor4f(1, 1, 1, 1);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, textures.load("/gui/minecoin.png"));
+            ShapeRenderer shape = ShapeRenderer.instance;
+            shape.begin();
+            shape.vertexUV(x, y + 10, 0, 0, 1);
+            shape.vertexUV(x + 9, y + 10, 0, 1, 1);
+            shape.vertexUV(x + 9, y, 0, 1, 0);
+            shape.vertexUV(x, y, 0, 0, 0);
+            shape.end();
+        } finally {
+            GL11.glPopAttrib();
+        }
+    }
 
     protected static void drawBox(int var0, int var1, int var2, int var3, int var4) {
         float var5 = (float) (var4 >>> 24) / 255.0F;

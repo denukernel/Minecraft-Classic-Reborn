@@ -12,19 +12,23 @@ public final class Equipment {
     public static Item STICK, LEATHER, STRING, ARROW;
     public static final int[] SWORDS = {21, 22, 2, 38, 39}, AXES = {23, 24, 25, 40, 41};
     public static final int DIAMOND_SHOVEL = 42, GOLDEN_SHOVEL = 43;
-    public static final int[][] ARMOR = {{26, 27, 28, 29}, {30, 31, 32, 33}};
+    public static final int[][] ARMOR = { { 26, 27, 28, 29 }, { 30, 31, 32, 33 },
+            { 200, 201, 202, 203 }, { 204, 205, 206, 207 } };
+
     private Equipment() {
     }
     public static final class Gear extends ToolItem {
         public final int damage, slot, protection, price;
-        public final boolean iron;
-        Gear(int id, String name, String texture, int damage, int slot, int protection, int price, boolean iron) {
+        public final String armorMaterial;
+
+        Gear(int id, String name, String texture, int damage, int slot, int protection, int price,
+                String armorMaterial) {
             super(id, name, texture);
             this.damage = damage;
             this.slot = slot;
             this.protection = protection;
             this.price = price;
-            this.iron = iron;
+            this.armorMaterial = armorMaterial;
             GEAR.put(id, this);
         }
 
@@ -46,23 +50,32 @@ public final class Equipment {
         int[] swordPrices = {4, 8, 15}, axePrices = {3, 7, 12};
         for (int t = 0; t < 3; t++) {
             Item sword = new Gear(SWORDS[t], tiers[t] + " Sword", "/items/gear/sword_" + t + ".png", 4 + t, -1, 0,
-                    swordPrices[t], t == 2);
+                    swordPrices[t], null);
             if (t == 2)
                 Item.SWORD = sword;
-            new Gear(AXES[t], tiers[t] + " Axe", "/items/gear/axe_" + t + ".png", 3 + t, -1, 0, axePrices[t], t == 2);
+            new Gear(AXES[t], tiers[t] + " Axe", "/items/gear/axe_" + t + ".png", 3 + t, -1, 0,
+                    axePrices[t], null);
         }
-        new Gear(SWORDS[3], "Diamond Sword", "/items/gear/diamond_sword.png", 7, -1, 0, 30, false);
-        new Gear(SWORDS[4], "Golden Sword", "/items/gear/golden_sword.png", 4, -1, 0, 12, false);
-        new Gear(AXES[3], "Diamond Axe", "/items/gear/diamond_axe.png", 9, -1, 0, 28, false);
-        new Gear(AXES[4], "Golden Axe", "/items/gear/golden_axe.png", 7, -1, 0, 10, false);
-        new Gear(DIAMOND_SHOVEL, "Diamond Shovel", "/items/gear/diamond_shovel.png", 5, -1, 0, 18, false);
-        new Gear(GOLDEN_SHOVEL, "Golden Shovel", "/items/gear/golden_shovel.png", 3, -1, 0, 7, false);
+        new Gear(SWORDS[3], "Diamond Sword", "/items/gear/diamond_sword.png", 7, -1, 0, 30, null);
+        new Gear(SWORDS[4], "Golden Sword", "/items/gear/golden_sword.png", 4, -1, 0, 12, null);
+        new Gear(AXES[3], "Diamond Axe", "/items/gear/diamond_axe.png", 9, -1, 0, 28, null);
+        new Gear(AXES[4], "Golden Axe", "/items/gear/golden_axe.png", 7, -1, 0, 10, null);
+        new Gear(DIAMOND_SHOVEL, "Diamond Shovel", "/items/gear/diamond_shovel.png", 5, -1, 0, 18,
+                null);
+        new Gear(GOLDEN_SHOVEL, "Golden Shovel", "/items/gear/golden_shovel.png", 3, -1, 0, 7, null);
         String[] slots = {"Helmet", "Chestplate", "Leggings", "Boots"};
-        int[][] points = {{1, 3, 2, 1}, {2, 6, 5, 2}}, prices = {{5, 10, 8, 4}, {10, 24, 18, 8}};
-        for (int t = 0; t < 2; t++)
-            for (int s = 0; s < 4; s++)
-                new Gear(ARMOR[t][s], (t == 0 ? "Leather " : "Iron ") + slots[s],
-                        "/items/gear/armor_" + t + "_" + s + ".png", 0, s, points[t][s], prices[t][s], t == 1);
+        String[] names = { "Leather", "Iron", "Golden", "Diamond" };
+        String[] materials = { "leather", "iron", "gold", "diamond" };
+        int[][] points = { { 1, 3, 2, 1 }, { 2, 6, 5, 2 }, { 2, 5, 3, 1 }, { 3, 8, 6, 3 } };
+        int[][] prices = { { 5, 10, 8, 4 }, { 10, 24, 18, 8 }, { 8, 16, 14, 7 }, { 20, 40, 34, 18 } };
+        for (int t = 0; t < ARMOR.length; t++) {
+            for (int s = 0; s < slots.length; s++) {
+                String icon = t < 2 ? "armor_" + t + "_" + s
+                        : names[t].toLowerCase(Locale.ROOT) + "_" + slots[s].toLowerCase(Locale.ROOT);
+                new Gear(ARMOR[t][s], names[t] + " " + slots[s], "/items/gear/" + icon + ".png", 0, s,
+                        points[t][s], prices[t][s], materials[t]);
+            }
+        }
         STICK = new Item(34, "Stick", "/items/gear/stick.png");
         LEATHER = new Item(35, "Leather", "/items/gear/leather.png");
         STRING = new Item(36, "String", "/items/gear/string.png");

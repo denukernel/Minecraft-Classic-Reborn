@@ -34,7 +34,7 @@ public abstract class HumanoidMob extends Mob {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, tm.load("/armor/plate.png"));
         GL11.glDisable(GL11.GL_CULL_FACE);
 
-        boolean isBaby = this instanceof BabyZombie || this instanceof BabySkeleton;
+        boolean isBaby = isBaby() && (this instanceof Zombie || this instanceof BabySkeleton);
         HumanoidModel armorModel =
                 (HumanoidModel)
                         modelCache.getModel(

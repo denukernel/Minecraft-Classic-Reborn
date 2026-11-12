@@ -60,7 +60,7 @@ public class TextureManager {
                 int textureID = idBuffer.get(0);
 
                 if (file.equals(BlockTextureAtlas.RESOURCE)) {
-                    load(BlockTextureAtlas.create(null), textureID);
+                    load(BlockTextureAtlas.create(null, settings.fastGraphics()), textureID);
                     textures.put(file, textureID);
                 } else if (file.endsWith(".png")) {
                     BufferedImage img = null;
@@ -89,7 +89,7 @@ public class TextureManager {
 
                 } else if (file.endsWith(".zip")) {
                     try (ZipFile zip = new ZipFile(new File(texturesFolder, file))) {
-                        load(BlockTextureAtlas.create(zip), textureID);
+                        load(BlockTextureAtlas.create(zip, settings.fastGraphics()), textureID);
                     }
                     externalTexturePacks.put(file, textureID);
                 }
@@ -251,7 +251,9 @@ public class TextureManager {
     // TextureManager.java
     public void applyBlockTextures() {
         try {
-            load(BlockTextureAtlas.create(null), load(BlockTextureAtlas.RESOURCE));
+            load(
+                    BlockTextureAtlas.create(null, settings.fastGraphics()),
+                    load(BlockTextureAtlas.RESOURCE));
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot load block textures", exception);
         }

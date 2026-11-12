@@ -31,9 +31,10 @@ public final class LanguageScreen extends GuiScreen {
 
         if (files != null) {
             Arrays.sort(files);
-            languages = Arrays.stream(files)
-                              .map(f -> f.getName().replace(".lang", ""))
-                              .collect(Collectors.toList());
+            languages =
+                    Arrays.stream(files)
+                            .map(f -> f.getName().replace(".lang", ""))
+                            .collect(Collectors.toList());
         }
 
         refreshButtons();
@@ -43,7 +44,8 @@ public final class LanguageScreen extends GuiScreen {
         this.buttons.clear();
 
         if (languages == null || languages.isEmpty()) {
-            this.buttons.add(new Button(200, this.width / 2 - 100, this.height - 36, 200, 20, "Done"));
+            this.buttons.add(
+                    new Button(200, this.width / 2 - 100, this.height - 36, 200, 20, "Done"));
             return;
         }
 
@@ -70,7 +72,6 @@ public final class LanguageScreen extends GuiScreen {
         this.buttons.add(new Button(200, this.width / 2 - 100, this.height - 36, 200, 20, "Done"));
     }
 
-
     @Override
     protected void onButtonClick(Button b) {
         if (b.id == 200) {
@@ -92,16 +93,22 @@ public final class LanguageScreen extends GuiScreen {
         if (b.id >= 0 && b.id < languages.size()) {
             String chosen = b.text;
             langMgr.load(chosen);
-            if (this.minecraft.hud != null) this.minecraft.hud.addChat("&aLanguage set to: " + chosen);
+            if (this.minecraft.hud != null)
+                this.minecraft.hud.addChat("&aLanguage set to: " + chosen);
             this.minecraft.setCurrentScreen(parent);
         }
     }
 
     @Override
     public void render(int mx, int my) {
-        if (this.minecraft.level == null) drawMenuBackground();
+        drawOptionsBackground();
         drawFadingBox(0, 0, width, height, 0x60000000, 0xA0000000);
-        drawCenteredString(this.fontRenderer, "Select Language (page " + (page + 1) + ")", this.width / 2, 20, 0xFFFFFF);
+        drawCenteredString(
+                this.fontRenderer,
+                "Select Language (page " + (page + 1) + ")",
+                this.width / 2,
+                20,
+                0xFFFFFF);
         super.render(mx, my);
     }
 }

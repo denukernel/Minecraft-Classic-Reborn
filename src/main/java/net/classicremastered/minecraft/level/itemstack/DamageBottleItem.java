@@ -15,7 +15,15 @@ public class DamageBottleItem extends Item {
 
         // Spawn thrown damage bottle
         if (!level.isNetworkMode()) {
-            level.addEntity(new ThrownDamageBottle(level, player, player.x, player.y + 0.12f, player.z, player.yRot, player.xRot, 1.2f));
+            level.addEntity(
+                    new ThrownDamageBottle(
+                            level,
+                            player,
+                            player.x,
+                            player.y + 0.12f,
+                            player.z,
+                            player.aimDirection(1),
+                            1.2f));
             level.playSound("random/pop", player, 0.5f, 0.8f);
         }
 

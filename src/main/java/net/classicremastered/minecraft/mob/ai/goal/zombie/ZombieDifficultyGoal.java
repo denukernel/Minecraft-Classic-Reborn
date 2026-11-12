@@ -44,7 +44,7 @@ public final class ZombieDifficultyGoal extends Goal {
                     a.runSpeed = 1.05f;
                     break;
 
-                case HARD :
+                case HARD, VERY_HARD, EXTREME:
                     a.damage = 6;
                     a.runSpeed = 1.20f;
                     break;

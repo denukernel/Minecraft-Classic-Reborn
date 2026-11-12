@@ -5,10 +5,15 @@ import java.io.ObjectInputStream;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.SaddleItem;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
+import net.classicremastered.minecraft.model.CowModel;
+import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.nbt.CompoundTag;
 
 public final class Cow extends QuadrupedMob {
     public static final long serialVersionUID = 0L;
+    private boolean saddled;
 
     public Cow(Level level, float x, float y, float z) {
         super(level, x, y, z);
@@ -30,6 +35,50 @@ public final class Cow extends QuadrupedMob {
     private void initSounds() {
         soundIdle = "mob/cow/classic_idle";
         soundHurt = "mob/cow/classic_hurt";
+    }
+
+    public boolean isSaddled() {
+        return saddled;
+    }
+
+    @Override
+    public float getSeatY() {
+        // The seated humanoid hip is 12 model pixels above this anchor.
+        return bb.y0 + .658f;
+    }
+
+    public void saddle() {
+        saddled = true;
+    }
+
+    @Override
+    public void savePersistence(CompoundTag tag) {
+        super.savePersistence(tag);
+        if (saddled)
+            tag.putBoolean("Saddled", true);
+    }
+
+    @Override
+    public void loadPersistence(CompoundTag tag) {
+        super.loadPersistence(tag);
+        saddled = tag.getBoolean("Saddled");
+    }
+
+    @Override
+    public void die(Entity killer) {
+        if (!dead && saddled && level.doMobLoot && !level.isNetworkMode())
+            level.addEntity(new net.classicremastered.minecraft.entity.DroppedItem(level, x, y, z,
+                    SaddleItem.ID));
+        saddled = false;
+        super.die(killer);
+    }
+
+    @Override
+    public void renderModel(TextureManager textures, float limb, float run, float age, float yaw,
+            float pitch, float scale) {
+        super.renderModel(textures, limb, run, age, yaw, pitch, scale);
+        if (saddled && modelCache.getModel(modelName) instanceof CowModel model)
+            model.renderSaddle(textures, scale);
     }
 
     @Override

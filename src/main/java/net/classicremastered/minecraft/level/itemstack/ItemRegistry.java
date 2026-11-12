@@ -41,19 +41,32 @@ public final class ItemRegistry {
         Item.GRAPPLING_HOOK = new GrapplingHookItem(18);
         Item.GLASS_LOOKER = new GlassLookerItem(19);
         Item.ENDER_PEARL = new EnderPearlItem(20);
+        Item.SNOWBALL = new SnowballItem(72);
+        Item.OAK_SIGN = new SignItem(73);
+        new BoatItem();
 
         Equipment.register();
+        TurretItems.register();
         Item.items[Item.LEVER_ICON_ID] =
                 new Item(Item.LEVER_ICON_ID, "Lever", "/textures/block/lever.png");
+        new Item(Item.TORCH_ICON_ID, "Torch", "/items/torch.png");
+        new Item(Item.REDSTONE_TORCH_ICON_ID, "Redstone Torch", "/items/redstone_torch.png");
+        new Item(Item.REPEATER_ICON_ID, "Redstone Repeater", "/items/repeater.png");
+        new Item(Item.COMPARATOR_ICON_ID, "Redstone Comparator", "/items/comparator.png");
+        new Item(Item.LADDER_ICON_ID, "Ladder", "/textures/block/tower_ladder.png");
         new Item(Item.REDSTONE_DUST_ID, "Redstone Dust", "/items/redstone.png");
         new Item(Item.COAL_ID, "Coal", "/items/coal.png");
+        OreMaterials.register();
+        new SaddleItem();
         for (MobWandItem.Power power : MobWandItem.Power.values())
             new MobWandItem(80 + power.ordinal(), power);
         // --- Spawn eggs ---
         int eggBaseId = 100; // free range, safe above your tools/items
         for (String name : MobRegistry.allNames()) {
             short mobId = MobRegistry.idOfName(name);
-            if (mobId < 0) continue; // invalid entry
+            if (mobId < 0
+                    || mobId == net.classicremastered.minecraft.mob.CrossbowTurret.REGISTRY_ID)
+                continue; // invalid entry
 
             // Create spawn egg item
             ItemSpawnEgg egg = new ItemSpawnEgg(eggBaseId + mobId, mobId, name);

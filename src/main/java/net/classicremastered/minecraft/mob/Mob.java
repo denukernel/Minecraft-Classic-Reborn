@@ -9,7 +9,8 @@ import net.classicremastered.minecraft.model.MD3Model;
 import net.classicremastered.minecraft.model.MD3Renderer;
 import net.classicremastered.minecraft.model.Model;
 import net.classicremastered.minecraft.model.ModelManager;
-import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.model.SkeletonModel;
+import net.classicremastered.minecraft.player.DeathMessages;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.minecraft.render.entity.BabyZombieRenderer;
@@ -19,6 +20,8 @@ import net.classicremastered.util.MathHelper;
 import org.lwjgl.opengl.GL11;
 
 public abstract class Mob extends Entity {
+    private transient Entity forcedFallAttacker;
+
     public transient net.classicremastered.minecraft.level.itemstack.MobBattle.Fight battle;
     public boolean persistent;
     public String customName = "";
@@ -35,12 +38,22 @@ public abstract class Mob extends Entity {
 
     public void savePersistence(net.classicremastered.nbt.CompoundTag tag) {
         tag.putBoolean("Persistent", persistent);
+        tag.putBoolean("TurretDefender", corruptedToDefendPlayer);
         tag.putString("CustomName", customName == null ? "" : customName);
         tag.putInt("DespawnIdleTicks", despawnIdleTicks);
     }
 
+    public float movementClearanceHeight() {
+        return rider == null ? bbHeight : ridingHeight(rider);
+    }
+
+    public float movementClearanceWidth() {
+        return rider == null ? bbWidth : ridingWidth(rider);
+    }
+
     public void loadPersistence(net.classicremastered.nbt.CompoundTag tag) {
         persistent = tag.getBoolean("Persistent");
+        if (tag.getBoolean("TurretDefender")) DefenderAI.restore(this);
         customName = tag.hasKey("CustomName") ? tag.getString("CustomName") : "";
         despawnIdleTicks = Math.max(0, tag.getInt("DespawnIdleTicks"));
     }
@@ -63,8 +76,19 @@ public abstract class Mob extends Entity {
     public float run;
     public float animStep;
     public float animStepO;
+    private transient float playerStrideSpeed;
 
     private transient net.classicremastered.minecraft.mob.ai.movement.MobLookControl lookControl;
+
+    public float renderBodyYaw(float partial) {
+        return yBodyRotO + (yBodyRot - yBodyRotO) * partial;
+    }
+
+    public float getEyeHeight(float partial) {
+        return this instanceof net.classicremastered.minecraft.player.Player player
+                ? player.getRenderHeightOffset(partial)
+                : (bb.y1 - bb.y0) * .85f;
+    }
 
     public float renderHeadYaw(float partial) {
         if (lookControl != null) return lookControl.yaw(this, partial);
@@ -184,8 +208,50 @@ public abstract class Mob extends Entity {
         return net.classicremastered.minecraft.mob.MobRegistry.idOf(this);
     }
 
+    private transient float previousFeetY;
+    private transient boolean hasPreviousFeetY;
+
+    @Override
+    public void setPos(float x, float y, float z) {
+        super.setPos(x, y, z);
+        hasPreviousFeetY = false;
+        forcedFallAttacker = null;
+    }
+
+    public void markForcedFall(Entity attacker) {
+        forcedFallAttacker =
+                level != null && attacker != this && attacker != null && attacker.level == level
+                        ? attacker
+                        : null;
+    }
+
+    @Override
+    public void move(float dx, float dy, float dz) {
+        super.move(dx, dy, dz);
+        // A horizontal move can leave the supporting edge after vertical collision resolves.
+        if (forcedFallAttacker != null
+                && onGround
+                && !level.getCubes(bb.cloneMove(0, -.001f, 0)).isEmpty()) {
+            forcedFallAttacker = null;
+        }
+    }
+
+    @Override
+    public void resetInterpolation() {
+        super.resetInterpolation();
+        previousFeetY = bb.y0;
+        hasPreviousFeetY = true;
+    }
+
+    public float renderFeetY(float partial) {
+        if (!hasPreviousFeetY) return bb.y0;
+        return previousFeetY + (bb.y0 - previousFeetY) * partial;
+    }
+
     @Override
     public void tick() {
+        previousFeetY = bb.y0;
+        hasPreviousFeetY = true;
         super.tick();
         net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.beforeMobTick(this);
 
@@ -249,7 +315,10 @@ public abstract class Mob extends Entity {
                 this.airSupply = Math.min(TOTAL_AIR_SUPPLY, this.airSupply + 4);
             }
         }
-        if (this.isInWater()) this.fallDistance = 0.0F;
+        if (this.isInWater()) {
+            this.fallDistance = 0.0F;
+            forcedFallAttacker = null;
+        }
         if (this.isInLava()) this.hurt(null, 10, "lava");
 
         this.animStepO = this.animStep;
@@ -258,10 +327,13 @@ public abstract class Mob extends Entity {
         this.xRotO = this.xRot;
 
         // Always run physics
-        if (this.rider == null
-                && !net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.moveHeld(this)
-                && !net.classicremastered.minecraft.level.itemstack.GravityGunItem.moveHeld(this)) {
+        if (riding != null) {
+            net.classicremastered.minecraft.mob.ai.MobRiding.tickRider(this);
+        } else if (!net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.moveHeld(this)
+                && !net.classicremastered.minecraft.level.itemstack.GravityGunItem.moveHeld(this)
+                && !net.classicremastered.minecraft.mob.ai.MobRiding.driveMount(this)) {
             this.aiStep();
+            net.classicremastered.minecraft.mob.ai.MobRiding.findJockeyMount(this);
         }
 
         // Walk/run animation bookkeeping
@@ -280,20 +352,37 @@ public abstract class Mob extends Entity {
         if (!this.onGround) moving = 0.0F;
         this.run += (moving - this.run) * 0.3F;
 
-        float dyaw = bodyYaw - this.yBodyRot;
-        while (dyaw < -180.0F) dyaw += 360.0F;
-        while (dyaw >= 180.0F) dyaw -= 360.0F;
-        this.yBodyRot += dyaw * 0.1F;
-
-        float headDiff = this.yRot - this.yBodyRot;
-        while (headDiff < -180.0F) headDiff += 360.0F;
-        while (headDiff >= 180.0F) headDiff -= 360.0F;
-        boolean flip = headDiff < -90.0F || headDiff >= 90.0F;
-        if (headDiff < -75.0F) headDiff = -75.0F;
-        if (headDiff >= 75.0F) headDiff = 75.0F;
-        this.yBodyRot = this.yRot - headDiff;
-        this.yBodyRot += headDiff * 0.1F;
+        boolean flip;
+        if (this instanceof net.classicremastered.minecraft.player.Player player
+                && player.input != null
+                && riding == null) {
+            flip = player.input.yya < 0f;
+            float strafe = player.movementStrafe() * (flip ? -1f : 1f);
+            float turn = (float) Math.toDegrees(Math.atan2(-strafe, Math.abs(player.input.yya)));
+            float targetYaw = this.yRot + Math.max(-45f, Math.min(45f, turn));
+            float delta = (float) Math.IEEEremainder(targetYaw - this.yBodyRot, 360f);
+            this.yBodyRot += delta * 0.3f;
+            float headDiff = (float) Math.IEEEremainder(this.yRot - this.yBodyRot, 360f);
+            this.yBodyRot += headDiff - Math.max(-50f, Math.min(50f, headDiff));
+        } else {
+            float delta = (float) Math.IEEEremainder(bodyYaw - this.yBodyRot, 360f);
+            this.yBodyRot += delta * 0.1f;
+            float headDiff = (float) Math.IEEEremainder(this.yRot - this.yBodyRot, 360f);
+            flip = headDiff < -90f || headDiff >= 90f;
+            float turnLimit =
+                    this instanceof net.classicremastered.minecraft.player.Player ? 45f : 75f;
+            headDiff = Math.max(-turnLimit, Math.min(turnLimit, headDiff));
+            this.yBodyRot = this.yRot - headDiff * 0.9f;
+        }
+        if (rider instanceof net.classicremastered.minecraft.player.Player)
+            this.yBodyRot = this.yRot;
         if (flip) walk = -walk;
+        if (this instanceof net.classicremastered.minecraft.player.Player && riding == null) {
+            playerStrideSpeed += (walk - playerStrideSpeed) * 0.4F;
+            walk = playerStrideSpeed;
+        } else {
+            playerStrideSpeed = 0.0F;
+        }
 
         while (this.yRot - this.yRotO < -180.0F) this.yRotO -= 360.0F;
         while (this.yRot - this.yRotO >= 180.0F) this.yRotO += 360.0F;
@@ -344,10 +433,34 @@ public abstract class Mob extends Entity {
         while (this.yRotO - this.yRot < -180.0F) this.yRotO += 360.0F;
         while (this.yRotO - this.yRot >= 180.0F) this.yRotO -= 360.0F;
 
-        float bodyRot = this.yBodyRotO + (this.yBodyRot - this.yBodyRotO) * partial;
+        float bodyRot = renderBodyYaw(partial);
         float runAmt = this.oRun + (this.run - this.oRun) * partial;
         float yaw = renderHeadYaw(partial);
         float pitch = renderHeadPitch(partial);
+        float modelYawOffset = rotOffs;
+        if (this instanceof net.classicremastered.minecraft.player.Player) {
+            modelYawOffset = 0f;
+            if (riding instanceof Mob mount) {
+                bodyRot =
+                        mount.yBodyRotO
+                                + (float) Math.IEEEremainder(mount.yBodyRot - mount.yBodyRotO, 360f)
+                                        * partial
+                                - mount.rotOffs;
+            } else if (riding instanceof net.classicremastered.minecraft.entity.BoatEntity boat) {
+                bodyRot = boat.renderYaw(partial);
+            }
+            float look =
+                    (float) Math.IEEEremainder(yRotO + (yRot - yRotO) * partial - bodyRot, 360f);
+            yaw = Math.max(-75f, Math.min(75f, look));
+        } else if (this instanceof Zombie
+                && isBaby()
+                && !(this instanceof Skeleton)
+                && riding instanceof Mob mount) {
+            float look = bodyRot + yaw;
+            bodyRot = mount.renderBodyYaw(partial) - mount.rotOffs;
+            yaw = (float) Math.IEEEremainder(look - bodyRot, 360);
+            yaw = Math.max(-75f, Math.min(75f, yaw));
+        }
 
         GL11.glPushMatrix();
         float anim = this.animStepO + (this.animStep - this.animStepO) * partial;
@@ -360,31 +473,62 @@ public abstract class Mob extends Entity {
 
         // ---- model ground lift ----
         float groundLift = 23.0F;
+        boolean groundSkeletonStride = false;
         if (this.modelName != null && this.modelName.endsWith(".md3")) {
             groundLift = this.modelGroundOffset;
         } else if (modelCache != null && this.modelName != null) {
             Model mm = modelCache.getModel(this.modelName);
             if (mm != null) groundLift = mm.groundOffset;
+            if (mm instanceof SkeletonModel skeletonModel && riding == null && health > 0) {
+                groundSkeletonStride = true;
+                if (onGround)
+                    groundLift -= skeletonModel.groundedStrideOffset(anim, runAmt, isBaby());
+            }
         }
 
-        float bob =
-                -Math.abs(MathHelper.cos(anim * 0.6662F)) * 5.0F * runAmt * this.bobStrength
-                        - groundLift;
+        float walkBob =
+                groundSkeletonStride
+                        ? 0f
+                        : Math.abs(MathHelper.cos(anim * .6662F))
+                                * 5.0F
+                                * runAmt
+                                * this.bobStrength;
+        float bob = -walkBob - groundLift;
 
         // ---- move to entity ----
         float renderHeightOffset =
-                this instanceof net.classicremastered.minecraft.player.Player player
+                riding == null
+                                && this
+                                        instanceof
+                                        net.classicremastered.minecraft.player.Player player
                         ? player.getRenderHeightOffset(partial)
                         : this.heightOffset;
+        float anchorY =
+                this instanceof net.classicremastered.minecraft.player.Player || riding != null
+                        ? this.yo + (this.y - this.yo) * partial - renderHeightOffset
+                        : renderFeetY(partial);
+        if (riding instanceof net.classicremastered.minecraft.entity.BoatEntity
+                && (this instanceof HumanoidMob
+                        || this instanceof net.classicremastered.minecraft.player.Player)) {
+            anchorY -= isBaby() ? .19f : .30f;
+        } else if (riding != null
+                && !(riding instanceof Cow)
+                && !(this instanceof Skeleton && riding instanceof Spider)
+                && (this instanceof Zombie
+                        || this instanceof net.classicremastered.minecraft.player.Player)) {
+            anchorY -= isBaby() ? .43f : .62f;
+        }
         GL11.glTranslatef(
                 this.xo + (this.x - this.xo) * partial,
-                this.yo + (this.y - this.yo) * partial - renderHeightOffset + this.renderOffset,
+                anchorY + this.renderOffset,
                 this.zo + (this.z - this.zo) * partial);
 
-        boolean showFireOverlay = this.remainingFireTicks > 0;
+        boolean showFireOverlay =
+                this.remainingFireTicks > 0
+                        && (!(this instanceof Zombie undead) || !undead.isInWaterOrOnWater());
         if (!showFireOverlay && this instanceof Zombie) {
             Zombie z = (Zombie) this;
-            if (!z.isSunImmune()
+            if (z.canBurnInSunlight()
                     && z.level != null
                     && z.level.shouldUndeadBurnAt(z)
                     && !z.isInWaterOrOnWater()) {
@@ -437,16 +581,16 @@ public abstract class Mob extends Entity {
             }
 
             float dir = this.hurtDir;
-            GL11.glRotatef(180.0F - bodyRot + this.rotOffs, 0.0F, 1.0F, 0.0F);
+            GL11.glRotatef(180.0F - bodyRot + modelYawOffset, 0.0F, 1.0F, 0.0F);
             GL11.glRotatef(-dir, 0.0F, 1.0F, 0.0F);
             GL11.glRotatef(-ht, 0.0F, 0.0F, 1.0F);
             GL11.glRotatef(dir, 0.0F, 1.0F, 0.0F);
-            GL11.glRotatef(-(180.0F - bodyRot + this.rotOffs), 0.0F, 1.0F, 0.0F);
+            GL11.glRotatef(-(180.0F - bodyRot + modelYawOffset), 0.0F, 1.0F, 0.0F);
         }
 
         GL11.glTranslatef(0.0F, -bob * scale, 0.0F);
         GL11.glScalef(1.0F, -1.0F, 1.0F);
-        GL11.glRotatef(180.0F - bodyRot + this.rotOffs, 0.0F, 1.0F, 0.0F);
+        GL11.glRotatef(180.0F - bodyRot + modelYawOffset, 0.0F, 1.0F, 0.0F);
 
         // Alpha/Cull state
         if (!this.allowAlpha) GL11.glDisable(GL11.GL_ALPHA_TEST);
@@ -494,22 +638,6 @@ public abstract class Mob extends Entity {
                         this, h, tm, scale, baseBright);
             }
         }
-        // === DEBUG hitboxes (unchanged) ===
-        if (level != null && level.minecraft != null && level.minecraft.debugHitboxes) {
-            AABB b = this.bb;
-            GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
-            GL11.glDisable(GL11.GL_TEXTURE_2D);
-            GL11.glDisable(GL11.GL_LIGHTING);
-            GL11.glDisable(GL11.GL_CULL_FACE);
-            GL11.glDisable(GL11.GL_DEPTH_TEST);
-            GL11.glLineWidth(2.0F);
-            GL11.glColor3f(0.0F, 1.0F, 0.0F);
-            GL11.glBegin(GL11.GL_LINES);
-            // ... (your hitbox drawing code unchanged)
-            GL11.glEnd();
-            GL11.glPopAttrib();
-        }
-
         // === Hurt/dying overlay (with null-safe modelName) ===
         float hurtLeft = (float) this.hurtTime - partial;
         boolean hurtNow = (hurtLeft > 0.0F && this.hurtDuration > 0);
@@ -532,7 +660,7 @@ public abstract class Mob extends Entity {
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
             GL11.glColor4f(1.0f, 0.2f, 0.2f, Math.min(0.75f, 0.55f * s));
 
-            if (this instanceof BabyZombie) {
+            if (this instanceof Skeleton || this instanceof Zombie && isBaby()) {
                 this.bindTexture(tm);
             }
             if (this.modelName != null && this.modelName.endsWith(".md3")) {
@@ -589,8 +717,10 @@ public abstract class Mob extends Entity {
         if (modelCache == null || this.modelName == null) return;
         Model m = modelCache.getModel(this.modelName);
         if (m == null) return;
-        if (m instanceof net.classicremastered.minecraft.model.SkeletonModel skeletonModel)
+        if (m instanceof net.classicremastered.minecraft.model.SkeletonModel skeletonModel) {
             skeletonModel.setRenderTextures(tm);
+            skeletonModel.setRenderPartial(partial);
+        }
         if (this instanceof net.classicremastered.minecraft.mob.Chicken
                 && m instanceof net.classicremastered.minecraft.model.ChickenModel) {
             ((net.classicremastered.minecraft.model.ChickenModel) m)
@@ -646,10 +776,26 @@ public abstract class Mob extends Entity {
     /** DAMAGE ALLOWED in both Survival and Creative. */
     @Override
     public void hurt(Entity src, int dmg) {
+        Entity responsible =
+                src instanceof net.classicremastered.minecraft.entity.Arrow arrow
+                        ? arrow.getOwner()
+                        : src;
+        if (responsible instanceof Mob ally
+                && (ally.corruptedToDefendPlayer || ally instanceof Defender)
+                && (this instanceof net.classicremastered.minecraft.player.Player
+                        || this instanceof CrossbowTurret
+                        || this instanceof Defender
+                        || corruptedToDefendPlayer
+                        || (ally instanceof Defender
+                                ? !Defender.isEnemy(this)
+                                : !MobRegistry.isTurretHostile(this)))) return;
         if (this.health <= 0 || this.dead || this.removed) return;
 
         boolean freshHit =
-                this.invulnerableTime <= this.invulnerableDuration / 2f
+                (src instanceof net.classicremastered.minecraft.entity.Arrow pellet
+                                && pellet.getOwner() instanceof CrossbowTurret turret
+                                && turret.variant.shotgun())
+                        || this.invulnerableTime <= this.invulnerableDuration / 2f
                         || src instanceof net.classicremastered.minecraft.player.Player player
                                 && player.developerPowers().isRapidPunch();
         if (src != null || explosionDamage) {
@@ -666,7 +812,12 @@ public abstract class Mob extends Entity {
                 if (attacker instanceof Zombie
                         || attacker instanceof Skeleton
                         || attacker instanceof Spider)
-                    dmg = net.classicremastered.minecraft.CombatRules.damage(level, dmg);
+                    dmg =
+                            net.classicremastered.minecraft.CombatRules.undeadDamage(
+                                    level,
+                                    dmg,
+                                    (Mob) attacker,
+                                    src instanceof net.classicremastered.minecraft.entity.Arrow);
             }
             if (freshHit) {
                 dmg = net.classicremastered.minecraft.level.itemstack.Equipment.reduce(this, dmg);
@@ -695,13 +846,15 @@ public abstract class Mob extends Entity {
             this.hurtTime = this.hurtDuration = 10;
         }
 
-        // ✅ Only play hurt sound if still alive after damage
-        if (this.health > 0 && this.soundHurt != null && this.level != null) {
+        String hurtSound = soundHurt;
+        if (hurtSound == null && !(this instanceof net.classicremastered.minecraft.player.Player))
+            hurtSound = "damage/hit";
+        if (this.health > 0 && hurtSound != null && this.level != null) {
             if (this.level.minecraft == null
                     || this.level.minecraft.settings == null
                     || this.level.minecraft.settings.allowMobSounds) {
                 float pitch = randPitch(hurtPitchMin, hurtPitchMax);
-                this.level.playSound(this.soundHurt, this, 1.0F, pitch);
+                this.level.playSound(hurtSound, this, 1.0F, pitch);
             }
         }
 
@@ -735,7 +888,15 @@ public abstract class Mob extends Entity {
         }
 
         if (this.health <= 0) {
-            this.die(src);
+            Entity killer = src;
+            if (killer == null
+                    && "fall".equals(damageCause)
+                    && forcedFallAttacker != null
+                    && forcedFallAttacker.level == level) {
+                killer = forcedFallAttacker;
+            }
+            forcedFallAttacker = null;
+            this.die(killer);
         }
     }
 
@@ -744,17 +905,46 @@ public abstract class Mob extends Entity {
 
     protected int coinDrop = 0; // default: no coins
 
+    private int killScore() {
+        if (deathScore > 0) return deathScore;
+        if (this instanceof Skeleton) return 120;
+        if (this instanceof Zombie || MobRegistry.isTurretHostile(this)) return 80;
+        return 0;
+    }
+
+    private int legacyCoinBonus() {
+        if (deathScore <= 0) return 0;
+        if (this instanceof Enderman) return 4;
+        if (this instanceof Skeleton || this instanceof Spider) return 2;
+        return this instanceof Zombie ? 1 : 0;
+    }
+
     public void die(Entity killer) {
         if (dead) return;
         net.classicremastered.minecraft.level.itemstack.MobBattle.stop(this);
         if (level != null && !level.isNetworkMode() && level.doMobLoot) {
-            for (int raw : equipment)
+            for (int slot = 0; slot < equipment.length; slot++) {
+                int raw = equipment[slot];
                 if (raw > 0
-                        && level.random.nextFloat() < .05f
+                        && level.random.nextFloat()
+                                < (this instanceof Zombie && slot < 4 ? .085f : .05f)
                         && !(this instanceof net.classicremastered.minecraft.player.Player))
                     level.addEntity(
                             new net.classicremastered.minecraft.entity.DroppedItem(
                                     level, x, y, z, raw - 256));
+            }
+            if (this instanceof Enderman
+                    && level.random.nextBoolean()
+                    && net.classicremastered.minecraft.level.itemstack.Item.ENDER_PEARL != null) {
+                level.addEntity(
+                        new net.classicremastered.minecraft.entity.DroppedItem(
+                                level,
+                                x,
+                                y,
+                                z,
+                                net.classicremastered.minecraft.level.itemstack.Item.ENDER_PEARL
+                                        .id));
+            }
             if (this instanceof Pig || this instanceof Spider) {
                 var item =
                         this instanceof Pig
@@ -766,16 +956,13 @@ public abstract class Mob extends Entity {
                                     level, x, y, z, item.id, 1 + level.random.nextInt(2)));
             }
         }
-        if (this.deathScore > 0 && killer != null) {
-            killer.awardKillScore(this, this.deathScore);
-        }
-
-        // Score forwarding and coin attribution both follow the projectile owner.
-        Entity credited =
-                killer instanceof net.classicremastered.minecraft.entity.Arrow arrow
-                        ? arrow.getOwner()
-                        : killer;
+        // Keep damage attribution separate so turret victims retaliate against the turret.
+        Entity credited = DeathMessages.resolveAttacker(killer);
+        if (credited instanceof CrossbowTurret turret) credited = turret.creditedOwner();
+        int points = killScore();
+        if (credited != null && points > 0) credited.awardKillScore(this, points);
         if (credited instanceof net.classicremastered.minecraft.player.Player p) {
+            p.coins += legacyCoinBonus();
             if (coinDrop > 0 && (level == null || level.doMobLoot)) {
                 p.coins += coinDrop;
                 if (p.minecraft != null && p.minecraft.hud != null) {
@@ -792,12 +979,15 @@ public abstract class Mob extends Entity {
         if (this.riding != null) {
             this.unmount();
         }
-        if (this.soundDeath != null && this.level != null) {
+        String deathSound = soundDeath;
+        if (deathSound == null && !(this instanceof net.classicremastered.minecraft.player.Player))
+            deathSound = "damage/hit";
+        if (deathSound != null && this.level != null) {
             if (this.level.minecraft == null
                     || this.level.minecraft.settings == null
                     || this.level.minecraft.settings.allowMobSounds) {
                 float pitch = randPitch(deathPitchMin, deathPitchMax);
-                this.level.playSound(this.soundDeath, this, 1.0F, pitch);
+                this.level.playSound(deathSound, this, 1.0F, pitch);
             }
         }
         this.dead = true;
@@ -821,21 +1011,18 @@ public abstract class Mob extends Entity {
         if (this.yd > 0.4F) this.yd = 0.4F;
     }
 
+    public void animateHurt(float dx, float dz) {
+        if (health <= 0 || removed) return;
+        hurtTime = hurtDuration = 10;
+        hurtDir = (float) Math.toDegrees(Math.atan2(dz, dx)) - yRot;
+    }
+
     /** Fall damage applies in all modes for consistency. */
     @Override
     protected void causeFallDamage(float dist) {
         int dmg = (int) Math.ceil((double) (dist - 3.01F));
         if (dmg > 0) {
-            // Check if this mob was thrown by a player
-            net.classicremastered.minecraft.player.Player thrower =
-                    net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.thrownBy.get(
-                            this);
-
-            if (thrower != null) {
-                this.hurt(thrower, dmg, "fall"); // credit the thrower
-            } else {
-                this.hurt(null, dmg, "fall"); // environment damage
-            }
+            this.hurt(null, dmg, "fall");
         }
     }
 
@@ -866,7 +1053,9 @@ public abstract class Mob extends Entity {
         }
 
         if (this instanceof net.classicremastered.minecraft.player.Player player)
-            scale *= player.developerPowers().movementMultiplier(player);
+            scale *=
+                    player.developerPowers().movementMultiplier(player)
+                            * player.frostbiteMovementMultiplier();
 
         if (isInWater()) {
             y1 = y;
@@ -889,6 +1078,21 @@ public abstract class Mob extends Entity {
             if (horizontalCollision && isFree(xd, yd + 0.6f - y + y1, zd)) yd = 0.30f;
 
         } else {
+            boolean climbing =
+                    this instanceof net.classicremastered.minecraft.player.Player
+                            && net.classicremastered.minecraft.level.tile.LadderBlock.isLadder(
+                                    level.getTile(
+                                            (int) Math.floor(x),
+                                            (int) Math.floor(bb.y0 + .05f),
+                                            (int) Math.floor(z)));
+            if (climbing) {
+                fallDistance = 0;
+                var climber = (net.classicremastered.minecraft.player.Player) this;
+                if (climber.isHoldingLadder()) yd = 0;
+                else if (horizontalCollision || ai instanceof BasicAI input && input.jumping)
+                    yd = .22f;
+                else yd = Math.max(yd, -.12f);
+            }
             // ground vs air
             float base = onGround ? walkSpeed : airSpeed;
             moveRelative(yya, xxa, base * scale);

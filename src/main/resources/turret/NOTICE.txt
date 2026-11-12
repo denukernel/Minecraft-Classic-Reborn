@@ -1,0 +1,1 @@
+Turret Mod Rebirth by SanAndreaP, revision b90642f993f74c13c3ff7602ad1b21cb71accf97. The model, textures, and control panel artwork are used under the accompanying BSD 3-Clause License.

@@ -32,7 +32,7 @@ public final class ModLoader {
     public static synchronized void bootstrap(Minecraft mc) {
         if (INSTANCE != null) return;
         INSTANCE = new ModLoader(mc);
-        Hooks.install(INSTANCE);     // lets Hooks.onClientTick(...) call back into this instance
+        Hooks.install(INSTANCE); // lets Hooks.onClientTick(...) call back into this instance
         INSTANCE.loadAll();
     }
 
@@ -41,52 +41,86 @@ public final class ModLoader {
     private final EventBus events = new EventBus();
     private final CommandRegistry commands = new CommandRegistry();
     private final BlockRegistryContext blockCtx = new BlockRegistryContext();
-    private final ItemRegistryContext itemCtx  = new ItemRegistryContext();
+    private final ItemRegistryContext itemCtx = new ItemRegistryContext();
     private final EntityRegistryContext entCtx = new EntityRegistryContext();
     private final SoundRegistryContext soundCtx = new SoundRegistryContext();
 
     private final List<Mod> mods = new ArrayList<>();
+    private final List<Mod> builtinMods = BuiltinMods.create();
+    private final Properties selections = new Properties();
+    private File selectionFile;
     private final Map<Mod, Method> tickMethods = new LinkedHashMap<>(); // cached onClientTick()
     private URLClassLoader modClassLoader; // kept alive until shutdown
     private volatile String queuedHudBanner = null;
 
-    private ModLoader(Minecraft mc) { this.mc = mc; }
+    private ModLoader(Minecraft mc) {
+        this.mc = mc;
+    }
 
-    public SoundRegistryContext sounds()  { return soundCtx; }
-    public EventBus events()              { return events; }
-    public CommandRegistry commands()     { return commands; }
-    public BlockRegistryContext blocks()  { return blockCtx; }
-    public ItemRegistryContext items()    { return itemCtx; }
-    public EntityRegistryContext entities(){ return entCtx; }
+    public SoundRegistryContext sounds() {
+        return soundCtx;
+    }
 
+    public EventBus events() {
+        return events;
+    }
 
+    public CommandRegistry commands() {
+        return commands;
+    }
+
+    public BlockRegistryContext blocks() {
+        return blockCtx;
+    }
+
+    public ItemRegistryContext items() {
+        return itemCtx;
+    }
+
+    public EntityRegistryContext entities() {
+        return entCtx;
+    }
 
     // ----- per-frame (from Hooks.onClientTick) -----
     public void onClientTick(Minecraft mc) {
         // Show any queued banner once HUD exists
         String banner = queuedHudBanner;
         if (banner != null && mc != null && mc.hud != null) {
-            try { mc.hud.addChat(banner); } catch (Throwable ignored) {}
+            try {
+                mc.hud.addChat(banner);
+            } catch (Throwable ignored) {
+            }
             queuedHudBanner = null;
         }
 
         // Only tick mods once LWJGL is ready
         try {
-            if (!org.lwjgl.opengl.Display.isCreated() || !org.lwjgl.input.Keyboard.isCreated()) return;
-        } catch (Throwable ignored) { return; }
+            if (!org.lwjgl.opengl.Display.isCreated() || !org.lwjgl.input.Keyboard.isCreated())
+                return;
+        } catch (Throwable ignored) {
+            return;
+        }
 
         // Dispatch cached tick methods (no reflection lookup per frame)
         for (Map.Entry<Mod, Method> e : tickMethods.entrySet()) {
             Method m = e.getValue();
             if (m == null) continue;
-            try { m.invoke(e.getKey()); } catch (Throwable t) { t.printStackTrace(); }
+            try {
+                m.invoke(e.getKey());
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
         }
     }
 
     private void queueHud(String msg) {
         System.out.println(msg);
         if (mc != null && mc.hud != null) {
-            try { mc.hud.addChat(msg); return; } catch (Throwable ignored) {}
+            try {
+                mc.hud.addChat(msg);
+                return;
+            } catch (Throwable ignored) {
+            }
         }
         queuedHudBanner = msg;
     }
@@ -99,10 +133,26 @@ public final class ModLoader {
         File base = (Minecraft.mcDir != null) ? Minecraft.mcDir : new File(".");
         File modsDir = new File(base, "mods");
         if (!modsDir.exists()) modsDir.mkdirs();
+        rejectedMods.clear();
+        selectionFile = new File(modsDir, "builtin-mods.properties");
+        if (selectionFile.isFile()) {
+            try (InputStream in = new FileInputStream(selectionFile)) {
+                selections.load(in);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+        for (Mod mod : builtinMods) {
+            if (isSelected(mod)) addModIfNew(mod);
+        }
 
         System.out.println("[ModLoader] mcDir=" + Minecraft.mcDir);
         System.out.println("[ModLoader] CWD=" + new File(".").getAbsolutePath());
-        System.out.println("[ModLoader] Mods dir=" + modsDir.getAbsolutePath() + " exists=" + modsDir.exists());
+        System.out.println(
+                "[ModLoader] Mods dir="
+                        + modsDir.getAbsolutePath()
+                        + " exists="
+                        + modsDir.exists());
 
         // Gather candidate containers (jars + dirs, recursive)
         List<File> containers = new ArrayList<>();
@@ -112,7 +162,11 @@ public final class ModLoader {
 
         // Build URLClassLoader with those containers
         List<URL> urls = new ArrayList<>();
-        for (File f : containers) try { urls.add(f.toURI().toURL()); } catch (Exception ignored) {}
+        for (File f : containers)
+            try {
+                urls.add(f.toURI().toURL());
+            } catch (Exception ignored) {
+            }
         ClassLoader parent = Minecraft.class.getClassLoader(); // game classes visible
         modClassLoader = new URLClassLoader(urls.toArray(new URL[0]), parent);
 
@@ -120,7 +174,9 @@ public final class ModLoader {
         try {
             ServiceLoader<Mod> service = ServiceLoader.load(Mod.class, modClassLoader);
             for (Mod m : service) addModIfNew(m);
-        } catch (Throwable t) { t.printStackTrace(); }
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
 
         // 2) Explicit class list from mods/classlist.txt (optional, user-friendly)
         Set<String> classNames = new LinkedHashSet<>();
@@ -132,7 +188,9 @@ public final class ModLoader {
                     String cn = line.trim();
                     if (!cn.isEmpty() && !cn.startsWith("#")) classNames.add(cn);
                 }
-            } catch (Exception ex) { ex.printStackTrace(); }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
         }
 
         // 3) Fall back to scanning all jars/dirs for .class files
@@ -152,7 +210,11 @@ public final class ModLoader {
                 if (Modifier.isAbstract(c.getModifiers())) continue;
                 // avoid duplicates if ServiceLoader already created one
                 boolean dup = false;
-                for (Mod existing : mods) if (existing.getClass() == c) { dup = true; break; }
+                for (Mod existing : mods)
+                    if (existing.getClass() == c) {
+                        dup = true;
+                        break;
+                    }
                 if (dup) continue;
 
                 Mod m = (Mod) c.getDeclaredConstructor().newInstance();
@@ -166,18 +228,51 @@ public final class ModLoader {
         if (mods.isEmpty()) {
             queueHud("[ModLoader] No mods loaded (" + containers.size() + " candidates).");
         } else {
-            queueHud("[ModLoader] Loaded " + mods.size() + " mod(s) from " + containers.size() + " candidate(s).");
+            queueHud(
+                    "[ModLoader] Loaded "
+                            + mods.size()
+                            + " mod(s) from "
+                            + containers.size()
+                            + " candidate(s).");
         }
 
         // Shared context + lifecycle
         ModContext ctx = new ModContext(mc, events, commands, blockCtx, itemCtx, entCtx, soundCtx);
 
-        for (Mod m : mods) safe(() -> { try { m.preInit(ctx); }  catch (Exception e) { e.printStackTrace(); }});
-        for (Mod m : mods) safe(() -> { try { m.init(ctx); }     catch (Exception e) { e.printStackTrace(); }});
-        for (Mod m : mods) safe(() -> { try { m.postInit(ctx); } catch (Exception e) { e.printStackTrace(); }});
+        for (Mod m : mods)
+            safe(
+                    () -> {
+                        try {
+                            m.preInit(ctx);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
+        for (Mod m : mods)
+            safe(
+                    () -> {
+                        try {
+                            m.init(ctx);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
+        for (Mod m : mods)
+            safe(
+                    () -> {
+                        try {
+                            m.postInit(ctx);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
 
         // Flush any registered sounds into Paulscode
-        try { if (mc != null && mc.soundPC != null) soundCtx.flushTo(mc.soundPC); } catch (Throwable t) { t.printStackTrace(); }
+        try {
+            if (mc != null && mc.soundPC != null) soundCtx.flushTo(mc.soundPC);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
 
         events.post(new LifecycleEvents.GameStarted(mc));
     }
@@ -216,23 +311,37 @@ public final class ModLoader {
         }
     }
 
-
     public void shutdown() {
         for (Mod m : mods) safe(m::onShutdown);
         events.post(new LifecycleEvents.GameStopping(mc));
         if (modClassLoader != null) {
-            try { modClassLoader.close(); } catch (Exception ignored) {}
+            try {
+                modClassLoader.close();
+            } catch (Exception ignored) {
+            }
             modClassLoader = null;
         }
     }
 
     public static void shutdownIfAlive() {
         if (INSTANCE != null) {
-            try { INSTANCE.shutdown(); } catch (Throwable t) { t.printStackTrace(); } finally { INSTANCE = null; }
+            try {
+                INSTANCE.shutdown();
+            } catch (Throwable t) {
+                t.printStackTrace();
+            } finally {
+                INSTANCE = null;
+            }
         }
     }
 
-    private static void safe(Runnable r) { try { r.run(); } catch (Throwable t) { t.printStackTrace(); } }
+    private static void safe(Runnable r) {
+        try {
+            r.run();
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
 
     // ----------- filesystem helpers -----------
 
@@ -241,8 +350,8 @@ public final class ModLoader {
         if (list == null) return;
         for (File f : list) {
             if (f.isDirectory()) {
-                out.add(f);                 // treat as a class root
-                collectContainers(f, out);  // also descend into subfolders
+                out.add(f); // treat as a class root
+                collectContainers(f, out); // also descend into subfolders
             } else if (f.isFile() && f.getName().toLowerCase(Locale.ROOT).endsWith(".jar")) {
                 out.add(f);
             }
@@ -261,13 +370,16 @@ public final class ModLoader {
                     names.add(n.substring(0, n.length() - 6).replace('/', '.'));
                 }
             }
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
         return names;
     }
- // added: allow other classes to access the active ModLoader
+
+    // added: allow other classes to access the active ModLoader
     public static ModLoader getInstance() {
         return INSTANCE;
     }
+
     private static final List<RejectedMod> rejectedMods = new ArrayList<>();
 
     public static List<RejectedMod> getRejectedMods() {
@@ -278,7 +390,49 @@ public final class ModLoader {
     public List<Mod> getLoadedMods() {
         return Collections.unmodifiableList(mods);
     }
- // added: holds info about a rejected mod
+
+    public List<Mod> getBuiltinMods() {
+        return Collections.unmodifiableList(builtinMods);
+    }
+
+    public boolean isSelected(Mod mod) {
+        String id = mod.getClass().getAnnotation(ModInfo.class).id();
+        return Boolean.parseBoolean(selections.getProperty(id, "true"));
+    }
+
+    /** Save next-launch selection without unloading live content or event handlers. */
+    public void setSelected(Mod mod, boolean enabled) throws IOException {
+        if (!builtinMods.contains(mod)) throw new IllegalArgumentException("not a bundled mod");
+        String id = mod.getClass().getAnnotation(ModInfo.class).id();
+        Properties updated = new Properties();
+        updated.putAll(selections);
+        updated.setProperty(id, Boolean.toString(enabled));
+        java.nio.file.Path temporary =
+                java.nio.file.Files.createTempFile(
+                        selectionFile.getParentFile().toPath(), "builtin-mods-", ".tmp");
+        try {
+            try (OutputStream out = java.nio.file.Files.newOutputStream(temporary)) {
+                updated.store(out, "Bundled mods enabled on next launch");
+            }
+            java.nio.file.Files.move(
+                    temporary,
+                    selectionFile.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            selections.clear();
+            selections.putAll(updated);
+        } finally {
+            java.nio.file.Files.deleteIfExists(temporary);
+        }
+    }
+
+    public String testBuiltinMod() {
+        for (Mod mod : mods) {
+            if (mod instanceof BuiltinMods.TestMod) return ((BuiltinMods.TestMod) mod).testResult();
+        }
+        return "enable test mod and restart the game to test";
+    }
+
+    // added: holds info about a rejected mod
     public static class RejectedMod {
         public final String name;
         public final String reason;

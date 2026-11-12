@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.entity.FlyingPlank;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.ai.vandalizer.HouseVandalizerAI;
+import net.classicremastered.minecraft.model.Vec3D;
 
 /**
  * Rare undead house raider. Planks are taken from the actual house, never
@@ -35,21 +36,31 @@ public final class HouseVandalizer extends Zombie {
         super.tick();
     }
 
-    public boolean tearPlank(int x, int y, int z) {
-        if (health <= 0 || level == null || level.isNetworkMode() || level.getTile(x, y, z) != Block.WOOD.id)
+    public boolean tearHouseBlock(int x, int y, int z, Block block) {
+        if (health <= 0 || level == null || level.isNetworkMode()
+                || (block != Block.WOOD && block != Block.GLASS) || level.getTile(x, y, z) != block.id)
             return false;
+        if (block == Block.GLASS) {
+            var wall = level.clip(new Vec3D(this.x, bb.y0 + 1.25f, this.z),
+                    new Vec3D(x + .5f, y + .5f, z + .5f));
+            if (wall != null && (wall.x != x || wall.y != y || wall.z != z))
+                return false;
+        }
         if (!level.setTile(x, y, z, 0))
             return false;
         if (level.getTile(x, y, z) != 0) {
-            level.setTile(x, y, z, Block.WOOD.id);
+            level.setTile(x, y, z, block.id);
             return false;
         }
-        float angle = yBodyRot * (float) Math.PI / 180f;
+        boolean glass = block == Block.GLASS;
+        float angle = glass ? (float) Math.atan2(this.x - x - .5f, z + .5f - this.z)
+                : yBodyRot * (float) Math.PI / 180f;
         float bx = (float) Math.sin(angle), bz = -(float) Math.cos(angle);
         level.addEntity(new FlyingPlank(level, this, this.x + bx * .8f, this.bb.y0 + 1.25f, this.z + bz * .8f,
-                bx * .65f, .3f, bz * .65f));
+                bx * .65f, .3f, bz * .65f, glass));
         throwTicks = 12;
-        level.playSound("step/wood", this, .8f, .8f);
+        if (!glass)
+            level.playSound("step/wood", this, .8f, .8f);
         return true;
     }
 }

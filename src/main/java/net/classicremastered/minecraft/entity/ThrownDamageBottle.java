@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.minecraft.render.ShapeRenderer;
@@ -10,34 +11,37 @@ import net.classicremastered.util.MathHelper;
 import java.util.List;
 
 public class ThrownDamageBottle extends Entity {
-    public float xd, yd, zd;
     private Entity owner;
     private int time = 0;
 
     public ThrownDamageBottle(Level level, Entity owner, float x, float y, float z, float yaw, float pitch, float speed) {
+        this(level, owner, x, y, z, launchDirection(yaw, pitch), speed);
+    }
+
+    public ThrownDamageBottle(
+            Level level, Entity owner, float x, float y, float z, Vec3D direction, float speed) {
         super(level);
         this.owner = owner;
         this.setSize(0.25F, 0.25F);
         this.heightOffset = 0.125F;
 
-        float cy = MathHelper.cos(-yaw * 0.017453292F - (float)Math.PI);
-        float sy = MathHelper.sin(-yaw * 0.017453292F - (float)Math.PI);
-        float cp = MathHelper.cos(-pitch * 0.017453292F);
-        float sp = MathHelper.sin(-pitch * 0.017453292F);
+        this.xd = direction.x * speed;
+        this.yd = direction.y * speed;
+        this.zd = direction.z * speed;
+        this.setPos(x + direction.x * .5f, y + direction.y * .5f, z + direction.z * .5f);
+        xo = this.x;
+        yo = this.y;
+        zo = this.z;
+    }
 
-        float lx = sy * cp;
-        float ly = sp;
-        float lz = cy * cp;
-
-        this.x = x + lx * 0.5f;
-        this.y = y + ly * 0.5f;
-        this.z = z + lz * 0.5f;
-
-        this.xd = lx * speed;
-        this.yd = ly * speed;
-        this.zd = lz * speed;
-
-        this.setPos(this.x, this.y, this.z);
+    private static Vec3D launchDirection(float yaw, float pitch) {
+        float azimuth = -yaw * 0.017453292F - (float) Math.PI;
+        float elevation = -pitch * 0.017453292F;
+        float horizontal = MathHelper.cos(elevation);
+        return new Vec3D(
+                MathHelper.sin(azimuth) * horizontal,
+                MathHelper.sin(elevation),
+                MathHelper.cos(azimuth) * horizontal);
     }
 
     @Override

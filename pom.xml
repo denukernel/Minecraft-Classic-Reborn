@@ -6,7 +6,7 @@
 
 	<groupId>ClassicRemastered</groupId>
 	<artifactId>ClassicRemastered</artifactId>
-	<version>0.45</version>
+	<version>0.30</version>
 	<packaging>jar</packaging>
 
 	<developers>

@@ -31,6 +31,9 @@ public final class StillLiquidBlock extends LiquidBlock {
         if (level.isNetworkMode() || reactWithOtherLiquid(level, x, y, z, changedId)) {
             return;
         }
+        if (this.type == LiquidType.LAVA && FireBlock.isFlammable(changedId)) {
+            level.addToTickNextTick(x, y, z, this.id);
+        }
 
         // A block above the surface cannot open a path for flow.
         if (canFlowInto(level, x, y - 1, z) || canFlowInto(level, x - 1, y, z) || canFlowInto(level, x + 1, y, z)

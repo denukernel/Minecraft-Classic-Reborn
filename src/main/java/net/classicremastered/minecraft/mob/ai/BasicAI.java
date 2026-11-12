@@ -70,6 +70,7 @@ public class BasicAI extends AI {
 
     @Override
     public void tick(Level level, Mob mob) {
+        ladderStep = null;
         if (shorePath == null) shorePath = java.util.List.of();
         ++this.noActionTime;
         if (CreativeModeHelper.shouldIgnoreTarget(this.attackTarget)) {
@@ -95,7 +96,7 @@ public class BasicAI extends AI {
             steeredThisTick = false;
             routeDriven = false;
             float previousYaw = mob.yRot;
-            if (!escapeFire()) {
+            if (!seekSunlightWater() && !escapeFire()) {
                 this.update();
                 goalSelector().tick();
             } else if (selector != null) {
@@ -183,7 +184,15 @@ public class BasicAI extends AI {
         this.xxa *= 0.98F;
         this.yya *= 0.98F;
         this.yRotA *= 0.9F;
-        mob.travel(this.xxa, this.yya);
+        if (ladderStep != null) {
+            mob.fallDistance = 0;
+            mob.xd = mob.yd = mob.zd = 0;
+            mob.move(climbDelta(ladderStep.ladderX), climbDelta(ladderStep.ladderY),
+                    climbDelta(ladderStep.ladderZ));
+            mob.fallDistance = 0;
+        } else {
+            mob.travel(this.xxa, this.yya);
+        }
 
         List list = level.findEntities(mob, mob.bb.grow(0.2F, 0.0F, 0.2F));
         if (list != null && list.size() > 0) {
@@ -200,6 +209,8 @@ public class BasicAI extends AI {
                 crowdMotion().separate(mob, list);
         }
     }
+
+    private transient net.classicremastered.minecraft.path.PathNavigator.Result ladderStep;
 
     private int swimRepath;
     private transient java.util.List<net.classicremastered.minecraft.path.ShoreNavigator.Step>
@@ -389,6 +400,42 @@ public class BasicAI extends AI {
         return true;
     }
 
+    private boolean seekSunlightWater() {
+        if (!(mob instanceof Zombie zombie) || !navigationAllowed() || !zombie.canBurnInSunlight()
+                || net.classicremastered.minecraft.CombatRules
+                        .difficulty(level) != net.classicremastered.minecraft.Difficulty.EXTREME
+                || !level.shouldUndeadBurnAt(zombie) || zombie.isInWaterOrOnWater())
+            return false;
+        float best = 8.5f;
+        float bestYaw = mob.yRot;
+        for (int direction = 0; direction < 16; direction++) {
+            float yaw = direction * 22.5f;
+            double angle = Math.toRadians(yaw);
+            float dx = (float) -Math.sin(angle), dz = (float) Math.cos(angle);
+            for (float distance = .5f; distance < best; distance += .5f) {
+                var step = mob.bb.cloneMove(dx * distance, 0, dz * distance);
+                if (!level.getCubes(step).isEmpty())
+                    break;
+                int x = net.classicremastered.util.MathHelper.floor(mob.x + dx * distance);
+                int y = net.classicremastered.util.MathHelper.floor(mob.bb.y0);
+                int z = net.classicremastered.util.MathHelper.floor(mob.z + dz * distance);
+                if (level.isWater(x, y, z) || level.isWater(x, y - 1, z)) {
+                    best = distance;
+                    bestYaw = yaw;
+                    break;
+                }
+                if (level.getCubes(step.cloneMove(0, -.65f, 0)).isEmpty())
+                    break;
+            }
+        }
+        if (best == 8.5f)
+            return false;
+        holdPosition(bestYaw);
+        yya = 1f;
+        running = true;
+        return true;
+    }
+
     /** Goal-facing view of the controller navigation policy. */
     public final boolean canNavigate() {
         return navigationAllowed();
@@ -417,6 +464,13 @@ public class BasicAI extends AI {
             navigator = new net.classicremastered.minecraft.path.PathNavigator(level);
         }
         return navigator;
+    }
+
+    protected final void holdPosition(float yaw) {
+        steeredThisTick = true;
+        xxa = yya = yRotA = 0;
+        jumping = false;
+        mob.yRot = yaw;
     }
 
     public final boolean navigateTo(float x, float feetY, float z, float speed) {
@@ -457,6 +511,10 @@ public class BasicAI extends AI {
         routeYaw = result.targetYaw;
         xxa = yya = yRotA = 0;
         jumping = false;
+        if (result.ladder) {
+            ladderStep = result;
+            return true;
+        }
         if (!result.forward) {
             if (attackTarget != null && !attackTarget.removed) {
                 float face =
@@ -493,6 +551,20 @@ public class BasicAI extends AI {
         return true;
     }
 
+    public final boolean hasActiveRoute() {
+        return routeDriven || ladderStep != null;
+    }
+
+    public final void clearNavigation() {
+        getNavigator().clearGoal();
+        ladderStep = null;
+        routeDriven = false;
+    }
+
+    private static float climbDelta(float value) {
+        return Math.max(-.18f, Math.min(.18f, value));
+    }
+
     protected void jumpFromGround() {
         this.mob.yd = 0.42F;
     }
@@ -508,10 +580,19 @@ public class BasicAI extends AI {
         defaultMovement();
     }
 
+    protected boolean handlesTargetMovement() {
+        return false;
+    }
+
     public final void defaultMovement() {
         if (level == null || mob == null || mob.health <= 0) {
             jumping = false;
             xxa = yya = yRotA = 0;
+            return;
+        }
+        if (attackTarget != null && handlesTargetMovement()) {
+            xxa = yya = yRotA = 0f;
+            jumping = false;
             return;
         }
         if (movementGoals == null) {

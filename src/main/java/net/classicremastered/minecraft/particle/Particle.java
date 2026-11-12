@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.particle;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.util.MathHelper;
 
@@ -27,6 +28,9 @@ public class Particle extends Entity {
         this.setSize(0.2F, 0.2F);
         this.heightOffset = this.bbHeight / 2.0F;
         this.setPos(var2, var3, var4);
+        this.xo = this.x;
+        this.yo = this.y;
+        this.zo = this.z;
         this.rCol = this.gCol = this.bCol = 1.0F;
         this.xd = var5 + (float) (Math.random() * 2.0D - 1.0D) * 0.4F;
         this.yd = var6 + (float) (Math.random() * 2.0D - 1.0D) * 0.4F;
@@ -77,25 +81,26 @@ public class Particle extends Entity {
 
     }
 
-    public void render(ShapeRenderer var1, float var2, float var3, float var4, float var5, float var6, float var7) {
-        float var8;
-        float var9 = (var8 = (float) (this.tex % 16) / 16.0F) + 0.0624375F;
-        float var10;
-        float var11 = (var10 = (float) (this.tex / 16) / 16.0F) + 0.0624375F;
-        float var12 = 0.1F * this.size;
-        float var13 = this.xo + (this.x - this.xo) * var2;
-        float var14 = this.yo + (this.y - this.yo) * var2;
-        float var15 = this.zo + (this.z - this.zo) * var2;
-        var2 = this.getRenderBrightness(var2);
-        var1.color(this.rCol * var2, this.gCol * var2, this.bCol * var2);
-        var1.vertexUV(var13 - var3 * var12 - var6 * var12, var14 - var4 * var12, var15 - var5 * var12 - var7 * var12,
-                var8, var11);
-        var1.vertexUV(var13 - var3 * var12 + var6 * var12, var14 + var4 * var12, var15 - var5 * var12 + var7 * var12,
-                var8, var10);
-        var1.vertexUV(var13 + var3 * var12 + var6 * var12, var14 + var4 * var12, var15 + var5 * var12 + var7 * var12,
-                var9, var10);
-        var1.vertexUV(var13 + var3 * var12 - var6 * var12, var14 - var4 * var12, var15 + var5 * var12 - var7 * var12,
-                var9, var11);
+    public void render(ShapeRenderer shape, float partial, Vec3D right, Vec3D up) {
+        float u = (tex % 16) / 16f;
+        float v = (tex / 16) / 16f;
+        renderQuad(shape, partial, right, up, u, v, 0.0624375F);
+    }
+
+    protected final void renderQuad(ShapeRenderer shape, float partial, Vec3D right, Vec3D up,
+            float u, float v, float uvSize) {
+        float radius = 0.1F * size;
+        float px = xo + (x - xo) * partial;
+        float py = yo + (y - yo) * partial;
+        float pz = zo + (z - zo) * partial;
+        float rx = right.x * radius, ry = right.y * radius, rz = right.z * radius;
+        float ux = up.x * radius, uy = up.y * radius, uz = up.z * radius;
+        float light = getRenderBrightness(partial);
+        shape.color(rCol * light, gCol * light, bCol * light);
+        shape.vertexUV(px - rx - ux, py - ry - uy, pz - rz - uz, u, v + uvSize);
+        shape.vertexUV(px + rx - ux, py + ry - uy, pz + rz - uz, u + uvSize, v + uvSize);
+        shape.vertexUV(px + rx + ux, py + ry + uy, pz + rz + uz, u + uvSize, v);
+        shape.vertexUV(px - rx + ux, py - ry + uy, pz - rz + uz, u, v);
     }
 
     public int getParticleTexture() {

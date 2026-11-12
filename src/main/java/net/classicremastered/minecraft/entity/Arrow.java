@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.entity;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Enderman;
+import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.particle.SmokeParticle;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
@@ -16,13 +17,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Arrow extends Entity {
+    public static final float FLIGHT_DRAG = .998f;
+    public static final float TURRET_DROP = .008f;
+    public static final float HALF_WIDTH = .15f;
+    public static final float HALF_HEIGHT = .25f;
+
     public Arrow(Level level1, Entity owner, float x, float y, float z, float unknown0, float unknown1,
             float unknown2) {
+        this(level1, owner, x, y, z, unknown0, unknown1, unknown2, false, 0, false);
+    }
+
+    public static Arrow stolenHeadRound(Level level, Entity owner, float x, float y, float z, float yaw,
+            float pitch, float speed, int damage, boolean bullet) {
+        return new Arrow(level, owner, x, y, z, yaw, pitch, speed, true, damage, bullet);
+    }
+
+    private Arrow(Level level1, Entity owner, float x, float y, float z, float unknown0, float unknown1,
+            float unknown2, boolean stolen, int stolenDamage, boolean stolenBullet) {
         super(level1);
 
         this.owner = owner;
+        this.stolen = stolen;
 
-        setSize(0.3F, 0.5F);
+        setSize(2 * HALF_WIDTH, 2 * HALF_HEIGHT);
 
         heightOffset = bbHeight / 2.0F;
         damage = 3;
@@ -33,6 +50,14 @@ public class Arrow extends Entity {
             damage = 7;
         }
 
+        if (owner instanceof net.classicremastered.minecraft.mob.CrossbowTurret turret) {
+            damage = turret.projectileDamage();
+            bullet = turret.usesBullets();
+        }
+        if (stolen) {
+            damage = stolenDamage;
+            bullet = stolenBullet;
+        }
         heightOffset = 0.25F;
 
         float unknown3 = MathHelper.cos(-unknown0 * 0.017453292F - 3.1415927F);
@@ -43,13 +68,12 @@ public class Arrow extends Entity {
 
         slide = false;
 
-        gravity = 1.0F;
-
-        xo -= unknown3 * 0.2F;
-        zo += unknown4 * 0.2F;
-
-        x -= unknown3 * 0.2F;
-        z += unknown4 * 0.2F;
+        if (!isTurretProjectile()) {
+            xo -= unknown3 * 0.2F;
+            zo += unknown4 * 0.2F;
+            x -= unknown3 * 0.2F;
+            z += unknown4 * 0.2F;
+        }
 
         xd = unknown4 * unknown0 * unknown2;
         yd = unknown1 * unknown2;
@@ -111,11 +135,12 @@ public class Arrow extends Entity {
                 remove();
             }
         } else {
-            xd *= 0.998F;
-            yd *= 0.998F;
-            zd *= 0.998F;
+            xd *= FLIGHT_DRAG;
+            yd *= FLIGHT_DRAG;
+            zd *= FLIGHT_DRAG;
 
-            yd -= 0.02F * gravity;
+            yd -= isTurretProjectile() ? TURRET_DROP
+                    : .02f;
 
             int unknown0 = (int) (MathHelper.sqrt(xd * xd + yd * yd + zd * zd) / 0.2F + 1.0F);
             float x0 = xd / (float) unknown0;
@@ -133,9 +158,23 @@ public class Arrow extends Entity {
                 List blockMapEntitiesList = level.blockMap.getEntities(this, unknown5);
                 for (int currentEntity = 0; currentEntity < blockMapEntitiesList.size(); currentEntity++) {
                     Entity entity = (Entity) blockMapEntitiesList.get(currentEntity);
-                    if (!entity.removed && entity.isShootable() && (entity != owner || time > 5)) {
-                        entity.hurt(this, damage);
-                        level.playSound("random/bowhit", this, .7f, 1f);
+                    if (owner != null && entity == owner.riding && time <= 5)
+                        continue;
+                    if (owner instanceof net.classicremastered.minecraft.mob.CrossbowTurret
+                            && entity instanceof net.classicremastered.minecraft.mob.Mob mob
+                            && mob.health <= 0) {
+                        continue;
+                    }
+                    if (!entity.removed && entity.isShootable() && (entity != owner || time > 5
+                            && !isTurretProjectile())) {
+                        if (owner
+                                instanceof
+                                net.classicremastered.minecraft.mob.CrossbowTurret turret) {
+                            turret.hitWithArrow(this, entity, damage);
+                        } else {
+                            entity.hurt(this, damage);
+                        }
+                        playImpact();
                         collision = true;
                         remove();
                         return;
@@ -152,9 +191,15 @@ public class Arrow extends Entity {
             }
 
             if (collision) {
-                level.playSound("random/bowhit", this, .7f, 1f);
+                playImpact();
+                if (isBullet()) {
+                    remove();
+                    return;
+                }
                 hasHit = true;
                 xd = yd = zd = 0.0F;
+            } else if (isBullet()) {
+                emitSmoke(1);
             }
 
             if (!hasHit) {
@@ -308,8 +353,34 @@ public class Arrow extends Entity {
         }
     }
 
+    public boolean isTurretProjectile() {
+        return stolen || owner instanceof CrossbowTurret;
+    }
+
+    private boolean isBullet() {
+        return bullet;
+    }
+
+    private void playImpact() {
+        if (isBullet()) {
+            emitSmoke(3);
+            level.playSound("random/bowhit", this, .7f, .55f);
+        } else {
+            level.playSound("random/bowhit", this, .7f, 1f);
+        }
+    }
+
+    private void emitSmoke(int count) {
+        if (level.particleEngine == null)
+            return;
+        for (int i = 0; i < count; i++)
+            level.particleEngine.spawnParticle(new SmokeParticle(level, x, y, z));
+    }
+
     @Override
     public void render(TextureManager textureManager, float unknown0) {
+        if (isBullet())
+            return;
         textureId = textureManager.load("/item/arrows.png");
 
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureId);
@@ -336,7 +407,7 @@ public class Arrow extends Entity {
         float unknown5 = 10 / 32f;
         float unknown6 = 0.05625F;
 
-        GL11.glScalef(0.05625F, unknown6, unknown6);
+        GL11.glScalef(unknown6, unknown6, unknown6);
 
         GL11.glNormal3f(unknown6, 0.0F, 0.0F);
 
@@ -375,7 +446,7 @@ public class Arrow extends Entity {
 
     @Override
     public void playerTouch(Entity entity) {
-        if (!(entity instanceof Player))
+        if (isBullet() || !(entity instanceof Player))
             return;
         Player player = (Player) entity;
 
@@ -428,9 +499,10 @@ public class Arrow extends Entity {
     public int time = 0;
     private int type = 0;
 
-    private float gravity = 0.0F;
 
     private int damage;
+    private boolean bullet;
+    private boolean stolen;
 
     public Entity getOwner() {
         return owner;

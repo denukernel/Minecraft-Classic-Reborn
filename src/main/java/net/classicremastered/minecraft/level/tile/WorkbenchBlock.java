@@ -6,8 +6,12 @@ import net.classicremastered.minecraft.player.Player;
 
 public final class WorkbenchBlock extends Block {
 
-    public WorkbenchBlock(int id, int tex) {
-        super(id, tex, "Workbench");
+    private static final int TOP_TEXTURE = 53;
+    private static final int FRONT_TEXTURE = 54;
+    private static final int SIDE_TEXTURE = 55;
+
+    public WorkbenchBlock(int id) {
+        super(id, FRONT_TEXTURE, "Workbench");
         this.setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.0F);
     }
 
@@ -23,8 +27,12 @@ public final class WorkbenchBlock extends Block {
 
     @Override
     protected int getTextureId(int side) {
-        if (side == 0 || side == 1) return 4;
-        return 35;
+        return switch (side) {
+            case 0 -> 4;
+            case 1 -> TOP_TEXTURE;
+            case 2, 4 -> FRONT_TEXTURE;
+            default -> SIDE_TEXTURE;
+        };
     }
 
     @Override

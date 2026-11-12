@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.level;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.ProgressBarDisplay;
+import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.*;
@@ -39,6 +40,8 @@ public final class MobSpawner {
             case EASY -> 12;
             case NORMAL -> 20;
             case HARD -> 28;
+        case VERY_HARD -> 32;
+        case EXTREME -> 36;
         };
     }
 
@@ -147,6 +150,8 @@ public final class MobSpawner {
             int batches, Entity near, ProgressBarDisplay bar, boolean allowHostiles) {
         if (level == null || level.isNetworkMode() || !level.doMobSpawning) return 0;
         MobRegistry.bootstrapDefaults();
+        BiomeLevelGenerator biomes = level.biomeSeed == null ? null
+                : new BiomeLevelGenerator(level.biomeSeed);
         allowHostiles &= near != null && monsterCap() > 0;
         float centerX = near == null ? level.xSpawn : near.x,
                 centerY = near == null ? level.ySpawn : near.y,
@@ -234,11 +239,55 @@ public final class MobSpawner {
                 if (vandal && !villagerNear(sx, sy, sz)) continue;
                 short variant = id;
                 if (id == 2 && level.random.nextInt(100) < 5) variant = BabySkeleton.REGISTRY_ID;
-                if (id == 1 && level.random.nextInt(100) < 5) variant = 40;
+                if (id == 1) {
+                    boolean baby = level.random.nextInt(100) < 5;
+                    var biome = biomes == null ? null : biomes.biomeAt(sx, sz);
+                    if (biome == BiomeLevelGenerator.Biome.DESERT) {
+                        variant = baby ? net.classicremastered.minecraft.mob.BabyHusk.REGISTRY_ID
+                                : Husk.REGISTRY_ID;
+                    } else if (!level.isDaytime() && (biome == BiomeLevelGenerator.Biome.SNOWY_PLAINS
+                            || biome == BiomeLevelGenerator.Biome.SNOWY_FOREST)) {
+                        variant = baby ? net.classicremastered.minecraft.mob.BabyFrostbite.REGISTRY_ID
+                                : net.classicremastered.minecraft.mob.Frostbite.REGISTRY_ID;
+                    } else if (baby) {
+                        variant = 40;
+                    } else {
+                        var difficulty = CombatRules.difficulty(level);
+                        if (difficulty.ordinal() >= net.classicremastered.minecraft.Difficulty.VERY_HARD
+                                .ordinal()) {
+                            int roll = level.random.nextInt(100);
+                            int igniterChance = difficulty == net.classicremastered.minecraft.Difficulty.EXTREME
+                                    ? 12
+                                    : 2;
+                            if (roll < igniterChance)
+                                variant = ZombieIgniter.REGISTRY_ID;
+                            else if (roll < igniterChance + 2)
+                                variant = MobRegistry.idOfName("ZombieBuilder");
+                        }
+                    }
+                }
                 Mob mob = MobRegistry.create(variant, level, sx + .5f, sy, sz + .5f);
                 if (mob == null || mob.getRegistryId() != variant || !place(mob, sx, sy, sz, near))
                     continue;
+                Mob chicken = null;
+                if (mob instanceof Zombie && mob.isBaby() && level.random.nextInt(20) == 0) {
+                    var candidate = MobRegistry.create((short) 25, level, sx + .5f, sy, sz + .5f);
+                    if (candidate instanceof net.classicremastered.minecraft.mob.Chicken
+                            && place(candidate, sx, sy, sz, near))
+                        chicken = candidate;
+                }
+                if (chicken != null)
+                    level.addEntity(chicken);
                 level.addEntity(mob);
+                if (chicken != null)
+                    mob.mount(chicken);
+                if (mob instanceof Spider spider && level.random.nextInt(100) == 0) {
+                    Mob rider = MobRegistry.create((short) 2, level, mob.x, mob.y, mob.z);
+                    if (rider instanceof Skeleton skeleton && spider.hasRiderClearance(skeleton)) {
+                        level.addEntity(rider);
+                        rider.mount(mob);
+                    }
+                }
                 spawned++;
             }
         }

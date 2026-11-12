@@ -33,6 +33,11 @@ public final class StickFigureAI extends BasicAttackAI {
                 && super.navigationAllowed();
     }
 
+    @Override
+    protected boolean handlesTargetMovement() {
+        return true;
+    }
+
     public boolean hitThisStrike, playedSwing;
 
     public StickFigureAI() {

@@ -25,8 +25,7 @@ public final class SpiderAngerGoal extends MobGoal<BetaSpiderAI> {
         if (bright && ai.angerTicks == 0 && ai.attackTarget != null && ai.random.nextInt(100) == 0)
             ai.attackTarget = null;
         ai.neutral =
-                ai.level.creativeMode
-                        || net.classicremastered.minecraft.CombatRules.difficulty(ai.level)
+                net.classicremastered.minecraft.CombatRules.difficulty(ai.level)
                                 == net.classicremastered.minecraft.Difficulty.PEACEFUL
                         || (bright && ai.angerTicks == 0 && ai.attackTarget == null);
         if (ai.neutral) ai.attackTarget = null;

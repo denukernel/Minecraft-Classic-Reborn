@@ -1,11 +1,19 @@
 package net.classicremastered.minecraft;
 
 import net.classicremastered.minecraft.chat.ChatInputScreen;
+import net.classicremastered.minecraft.entity.BossFireball;
 import net.classicremastered.minecraft.entity.SignEntity;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
+import net.classicremastered.minecraft.level.itemstack.BowItem;
+import net.classicremastered.minecraft.level.itemstack.BucketItem;
+import net.classicremastered.minecraft.level.itemstack.GrapplingHookItem;
+import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.MobWandItem;
+import net.classicremastered.minecraft.level.itemstack.PhysicsGunItem;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.FireBlock;
+import net.classicremastered.minecraft.level.tile.FlowerBlock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.player.DeveloperPowers;
@@ -15,13 +23,123 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
 
 public class InputManager {
+    private static final int USE_INTERVAL = 4;
     private final Minecraft mc;
+    private Item activeUse;
+    private boolean attackHeld;
+    private boolean useHeld;
+    private int lastAttackTick;
+    private int lastUseTick;
 
     public InputManager(Minecraft mc) {
         this.mc = mc;
     }
 
+    void pressAttack() {
+        if (!canUse()) return;
+        attackHeld = true;
+        lastAttackTick = mc.ticks;
+        onMouseClick(0);
+    }
+
+    void tickAttack(boolean down) {
+        if (!down || !canUse()) {
+            attackHeld = false;
+            return;
+        }
+        float interval =
+                mc.selected != null
+                                && mc.selected.entityPos == 1
+                                && mc.player.developerPowers().fastPunch(mc.player)
+                        ? 3
+                        : mc.timer.tps / 4f;
+        if (attackHeld && mc.ticks - lastAttackTick >= interval) pressAttack();
+    }
+
+    void pressUse() {
+        if (!canUse()) return;
+        useHeld = true;
+        useSelected();
+    }
+
+    void releaseUse() {
+        useHeld = false;
+        if (activeUse != null) {
+            activeUse.releaseUse(mc.player, mc.level);
+            activeUse = null;
+        }
+    }
+
+    void tickUse(boolean down) {
+        if (!canUse()) {
+            BowItem.cancelDraw(mc.player);
+            releaseUse();
+            return;
+        }
+        BowItem.cancelIfNotSelected(mc.player);
+        Item held = selectedItem();
+        if (activeUse != held && activeUse != null) {
+            activeUse.releaseUse(mc.player, mc.level);
+            activeUse = null;
+        }
+        if (!down) releaseUse();
+        if (useHeld && mc.ticks - lastUseTick >= USE_INTERVAL && repeatsUse(held)) {
+            useSelected();
+            if (!canUse()) return;
+            held = selectedItem();
+        }
+        if (held != null
+                && (useHeld || held instanceof GravityGunItem || held instanceof PhysicsGunItem)) {
+            held.tick(mc.player, mc.level);
+        }
+    }
+
+    private boolean canUse() {
+        return mc.currentScreen == null
+                && mc.hasMouse
+                && !mc.gamemode.isSpectator()
+                && mc.level != null
+                && mc.player != null
+                && mc.player.health > 0;
+    }
+
+    private Item selectedItem() {
+        int index = mc.player.inventory.getSelected() - 256;
+        return index >= 0 && index < Item.items.length ? Item.items[index] : null;
+    }
+
+    private void useSelected() {
+        lastUseTick = mc.ticks;
+        Item held = selectedItem();
+        if (mc.selected != null
+                && mc.selected.entity
+                        instanceof net.classicremastered.minecraft.entity.BoatEntity boat
+                && !(held instanceof GrapplingHookItem
+                        || held instanceof GravityGunItem
+                        || held instanceof PhysicsGunItem)) {
+            if (!mc.isOnline() && !mc.level.isNetworkMode() && mc.entityWithinReach(boat))
+                boat.board(mc.player);
+            return;
+        }
+        onMouseClick(1);
+        if (held != null && canUse() && selectedItem() == held) {
+            activeUse = held;
+            held.use(mc.player, mc.level);
+        }
+    }
+
+    private static boolean repeatsUse(Item item) {
+        return !(item instanceof BowItem
+                || item instanceof BucketItem
+                || item instanceof GravityGunItem
+                || item instanceof PhysicsGunItem
+                || item instanceof GrapplingHookItem
+                || item instanceof MobWandItem
+                || item instanceof net.classicremastered.minecraft.level.itemstack.BoatItem);
+    }
+
     public void onMouseClick(int button) {
+        if (mc.gamemode.isSpectator()) return;
         // button: 0 = left, 1 = right
 
         final int selId = mc.player.inventory.getSelected();
@@ -29,7 +147,7 @@ public class InputManager {
                 && selId >= 256
                 && selId - 256 < Item.items.length
                 && Item.items[selId - 256]
-                        instanceof net.classicremastered.minecraft.level.itemstack.MobWandItem)
+                        instanceof MobWandItem)
             return;
 
         DeveloperPowers powers = mc.player.developerPowers();
@@ -45,23 +163,24 @@ public class InputManager {
         }
 
         if (selId == 266) {
-            if (button == 0)
-                net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.launch(mc.player);
+            if (button == 0) PhysicsGunItem.launch(mc.player);
             return;
         }
 
-        // If holding Gravity Gun and clicking Left Click while carrying something, drop
-        // gently
-        if (selId >= 256 && (selId - 256) == 11) {
+        if (selId == GravityGunItem.RAW_ID
+                || button == 1
+                        && (selectedItem() instanceof GrapplingHookItem
+                                || selectedItem()
+                                        instanceof
+                                        net.classicremastered.minecraft.level.itemstack.BoatItem)) {
             if (button == 0) {
-                net.classicremastered.minecraft.level.itemstack.GravityGunItem.dropGently(
-                        mc.player);
-                if (mc.renderer != null && mc.renderer.heldBlock != null) {
-                    mc.renderer.heldBlock.offset = -1;
-                    mc.renderer.heldBlock.moving = true;
-                }
-                return;
+                GravityGunItem.launch(mc.player, mc.level);
             }
+            if (mc.renderer != null && mc.renderer.heldBlock != null) {
+                mc.renderer.heldBlock.offset = -1;
+                mc.renderer.heldBlock.moving = true;
+            }
+            return;
         }
 
         // --- LEFT CLICK: swing animation ---
@@ -70,20 +189,66 @@ public class InputManager {
             mc.renderer.heldBlock.moving = true; // fixed
         }
 
-        // --- RIGHT CLICK: items swing only (let main loop call use()/tick/releaseUse)
-        // ---
+        // Item behavior is dispatched by useSelected after world interactions.
         if (button == 1 && selId >= 256) { // fixed
             if (mc.renderer != null && mc.renderer.heldBlock != null) {
                 mc.renderer.heldBlock.offset = -1; // fixed
                 mc.renderer.heldBlock.moving = true; // fixed
             }
-            // IMPORTANT: do NOT call held.use() here; main loop handles it to avoid
-            // double-fire // fixed
-            // (Exception: Flint & Steel block logic handled below; we don't return here)
+        }
+
+        if (button == 1 && mc.selected != null) {
+            if (mc.selected.entity
+                    instanceof net.classicremastered.minecraft.mob.Defender defender) {
+                if (mc.entityWithinReach(defender) && defender.canControl(mc.player))
+                    mc.setCurrentScreen(
+                            new net.classicremastered.minecraft.gui.DefenderEquipmentScreen(
+                                    defender));
+                return;
+            }
+            if (mc.selected.entity instanceof Villager villager) {
+                if (mc.entityWithinReach(villager) && !mc.level.isNetworkMode())
+                    villager.onRightClick(mc.player);
+                return;
+            }
+            if (mc.selected.entity instanceof SignEntity sign) {
+                if (!mc.level.isNetworkMode() && !mc.isOnline() && mc.entityWithinReach(sign)) {
+                    mc.setCurrentScreen(
+                            new net.classicremastered.minecraft.gui.SignEditScreen(sign));
+                }
+                return;
+            }
+            if (mc.selected.entity
+                    instanceof net.classicremastered.minecraft.mob.CrossbowTurret turret) {
+                if (mc.entityWithinReach(turret)) {
+                    net.classicremastered.minecraft.level.itemstack.TurretItems.interact(
+                            mc.player, turret, selId);
+                }
+                return;
+            }
+            if (mc.selected.entityPos == 0
+                    && net.classicremastered.minecraft.level.itemstack.TurretItems.isPlacementItem(
+                            selId)) {
+                net.classicremastered.minecraft.level.itemstack.TurretItems.place(
+                        mc.player,
+                        mc.selected.x,
+                        mc.selected.y,
+                        mc.selected.z,
+                        mc.selected.face,
+                        selId);
+                return;
+            }
         }
 
         // ============== ENTITY INTERACTION ==============
         if (mc.selected != null && mc.selected.entityPos == 1) {
+            if (button == 1
+                    && selId == net.classicremastered.minecraft.level.itemstack.SaddleItem.ID + 256
+                    && mc.selected.entity instanceof net.classicremastered.minecraft.mob.Cow cow
+                    && mc.entityWithinReach(cow)) {
+                net.classicremastered.minecraft.level.itemstack.SaddleItem.equip(mc.player, cow);
+                return;
+            }
             if (button == 1
                     && selId == Item.FLINT_AND_STEEL.id + 256
                     && mc.selected.entity instanceof Mob target) {
@@ -92,6 +257,17 @@ public class InputManager {
                         && target.ignite(100)) {
                     mc.level.playSound("random/click", target, .8f, 1f);
                 }
+                return;
+            }
+
+            if (button == 1
+                    && selId <= 0
+                    && !mc.level.isNetworkMode()
+                    && mc.entityWithinReach(mc.selected.entity)
+                    && net.classicremastered.minecraft.mob.ai.MobRiding.canRide(
+                            mc.player, mc.selected.entity)) {
+                mc.player.isFlying = false;
+                mc.player.mount(mc.selected.entity);
                 return;
             }
 
@@ -104,11 +280,27 @@ public class InputManager {
             // Left click → damage any entity (including villager)
             if (button == 0) {
                 if (!mc.entityWithinReach(mc.selected.entity)) return;
+                if (mc.selected.entity instanceof BossFireball fireball) {
+                    fireball.deflect(mc.player);
+                    return;
+                }
                 int dmg = net.classicremastered.minecraft.level.itemstack.Equipment.damage(selId);
                 if (powers.fastPunch(mc.player)) powers.punch(mc.player, mc.selected.entity, dmg);
                 else mc.selected.entity.hurt(mc.player, dmg);
             }
             return;
+        }
+
+        if (button == 1
+                && FlowerBlock.isFlower(selId)
+                && mc.level != null
+                && !mc.level.isNetworkMode()
+                && !mc.isOnline()) {
+            MovingObjectPosition water = ClientTargetPicker.pickWater(mc.renderer);
+            if (water != null) {
+                placeSelectedBlock(selId, selId, water.x, water.y, water.z, water.face);
+                return;
+            }
         }
 
         // ============== BLOCK INTERACTION ==============
@@ -123,6 +315,13 @@ public class InputManager {
                 int tid = mc.level.getTile(ox, oy, oz);
                 Block tgt = tid > 0 ? Block.blocks[tid] : null;
                 if (tgt != null && tgt.onRightClick(mc.level, ox, oy, oz, mc.player, face)) return;
+                if (Item.OAK_SIGN
+                                instanceof
+                                net.classicremastered.minecraft.level.itemstack.SignItem sign
+                        && selId == sign.id + 256) {
+                    sign.place(mc.player, ox, oy, oz, face);
+                    return;
+                }
             }
 
             // 2) RMB + Flint&Steel (allow alongside item swing; main loop still calls
@@ -225,59 +424,60 @@ public class InputManager {
 
             int placeId = selId == Item.REDSTONE_DUST_ID + 256 ? Block.REDSTONE_WIRE.id : selId;
             if (button == 1 && placeId > 0 && placeId < 256 && Block.blocks[placeId] != null) {
-                if (!mc.gamemode.canPlace(selId)) return;
-                if (!mc.level.isInBounds(x, y, z)) return;
-
-                if (mc.wouldCollideWithPlayer(x, y, z)) return;
-                if (mc.wouldCollideWithMob(x, y, z)) return;
-
-                if (mc.gamemode.tryPlaceBlock(mc.player, x, y, z, placeId, face)) {
-                    mc.renderer.heldBlock.pos = 0.0F;
-
-                    if (!(mc.gamemode instanceof CreativeGameMode)) {
-                        mc.player.inventory.removeSelected(1);
-                    }
-                }
-                return;
+                placeSelectedBlock(selId, placeId, x, y, z, face);
             }
         }
     }
 
+    private void placeSelectedBlock(int selectedId, int blockId, int x, int y, int z, int face) {
+        if (!mc.gamemode.canPlace(selectedId) || !mc.level.isInBounds(x, y, z)) return;
+        if (mc.wouldCollideWithPlayer(x, y, z) || mc.wouldCollideWithMob(x, y, z)) return;
+        if (mc.gamemode.tryPlaceBlock(mc.player, x, y, z, blockId, face)) {
+            mc.renderer.heldBlock.pos = 0.0F;
+            if (!(mc.gamemode instanceof CreativeGameMode)) mc.player.inventory.removeSelected(1);
+        }
+    }
+
+    private boolean debugKeyHeld;
+    private boolean debugShortcutUsed;
+
+    private boolean handleDebugKey() {
+        int key = Keyboard.getEventKey();
+        boolean down = Keyboard.getEventKeyState();
+        if (key == Keyboard.KEY_F3 && !down && debugKeyHeld) {
+            debugKeyHeld = false;
+            if (!debugShortcutUsed && mc.currentScreen == null) mc.debugOverlay = !mc.debugOverlay;
+            return true;
+        }
+        if (mc.currentScreen != null) return false;
+        if (key == Keyboard.KEY_F3 && down) {
+            if (!Keyboard.isRepeatEvent()) {
+                debugKeyHeld = true;
+                debugShortcutUsed = false;
+            }
+            return true;
+        }
+        if (down
+                && debugKeyHeld
+                && Keyboard.isKeyDown(Keyboard.KEY_F3)
+                && (key == Keyboard.KEY_N || key == Keyboard.KEY_B)) {
+            if (!Keyboard.isRepeatEvent()) {
+                debugShortcutUsed = true;
+                if (key == Keyboard.KEY_N) {
+                    mc.toggleSpectatorMode();
+                } else {
+                    mc.debugHitboxes = !mc.debugHitboxes;
+                    mc.hud.addChat(mc.debugHitboxes ? "&eHitboxes shown." : "&eHitboxes hidden.");
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
     public void handleKeyboardEvent() {
-        if (Keyboard.getEventKey() == Keyboard.KEY_B && !Keyboard.getEventKeyState()) {
-            if (mc.currentScreen == null && mc.hasMouse)
-                mc.player.developerPowers().throwBlock(mc.player);
-            else mc.player.developerPowers().cancelBlockAim();
-        }
-        if (mc.currentScreen == null
-                && mc.hasMouse
-                && Keyboard.getEventKeyState()
-                && Keyboard.getEventKey() == Keyboard.KEY_G
-                && !Keyboard.isRepeatEvent()
-                && mc.player.developerPowers().active(mc.player)) {
-            mc.player.developerPowers().kick(mc.player);
-            return;
-        }
-        if (mc.currentScreen == null
-                && mc.hasMouse
-                && Keyboard.getEventKeyState()
-                && Keyboard.getEventKey() == Keyboard.KEY_B
-                && !Keyboard.isRepeatEvent()
-                && mc.player.developerPowers().active(mc.player)) {
-            mc.player.developerPowers().beginBlockAim(mc.player);
-            return;
-        }
-        if (mc.currentScreen == null
-                && mc.hasMouse
-                && Keyboard.getEventKeyState()
-                && Keyboard.getEventKey() == Keyboard.KEY_R
-                && !Keyboard.isRepeatEvent()
-                && mc.player.developerPowers().active(mc.player)
-                && mc.player.input != null) {
-            mc.player.input.updateMovement();
-            mc.player.developerPowers().dodge(mc.player, mc.player.input.xxa, mc.player.input.yya);
-            return;
-        }
+        if (handleDebugKey()) return;
+        if (!mc.gamemode.isSpectator() && handlePowerKey()) return;
 
         // Pass key state to the player
         mc.player.setKey(Keyboard.getEventKey(), Keyboard.getEventKeyState());
@@ -290,6 +490,10 @@ public class InputManager {
 
             // --- Game-wide keys (only when no screen is open) ---
             if (mc.currentScreen == null) {
+                if (Keyboard.getEventKey() == Keyboard.KEY_F1 && !Keyboard.isRepeatEvent()) {
+                    mc.hudHidden = !mc.hudHidden;
+                }
+
                 // ESC → pause
                 if (Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
                     mc.pause();
@@ -321,14 +525,6 @@ public class InputManager {
                         }
                     }
                 }
-                if (Keyboard.getEventKey() == Keyboard.KEY_F7) { // F7 = spawn test sign
-                    SignEntity s =
-                            new SignEntity(
-                                    mc, mc.player.x, mc.player.y, mc.player.z, mc.player.yRot);
-                    mc.level.addEntity(s);
-                    mc.hud.addChat("&aSpawned Sign at player");
-                }
-
                 if (Keyboard.getEventKey() == mc.settings.flyToggleKey.key) {
                     if (mc.gamemode
                                     instanceof
@@ -419,22 +615,52 @@ public class InputManager {
                 }
             }
 
+            if (mc.gamemode.isSpectator()) return;
+
             // Number keys (hotbar)
             for (int i = 0; i < 9; ++i) {
                 if (Keyboard.getEventKey() == i + 2) {
                     mc.player.inventory.selected = i;
                 }
             }
-
-            // Fog toggle
-            if (Keyboard.getEventKey() == mc.settings.toggleFogKey.key) {
-                mc.settings.toggleSetting(
-                        4,
-                        !Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
-                                        && !Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)
-                                ? 1
-                                : -1);
-            }
         }
+    }
+
+    private boolean handlePowerKey() {
+        if (Keyboard.getEventKey() == Keyboard.KEY_B && !Keyboard.getEventKeyState()) {
+            if (mc.currentScreen == null && mc.hasMouse)
+                mc.player.developerPowers().throwBlock(mc.player);
+            else mc.player.developerPowers().cancelBlockAim();
+        }
+        if (mc.currentScreen == null
+                && mc.hasMouse
+                && Keyboard.getEventKeyState()
+                && Keyboard.getEventKey() == Keyboard.KEY_G
+                && !Keyboard.isRepeatEvent()
+                && mc.player.developerPowers().active(mc.player)) {
+            mc.player.developerPowers().kick(mc.player);
+            return true;
+        }
+        if (mc.currentScreen == null
+                && mc.hasMouse
+                && Keyboard.getEventKeyState()
+                && Keyboard.getEventKey() == Keyboard.KEY_B
+                && !Keyboard.isRepeatEvent()
+                && mc.player.developerPowers().active(mc.player)) {
+            mc.player.developerPowers().beginBlockAim(mc.player);
+            return true;
+        }
+        if (mc.currentScreen == null
+                && mc.hasMouse
+                && Keyboard.getEventKeyState()
+                && Keyboard.getEventKey() == Keyboard.KEY_R
+                && !Keyboard.isRepeatEvent()
+                && mc.player.developerPowers().active(mc.player)
+                && mc.player.input != null) {
+            mc.player.input.updateMovement();
+            mc.player.developerPowers().dodge(mc.player, mc.player.input.xxa, mc.player.input.yya);
+            return true;
+        }
+        return false;
     }
 }

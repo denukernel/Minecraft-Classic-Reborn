@@ -1,6 +1,5 @@
 package net.classicremastered.minecraft.mob.ai.goal.tnt;
 
-import net.classicremastered.minecraft.entity.ImpactPrimedTnt;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.goal.MobGoal;
 import net.classicremastered.minecraft.mob.ai.tnt.ThrowTntAI;
@@ -19,8 +18,7 @@ public final class ThrowTntGoal extends MobGoal<ThrowTntAI> {
 
     @Override
     public void tick() {
-        if (ai.frenzyCooldown > 0)
-            ai.frenzyCooldown--;
+        if (ai.frenzyCooldown > 0) ai.frenzyCooldown--;
         float walk = ai.walkSpeed * (ai.running ? 1.4F : 1.0F);
         float dx = ai.playerTarget.x - ai.mob.x;
         float dz = ai.playerTarget.z - ai.mob.z;
@@ -57,7 +55,9 @@ public final class ThrowTntGoal extends MobGoal<ThrowTntAI> {
         }
 
         // Throw the straight-shot TNT (explodes on ground/player)
-        float dy = (ai.playerTarget.y + 1.55F) - (ai.mob.y + ai.mob.heightOffset);
+        float dy =
+                (ai.playerTarget.bb.y0 + ai.playerTarget.bbHeight * .5f)
+                        - (ai.mob.y + ai.mob.heightOffset);
         float pitchUp = ai.clamp(-35F, -5F - flatDist * 1.8F - dy * 1.2F, -5F);
 
         float yaw = ai.mob.yRot;
@@ -67,18 +67,24 @@ public final class ThrowTntGoal extends MobGoal<ThrowTntAI> {
         float offX = -MathHelper.sin(yawRad) * forward;
         float offZ = MathHelper.cos(yawRad) * forward;
 
-        ai.level.addEntity(new net.classicremastered.minecraft.entity.ImpactPrimedTnt(
-                ai.level, ai.mob,
-                ai.mob.x + offX,
-                ai.mob.y + ai.mob.heightOffset + up,
-                ai.mob.z + offZ,
-                ai.playerTarget.x, ai.playerTarget.y + 1.55F, ai.playerTarget.z,
-                ai.throwPower, ai.fuseTicks, ai.preferredMax).setExplodeOnGround(true)
-                .setExplodeOnPlayer(true));
+        ai.level.addEntity(
+                new net.classicremastered.minecraft.entity.ImpactPrimedTnt(
+                                ai.level,
+                                ai.mob,
+                                ai.mob.x + offX,
+                                ai.mob.bb.y0 + ai.mob.bbHeight * .85f,
+                                ai.mob.z + offZ,
+                                ai.playerTarget.x,
+                                ai.playerTarget.bb.y0 + ai.playerTarget.bbHeight * .5f,
+                                ai.playerTarget.z,
+                                ai.throwPower,
+                                ai.fuseTicks,
+                                ai.preferredMax)
+                        .setExplodeOnGround(true)
+                        .setExplodeOnPlayer(true));
 
         ai.mob.attackTime = Mob.ATTACK_DURATION;
         ai.windup = 0;
         ai.cooldown = ai.cooldownTicks;
     }
-
 }

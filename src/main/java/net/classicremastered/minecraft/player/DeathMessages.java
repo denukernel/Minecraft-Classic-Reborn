@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.player;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.Arrow;
+import net.classicremastered.minecraft.entity.HeldBlockEntity;
 import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.net.NetworkPlayer;
 
@@ -11,8 +12,27 @@ public final class DeathMessages {
     }
 
     public static String message(Player player, Entity source, String cause) {
+        return message(player, source, cause, null);
+    }
+
+    public static Entity resolveAttacker(Entity source) {
+        if (source instanceof Arrow arrow) return arrow.getOwner();
+        if (source instanceof HeldBlockEntity block) return block.getOwner();
+        return source;
+    }
+
+    static String message(Player player, Entity source, String cause, Entity recentAttacker) {
         String victim = name(player);
-        Entity attacker = source instanceof Arrow ? ((Arrow) source).getOwner() : source;
+        if (source == null
+                && recentAttacker != null
+                && cause != null
+                && switch (cause) {
+                    case "in_wall", "drown", "lava", "fire", "burn", "fall", "void" -> true;
+                    default -> false;
+                }) {
+            return name(recentAttacker) + " finished off " + victim;
+        }
+        Entity attacker = resolveAttacker(source);
         if (attacker instanceof StickFigure) {
             return victim + " got punished by " + name(attacker);
         }
@@ -24,17 +44,20 @@ public final class DeathMessages {
                     return victim + " drowned";
                 case "lava" :
                     return victim + " tried to swim in lava";
-                case "fire" :
+                case "fire":
                     return victim + " went up in flames";
-                case "burn" :
+                case "burn":
                     return victim + " burned to death";
-                case "fall" :
-                    return victim + " hit the ground too hard";
-                case "void" :
+                case "fall":
+                    return victim
+                            + (attacker == null
+                                    ? " hit the ground too hard"
+                                    : " was doomed to fall by " + name(attacker));
+                case "void":
                     return victim + " fell out of the world";
-                case "magic" :
+                case "magic":
                     return victim + " was killed by magic";
-                case "explosion" :
+                case "explosion":
                     return victim
                             + (attacker == null
                                     ? " blew up"
@@ -43,8 +66,9 @@ public final class DeathMessages {
                     break;
             }
         }
-        if (source instanceof Arrow)
-            return victim + " was shot by " + name(attacker);
+        if (source instanceof Arrow) return victim + " was shot by " + name(attacker);
+        if (source instanceof HeldBlockEntity && attacker != null)
+            return victim + " was hit by a block thrown by " + name(attacker);
         return victim + (attacker == null ? " died" : " was slain by " + name(attacker));
     }
 

@@ -1,13 +1,17 @@
 package net.classicremastered.minecraft.render;
 
-import net.classicremastered.minecraft.MovingObjectPosition;
+import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 
 /** Camera placement only. Player geometry belongs exclusively to the world entity pass. */
 public record CameraView(float yaw, float pitch, float distance, Vec3D focus, Vec3D position) {
+    private static final float THIRD_PERSON_DISTANCE = 4f;
+    private static final float CAMERA_RADIUS = .15f;
+
     public static CameraView resolve(Player player, int mode, float partial) {
-        float yaw = player.yRotO + (player.yRot - player.yRotO) * partial;
+        float yaw = player.aimYaw(partial);
         float pitch = player.xRotO + (player.xRot - player.xRotO) * partial;
         Vec3D focus = new Vec3D(player.xo + (player.x - player.xo) * partial,
                 player.yo + (player.y - player.yo) * partial, player.zo + (player.z - player.zo) * partial);
@@ -20,26 +24,40 @@ public record CameraView(float yaw, float pitch, float distance, Vec3D focus, Ve
         double y = Math.toRadians(yaw), p = Math.toRadians(pitch);
         float dx = (float) (-Math.sin(y) * Math.cos(p)), dy = (float) Math.sin(p),
                 dz = (float) (Math.cos(y) * Math.cos(p));
-        float distance = 4;
-        if (player.level != null)
-            for (int sample = 0; sample < 9; sample++) {
-                float ox = sample == 8 ? 0 : ((sample & 1) == 0 ? -.12f : .12f);
-                float oy = sample == 8 ? 0 : ((sample & 2) == 0 ? -.12f : .12f);
-                float oz = sample == 8 ? 0 : ((sample & 4) == 0 ? -.12f : .12f);
-                float sx = focus.x + ox, sy = focus.y + oy, sz = focus.z + oz;
-                if (player.level.isSolidTile((int) Math.floor(sx), (int) Math.floor(sy), (int) Math.floor(sz))) {
-                    distance = .15f;
+        float distance = clipDistance(player.level, focus, dx, dy, dz);
+        return new CameraView(yaw, pitch, distance, focus,
+                focus.add(dx * distance, dy * distance, dz * distance));
+    }
+
+    private static float clipDistance(Level level, Vec3D focus, float dx, float dy, float dz) {
+        if (level == null)
+            return THIRD_PERSON_DISTANCE;
+        float x = dx * THIRD_PERSON_DISTANCE, y = dy * THIRD_PERSON_DISTANCE,
+                z = dz * THIRD_PERSON_DISTANCE;
+        Vec3D end = focus.add(x, y, z);
+        AABB sweep = new AABB(focus.x, focus.y, focus.z, focus.x, focus.y, focus.z)
+                .grow(CAMERA_RADIUS, CAMERA_RADIUS, CAMERA_RADIUS).expand(x, y, z);
+        float distance = THIRD_PERSON_DISTANCE;
+        // Sweep the camera volume against block shapes, including transparent leaves and glass.
+        for (Object candidate : level.getCubes(sweep)) {
+            AABB block = (AABB) candidate;
+            AABB padded = block.grow(CAMERA_RADIUS, CAMERA_RADIUS, CAMERA_RADIUS);
+            if (padded.contains(focus)) {
+                if (staysOutside(focus.x, dx, block.x0, block.x1)
+                        || staysOutside(focus.y, dy, block.y0, block.y1)
+                        || staysOutside(focus.z, dz, block.z0, block.z1))
                     continue;
-                }
-                // Level.clip mutates its input vector, so retain scalar coordinates for hit distance.
-                MovingObjectPosition hit = player.level.clip(new Vec3D(sx, sy, sz),
-                        new Vec3D(sx + dx * 4, sy + dy * 4, sz + dz * 4), true);
-                if (hit != null) {
-                    float travel = (hit.vec.x - sx) * dx + (hit.vec.y - sy) * dy + (hit.vec.z - sz) * dz;
-                    distance = Math.min(distance, Math.max(.15f, travel - .15f));
-                }
+                return 0f;
             }
-        return new CameraView(yaw, pitch, distance, focus, focus.add(dx * distance, dy * distance, dz * distance));
+            var hit = padded.clip(focus, end);
+            if (hit != null)
+                distance = Math.min(distance, Math.max(0f, focus.distance(hit.vec) - .01f));
+        }
+        return distance;
+    }
+
+    private static boolean staysOutside(float start, float direction, float min, float max) {
+        return start <= min && direction <= 0f || start >= max && direction >= 0f;
     }
 
     public boolean outsidePlayer(Player player) {
@@ -48,5 +66,13 @@ public record CameraView(float yaw, float pitch, float distance, Vec3D focus, Ve
         return distance > .65f && !(position.x > player.bb.x0 - .1f && position.x < player.bb.x1 + .1f
                 && position.y > player.bb.y0 - .1f && position.y < player.bb.y1 + .1f && position.z > player.bb.z0 - .1f
                 && position.z < player.bb.z1 + .1f);
+    }
+
+    CameraView withDistance(float newDistance) {
+        if (newDistance >= distance)
+            return this;
+        float scale = newDistance / distance;
+        return new CameraView(yaw, pitch, newDistance, focus, focus.add((position.x - focus.x) * scale,
+                (position.y - focus.y) * scale, (position.z - focus.z) * scale));
     }
 }

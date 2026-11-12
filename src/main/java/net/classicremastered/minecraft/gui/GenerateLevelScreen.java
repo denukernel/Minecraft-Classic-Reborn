@@ -43,7 +43,7 @@ public final class GenerateLevelScreen extends GuiScreen {
     @Override
     public void onOpen() {
         this.buttons.clear();
-        int rows = 6 + (!infinite ? 1 : 0) + (!infinite || !biomes ? 1 : 0);
+        int rows = 7 + (!infinite ? 1 : 0);
         int y = Math.max(8, (this.height - rows * 24 + 4) / 2);
         int cx = this.width / 2;
 
@@ -63,11 +63,8 @@ public final class GenerateLevelScreen extends GuiScreen {
                     new Button(0, cx - 100, y + 24 * line, "World Size: " + SIZE_NAMES[sizeIndex]));
             line++;
         }
-        if (!infinite || !biomes) {
-            this.buttons.add(
-                    new Button(1, cx - 100, y + 24 * line, "Flat World: " + (flat ? "ON" : "OFF")));
-            line++;
-        }
+        this.buttons.add(
+                new Button(1, cx - 100, y + 24 * line++, "Flat World: " + (flat ? "ON" : "OFF")));
 
         this.buttons.add(
                 new Button(
@@ -156,9 +153,11 @@ public final class GenerateLevelScreen extends GuiScreen {
                 level =
                         flat && !biomes
                                 ? new LevelInfiniteFlat(seed, 64)
-                                : new LevelInfiniteTerrain(seed, 64, biomes);
+                                : new LevelInfiniteTerrain(seed, 64, biomes, flat);
                 level.name =
-                        biomes ? "Infinite Biomes" : flat ? "Infinite Flat" : "Infinite Terrain";
+                        biomes
+                                ? (flat ? "Infinite Flat Biomes" : "Infinite Biomes")
+                                : flat ? "Infinite Flat" : "Infinite Terrain";
             } else if (biomes) {
                 level = new BiomeLevelGenerator(seed).generate(creator, size, flat);
             } else if (flat) {

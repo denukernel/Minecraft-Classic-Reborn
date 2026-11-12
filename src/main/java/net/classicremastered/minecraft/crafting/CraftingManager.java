@@ -1,7 +1,11 @@
 package net.classicremastered.minecraft.crafting;
 
+import net.classicremastered.minecraft.level.itemstack.BoatItem;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.OreMaterials;
+import net.classicremastered.minecraft.level.itemstack.TurretItems;
+import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
 import net.classicremastered.minecraft.level.tile.Block;
 
 import java.util.ArrayList;
@@ -22,11 +26,154 @@ public class CraftingManager {
         System.out.println("Initializing CraftingManager...");
         net.classicremastered.minecraft.level.itemstack.ItemRegistry.bootstrap();
 
+        addRecipe(new ItemStack(Block.SNOW_BLOCK.id, 1), "ss", "ss", 's', Item.SNOWBALL.id + 256);
+
         // --- Register Recipes here ---
+
+        addRecipe(
+                new ItemStack(Block.LADDER.id, 3),
+                "s s",
+                "sss",
+                "s s",
+                's',
+                Equipment.STICK.id + 256);
 
         // Log -> 4 Planks (Shapeless / 1x1)
         addRecipe(new ItemStack(Block.WOOD.id, 4), "#", '#', Block.LOG.id);
+        addRecipe(new ItemStack(BoatItem.ID + 256, 1), "w w", "www", 'w', Block.WOOD.id);
 
+        int upgrade =
+                net.classicremastered.minecraft.level.itemstack.TurretItems.FIRST_UPGRADE + 256;
+        for (int i = 0; i < 4; i++) {
+            addRecipe(
+                    new ItemStack(upgrade + i, 1),
+                    "iii",
+                    "ici",
+                    "iii",
+                    'i',
+                    net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+                    'c',
+                    i == 0 ? Block.COBBLESTONE.id : upgrade + i - 1);
+        }
+        addRecipe(
+                new ItemStack(upgrade + 4, 1),
+                "iri",
+                'i',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+                'r',
+                Item.REDSTONE_DUST_ID + 256);
+        addRecipe(
+                new ItemStack(upgrade + 5, 1),
+                "rur",
+                'u',
+                upgrade + 4,
+                'r',
+                Item.REDSTONE_DUST_ID + 256);
+        addRecipe(
+                new ItemStack(upgrade + 6, 1),
+                "ici",
+                'i',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+                'c',
+                Block.CHEST.id);
+
+        int baseTurret = net.classicremastered.minecraft.level.itemstack.TurretItems.TURRET + 256;
+        int iron = net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256;
+        int redstone = Item.REDSTONE_DUST_ID + 256;
+        addRecipe(new ItemStack(316, 1), "itw", 'i', iron, 't', baseTurret, 'w', Block.WOOD.id);
+        addRecipe(
+                new ItemStack(317, 1),
+                "its",
+                'i',
+                iron,
+                't',
+                baseTurret,
+                's',
+                Equipment.STRING.id + 256);
+        addRecipe(
+                new ItemStack(318, 1),
+                "rte",
+                'r',
+                redstone,
+                't',
+                baseTurret,
+                'e',
+                Item.ENDER_PEARL.id + 256);
+        addRecipe(
+                new ItemStack(319, 1), "rtg", 'r', redstone, 't', baseTurret, 'g', Block.GLASS.id);
+        addRecipe(new ItemStack(net.classicremastered.minecraft.mob.TurretVariant.ROVER.item + 256, 1),
+                "iti", "www", 'i', iron, 't', baseTurret, 'w', Block.WOOD.id);
+        addRecipe(new ItemStack(352, 1), "iti", " r ", 'i', iron, 't', baseTurret, 'r', redstone);
+        addRecipe(new ItemStack(353, 1), "iai", " b ", 'i', iron, 'a', 316, 'b', 352);
+        addRecipe(new ItemStack(354, 8), "ici", 'i', iron, 'c', Item.COAL_ID + 256);
+        addRecipe(new ItemStack(321, 4), "ii", " s", 'i', iron, 's', Equipment.STICK.id + 256);
+        addRecipe(new ItemStack(322, 4), "br", 'b', 304, 'r', redstone);
+
+        addRecipe(new ItemStack(326, 1), "grg", 'g', Block.GLASS.id, 'r', redstone);
+        addRecipe(
+                new ItemStack(327, 1),
+                "drd",
+                'd',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.DIAMOND + 256,
+                'r',
+                redstone);
+
+        // Tier 1 crossbow turret and supplies
+        addRecipe(
+                new ItemStack(
+                        net.classicremastered.minecraft.level.itemstack.TurretItems.TURRET + 256,
+                        1),
+                " b ",
+                "wsw",
+                "ccc",
+                'b',
+                Item.BOW.id + 256,
+                'w',
+                Block.WOOD.id,
+                's',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+                'c',
+                Block.COBBLESTONE.id);
+        addRecipe(
+                new ItemStack(
+                        net.classicremastered.minecraft.level.itemstack.TurretItems.BOLT + 256, 4),
+                "i",
+                "s",
+                'i',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+                's',
+                Equipment.STICK.id + 256);
+        addRecipe(
+                new ItemStack(
+                        net.classicremastered.minecraft.level.itemstack.TurretItems.REPAIR + 256,
+                        1),
+                "ir",
+                'i',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+                'r',
+                Item.REDSTONE_DUST_ID + 256);
+        addRecipe(
+                new ItemStack(
+                        net.classicremastered.minecraft.level.itemstack.TurretItems.CONTROL + 256,
+                        1),
+                "gr",
+                "ii",
+                'g',
+                Block.GLASS.id,
+                'r',
+                Item.REDSTONE_DUST_ID + 256,
+                'i',
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256);
+        addRecipe(
+                new ItemStack(
+                        net.classicremastered.minecraft.level.itemstack.TurretItems.CRATE + 256, 1),
+                "www",
+                "wcw",
+                "www",
+                'w',
+                Block.WOOD.id,
+                'c',
+                Block.CHEST.id);
         // 4 Planks -> Workbench
         addRecipe(new ItemStack(Block.WORKBENCH.id, 1), "##", "##", '#', Block.WOOD.id);
 
@@ -99,7 +246,7 @@ public class CraftingManager {
                 'c',
                 Block.COBBLESTONE.id,
                 'i',
-                Block.IRON_ORE.id,
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
                 'r',
                 net.classicremastered.minecraft.level.itemstack.Item.REDSTONE_DUST_ID + 256);
         addRecipe(
@@ -114,9 +261,9 @@ public class CraftingManager {
         int[] materials = {
             Block.WOOD.id,
             Block.COBBLESTONE.id,
-            Block.IRON_ORE.id,
-            Block.DIAMOND_ORE_NEW.id,
-            Block.GOLD_ORE.id
+            net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256,
+            net.classicremastered.minecraft.level.itemstack.OreMaterials.DIAMOND + 256,
+            net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_GOLD + 256
         };
         for (int tier = 0; tier < materials.length; tier++) {
             addRecipe(
@@ -144,7 +291,7 @@ public class CraftingManager {
                 "s",
                 "s",
                 '#',
-                Block.DIAMOND_ORE_NEW.id,
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.DIAMOND + 256,
                 's',
                 stick);
         addRecipe(
@@ -153,16 +300,16 @@ public class CraftingManager {
                 "s",
                 "s",
                 '#',
-                Block.GOLD_ORE.id,
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_GOLD + 256,
                 's',
                 stick);
-        for (int t = 0; t < 2; t++) {
-            int mat =
-                    t == 0
-                            ? net.classicremastered.minecraft.level.itemstack.Equipment.LEATHER.id
-                                    + 256
-                            : Block.IRON_ORE.id;
-            int[] armor = net.classicremastered.minecraft.level.itemstack.Equipment.ARMOR[t];
+        int[] armorMaterials = { Equipment.LEATHER.id, OreMaterials.RAW_IRON, OreMaterials.RAW_GOLD,
+                OreMaterials.DIAMOND };
+        addRecipe(new ItemStack(net.classicremastered.minecraft.level.itemstack.SaddleItem.ID + 256, 1),
+                " L ", "LIL", 'L', Equipment.LEATHER.id + 256, 'I', OreMaterials.RAW_IRON + 256);
+        for (int t = 0; t < armorMaterials.length; t++) {
+            int mat = armorMaterials[t] + 256;
+            int[] armor = Equipment.ARMOR[t];
             addRecipe(new ItemStack(armor[0] + 256, 1), "###", "# #", '#', mat);
             addRecipe(new ItemStack(armor[1] + 256, 1), "# #", "###", "###", '#', mat);
             addRecipe(new ItemStack(armor[2] + 256, 1), "###", "# #", "# #", '#', mat);
@@ -189,6 +336,27 @@ public class CraftingManager {
                 'f',
                 Item.FEATHER.id + 256);
 
+        addTurretUpgrade(TurretUpgrade.ARMOR_I, Block.IRON_BLOCK.id);
+        addTurretUpgrade(TurretUpgrade.ARMOR_II, Block.IRON_BLOCK.id);
+        addTurretUpgrade(TurretUpgrade.POWER_I, Equipment.ARROW.id + 256);
+        addTurretUpgrade(TurretUpgrade.POWER_II, Equipment.ARROW.id + 256);
+        addTurretUpgrade(TurretUpgrade.RECYCLER_I,
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_GOLD + 256);
+        addTurretUpgrade(TurretUpgrade.RECYCLER_II,
+                net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_GOLD + 256);
+        addTurretUpgrade(TurretUpgrade.TRACKING_I, Block.GLASS.id);
+        addTurretUpgrade(TurretUpgrade.TRACKING_II, Block.GLASS.id);
+        addTurretUpgrade(TurretUpgrade.REPAIR, TurretItems.REPAIR + 256);
+        addTurretUpgrade(TurretUpgrade.FIRE_SEAL, Block.OBSIDIAN.id);
+        addTurretUpgrade(TurretUpgrade.WATER_SEAL, Block.SPONGE.id);
+        addTurretUpgrade(TurretUpgrade.SHOCK_ABSORBER, Block.WHITE_WOOL.id);
+
+        addRecipe(new ItemStack(Block.STONE_BRICKS.id, 4), "ss", "ss", 's', Block.STONE.id);
+        addStairs(Block.SANDSTONE_STAIRS, Block.SANDSTONE);
+        addStairs(Block.OAK_STAIRS, Block.WOOD);
+        addStairs(Block.COBBLESTONE_STAIRS, Block.COBBLESTONE);
+        addStairs(Block.STONE_BRICK_STAIRS, Block.STONE_BRICKS);
+
         // Sort recipes by size (largest first) to prioritize complex recipes
         Collections.sort(
                 recipes,
@@ -198,6 +366,16 @@ public class CraftingManager {
                     }
                 });
         System.out.println(recipes.size() + " recipes loaded.");
+    }
+
+    private void addStairs(Block stairs, Block material) {
+        addRecipe(new ItemStack(stairs.id, 4), "s  ", "ss ", "sss", 's', material.id);
+    }
+
+    private void addTurretUpgrade(TurretUpgrade upgrade, int material) {
+        int core = upgrade.previous == null ? TurretItems.CONTROL : upgrade.previous.item;
+        addRecipe(new ItemStack(upgrade.item + 256, 1), " m ", "rcr", " m ", 'm', material, 'r',
+                Item.REDSTONE_DUST_ID + 256, 'c', core + 256);
     }
 
     public void addRecipe(ItemStack result, Object... args) {

@@ -1,7 +1,5 @@
 package net.classicremastered.minecraft.level.itemstack;
 
-import java.util.Map;
-import java.util.WeakHashMap;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.entity.*;
@@ -9,6 +7,9 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
+
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /** Shared ownership and collision-safe dragging for non-mob entities. */
 public final class GunEntityDrag {
@@ -39,10 +40,17 @@ public final class GunEntityDrag {
         Entity result = null;
         for (Entity entity : level.blockMap.getEntities(player,
                 player.bb.expand(direction.x * range, direction.y * range, direction.z * range).grow(.3f, .3f, .3f))) {
-            if (entity instanceof Mob || entity instanceof HeldBlockEntity || entity instanceof SignEntity
-                    || entity instanceof TakeEntityAnim || entity instanceof DamageCloud || entity.removed
-                    || entity.bb == null || entity.rider != null || entity.riding != null || isHeld(entity))
-                continue;
+            if (entity instanceof Mob
+                    || entity instanceof BoatEntity
+                    || entity instanceof HeldBlockEntity
+                    || entity instanceof SignEntity
+                    || entity instanceof TakeEntityAnim
+                    || entity instanceof DamageCloud
+                    || entity.removed
+                    || entity.bb == null
+                    || entity.rider != null
+                    || entity.riding != null
+                    || isHeld(entity)) continue;
             MovingObjectPosition hit = entity.bb.grow(.2f, .2f, .2f).clip(start, end);
             if (hit != null && start.distance(hit.vec) < nearest) {
                 nearest = start.distance(hit.vec);
@@ -94,7 +102,8 @@ public final class GunEntityDrag {
     public static void cleanup(Level level) {
         for (Player player : held.keySet().toArray(new Player[0])) {
             Hold hold = held.get(player);
-            if (player.removed || player.health <= 0 || player.level != level || hold.entity.level != level
+            if (player.isSpectator() || player.removed || player.health <= 0
+                    || player.level != level || hold.entity.level != level
                     || level.isNetworkMode() || hold.entity.removed || player.inventory.getSelected() != hold.tool)
                 release(player, hold.tool, 0);
         }
@@ -115,7 +124,8 @@ public final class GunEntityDrag {
         if (owner == null)
             return false;
         Hold hold = held.get(owner);
-        if (owner.removed || owner.health <= 0 || entity.removed || owner.level != entity.level
+        if (owner.isSpectator() || owner.removed || owner.health <= 0 || entity.removed
+                || owner.level != entity.level
                 || entity.level.isNetworkMode() || owner.inventory.getSelected() != hold.tool
                 || owner.distanceTo(entity) > 18) {
             release(owner, hold.tool, 0);

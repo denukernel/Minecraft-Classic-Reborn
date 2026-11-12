@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.IronGolem;
+import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.phys.AABB;
@@ -79,6 +80,7 @@ public class Level implements Serializable {
     }
 
     public boolean creativeMode;
+    public transient boolean spectatorMode;
     public int waterLevel;
     public int skyColor; // --- Day/Night cycle ---
     public int dayLength = 24000; // ticks per full day (~20 min at 20 TPS)
@@ -88,6 +90,8 @@ public class Level implements Serializable {
     public boolean doMobLoot = true;
     public boolean keepInventory = false;
     public boolean doDayNightCycle = true;
+    public java.util.Set<net.classicremastered.minecraft.level.structure.GeneratedHouse> generatedHouses = java.util.concurrent.ConcurrentHashMap
+            .newKeySet();
     private static final int SKY_DAY = 0x66B1FF; // light blue
     private static final int SKY_NIGHT = 0x020924; // deep navy
     private static final int FOG_DAY = 0xC0D8FF; // pale blue
@@ -223,9 +227,9 @@ public class Level implements Serializable {
 
     /** For star alpha: dark nights, zero at day. */
     public float getStarBrightness() {
-        float daylight = (getDayFactorSmooth() - 0.25f) / 0.75f;
-        float d = Math.max(0f, Math.min(1f, 1f - daylight));
-        return d * d; // softer transition
+        float sunHeight = MathHelper.cos(getCelestialAngleSmooth() * (float) Math.PI * 2);
+        float dark = Math.max(0, Math.min(1, (-sunHeight - .15f) / .6f));
+        return dark * dark * (3 - 2 * dark);
     }
 
     private static int lerpColor(int a, int b, float t) {
@@ -259,6 +263,12 @@ public class Level implements Serializable {
     // --- end Day/Night helpers ---
 
     public void initTransient() {
+        RidingLinks ridingLinks = new RidingLinks();
+        initTransient(ridingLinks);
+        ridingLinks.restore();
+    }
+
+    void initTransient(RidingLinks ridingLinks) {
         if (cactusAges == null) cactusAges = new java.util.HashMap<>();
         if (this.blocks == null) {
             throw new RuntimeException("The level is corrupt!");
@@ -317,6 +327,7 @@ public class Level implements Serializable {
                     } catch (Throwable ignored) {
                     }
                     this.addEntity(m);
+                    ridingLinks.read(m, s.extraData);
                 }
                 this.pendingEntities = null; // spawn only once
             }
@@ -674,6 +685,18 @@ public class Level implements Serializable {
 
     public void tickEntities() {
         this.blockMap.tickAll();
+        lightEngine.refreshBurningMobs();
+    }
+
+    void queueLightRegion(int x, int y, int z, int radius) {
+        for (Object listener : listeners)
+            if (listener instanceof LevelRenderer renderer)
+                renderer.queueChunks(x - radius, y - radius, z - radius, x + radius, y + radius,
+                        z + radius);
+        if (minecraft != null && minecraft.levelRenderer != null
+                && !listeners.contains(minecraft.levelRenderer))
+            minecraft.levelRenderer.queueChunks(x - radius, y - radius, z - radius, x + radius,
+                    y + radius, z + radius);
     }
 
     // Level fields
@@ -757,7 +780,10 @@ public class Level implements Serializable {
     }
 
     public boolean isEntityActive(Entity entity) {
-        if (entity instanceof Player || entity.rider != null || entity.riding != null) return true;
+        if (entity instanceof Player || entity.rider instanceof Player)
+            return true;
+        if (entity.riding != null)
+            entity = entity.riding;
         if (!isEntityChunkLoaded(entity)) return false;
         if (!(this instanceof LevelInfiniteTerrain) && !(this instanceof LevelInfiniteFlat))
             return true;
@@ -771,6 +797,9 @@ public class Level implements Serializable {
                 && Math.abs(entity.x - player.x) <= 128
                 && Math.abs(entity.z - player.z) <= 128;
     }
+
+    public java.util.Set<net.classicremastered.minecraft.level.structure.CobblestoneTower.Entrance>
+            cobblestoneTowers = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     protected void despawnDistantMobs() {
         if (isNetworkMode() || blockMap == null) return;
@@ -787,6 +816,15 @@ public class Level implements Serializable {
                     || mob.health <= 0) continue;
             if (!MobSpawner.isMonster(mob) || mob.isPersistenceRequired()) {
                 mob.despawnIdleTicks = 0;
+                continue;
+            }
+            if (isDaytime()
+                    && !(mob instanceof net.classicremastered.minecraft.mob.Husk)
+                    && getDaylightBrightness() >= 0.6f
+                    && (!(mob instanceof net.classicremastered.minecraft.mob.Zombie zombie)
+                            || !zombie.isSunlightVulnerable())
+                    && isSunlitAtHead(mob)) {
+                mob.remove();
                 continue;
             }
             if (players.isEmpty()) continue;
@@ -1185,19 +1223,25 @@ public class Level implements Serializable {
         return 0.25f + 0.75f * c;
     }
 
+    public boolean hasRainbowSky() {
+        return forceRainbowSky
+                && player != null
+                && Math.max(Math.abs(player.x), Math.abs(player.z)) > 30_000_000;
+    }
+
+    public float twilightStrength() {
+        if (hasRainbowSky()
+                || player != null && Math.max(Math.abs(player.x), Math.abs(player.z)) >= 25_000_000)
+            return 0;
+        float angle = getCelestialAngleSmooth();
+        if (angle > .5f) angle = 1 - angle;
+        if (angle < .19f || angle > .33f) return 0;
+        float progress = angle < .25f ? (angle - .19f) / .06f : (.33f - angle) / .08f;
+        return progress * progress * (3 - 2 * progress);
+    }
+
     public void updateDayNightColorsSmooth() {
-        boolean rainbow = false;
-
-        // Enable rainbow only if flag is set AND player is far enough
-        if (forceRainbowSky && this.player != null) {
-            float distX = Math.abs(this.player.x);
-            float distZ = Math.abs(this.player.z);
-            if (distX > 30_000_000 || distZ > 30_000_000) {
-                rainbow = true;
-            }
-        }
-
-        if (rainbow) {
+        if (hasRainbowSky()) {
             // Rainbow sky ignores day/night cycle
             float hue = (this.tickCount % 720) / 720.0f; // cycle ~36s
             java.awt.Color c = java.awt.Color.getHSBColor(hue, 1.0f, 1.0f);
@@ -1215,6 +1259,11 @@ public class Level implements Serializable {
         this.skyColor = lerpColor(SKY_NIGHT, SKY_DAY, dl);
         this.fogColor = lerpColor(FOG_NIGHT, FOG_DAY, dl);
         this.cloudColor = lerpColor(CLOUD_NGT, CLOUD_DAY, dl);
+        float sunset = twilightStrength();
+        if (sunset > 0) {
+            this.fogColor = lerpColor(this.fogColor, 0xE69569, sunset * .22f);
+            this.cloudColor = lerpColor(this.cloudColor, 0xFFAF82, sunset * .46f);
+        }
     }
 
     /** True during the day. If you prefer a softer cutoff, gate on getDaylightBrightness(). */
@@ -1818,21 +1867,19 @@ public class Level implements Serializable {
         }
     }
 
-    // ADD import if you don't already have it at the file top:
-
-    /** Returns the nearest Player within maxDist of (x,y,z), or null if none. */
+    /** Returns the nearest non-spectator player within maxDist, or null if none. */
     public Player getNearestPlayer(float x, float y, float z, float maxDist) {
         Player nearest = null;
         float bestD2 = (maxDist <= 0 ? Float.MAX_VALUE : maxDist * maxDist);
 
         // Prefer the cached singleplayer field when available and in range
-        if (this.player instanceof Player) {
-            float dx = this.player.x - x;
-            float dy = this.player.y - y;
-            float dz = this.player.z - z;
+        if (this.player instanceof Player p && !p.isSpectator()) {
+            float dx = p.x - x;
+            float dy = p.y - y;
+            float dz = p.z - z;
             float d2 = dx * dx + dy * dy + dz * dz;
             if (d2 <= bestD2) {
-                nearest = (Player) this.player;
+                nearest = p;
                 bestD2 = d2;
             }
         }
@@ -1841,8 +1888,7 @@ public class Level implements Serializable {
         if (this.blockMap != null && this.blockMap.all != null) {
             for (int i = 0; i < this.blockMap.all.size(); i++) {
                 Object e = this.blockMap.all.get(i);
-                if (e instanceof Player) {
-                    Player p = (Player) e;
+                if (e instanceof Player p && !p.isSpectator()) {
                     float dx = p.x - x;
                     float dy = p.y - y;
                     float dz = p.z - z;
@@ -1871,7 +1917,8 @@ public class Level implements Serializable {
                 src == null ? 0f : (src.y + 0.12f),
                 src == null ? 0f : src.z,
                 volume,
-                pitch);
+                pitch,
+                src instanceof Mob && !(src instanceof Player));
     }
 
     public void playSound(String key, float x, float y, float z, float volume, float pitch) {
@@ -1977,6 +2024,11 @@ public class Level implements Serializable {
     private void readObject(java.io.ObjectInputStream in)
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
+        if (generatedHouses == null)
+            generatedHouses = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        if (cobblestoneTowers == null) {
+            cobblestoneTowers = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        }
         if (gameRulesVersion == 0) {
             doMobSpawning = doMobLoot = true;
             keepInventory = false;
@@ -2087,28 +2139,6 @@ public class Level implements Serializable {
             net.classicremastered.minecraft.CombatRules.roll(m);
         this.blockMap.insert(var1);
         var1.setLevel(this);
-
-        // Drops and pickup flights are rendered as entities, outside chunk meshes.
-        if (var1 instanceof net.classicremastered.minecraft.entity.DroppedItem
-                || var1 instanceof net.classicremastered.minecraft.entity.DroppedBlock
-                || var1 instanceof net.classicremastered.minecraft.entity.TakeEntityAnim) return;
-
-        // Force chunk rebuild near the entity for renderer sync
-        if (this.listeners != null) {
-            for (int i = 0; i < listeners.size(); i++) {
-                Object o = listeners.get(i);
-                if (o instanceof net.classicremastered.minecraft.render.LevelRenderer) {
-                    ((net.classicremastered.minecraft.render.LevelRenderer) o)
-                            .queueChunks(
-                                    (int) var1.x - 1,
-                                    (int) var1.y - 1,
-                                    (int) var1.z - 1,
-                                    (int) var1.x + 1,
-                                    (int) var1.y + 1,
-                                    (int) var1.z + 1);
-                }
-            }
-        }
     }
 
     public void removeEntity(Entity var1) {

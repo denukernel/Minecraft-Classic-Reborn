@@ -242,9 +242,15 @@ public final class SimpleChunkManager {
         int worldZ = c.cz * SimpleChunk.SIZE;
 
         if (biomes != null) {
-            biomes.generateChunk(c);
+            biomes.generateChunk(c, level != null && level.flatBiomes);
         } else if (terrain != null) {
             terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT, level);
+        }
+        if (mode != Mode.FLAT && (level == null || !level.flatBiomes)) {
+            net.classicremastered.minecraft.level.structure.CobblestoneTower.decorate(c, seed);
+            if (level != null && c.cobblestoneTower != null) {
+                level.cobblestoneTowers.add(c.cobblestoneTower);
+            }
         }
         c.buildEmissiveList();
     }

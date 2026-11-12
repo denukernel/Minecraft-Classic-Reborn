@@ -18,6 +18,7 @@ public final class StructureRegistry {
     }
 
     public List<Entry> getEntries() {
+        bootstrapDefaults();
         return java.util.Collections.unmodifiableList(entries);
     }
 
@@ -37,6 +38,7 @@ public final class StructureRegistry {
         try {
             register(new HouseStructure(), 20);
             register(new DesertPyramid(), 1);
+            register(new CobblestoneTower(), 1);
         } catch (Throwable t) {
             t.printStackTrace();
         }
@@ -115,11 +117,12 @@ public final class StructureRegistry {
 
     private Structure pickWeighted(Random rand) {
         int total = 0;
-        for (Entry e : entries) total += e.weight;
+        for (Entry e : entries) if (!(e.structure instanceof CobblestoneTower)) total += e.weight;
         if (total <= 0) return null;
         int r = rand.nextInt(total);
         for (Entry e : entries) {
-            if ((r -= e.weight) < 0) return e.structure;
+            if (!(e.structure instanceof CobblestoneTower) && (r -= e.weight) < 0)
+                return e.structure;
         }
         return null;
     }

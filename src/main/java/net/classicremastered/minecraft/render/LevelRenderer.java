@@ -118,7 +118,7 @@ public final class LevelRenderer {
         yChunks = (level.depth + 15) / 16;
         zChunks = (level.height + 15) / 16;
         int count = xChunks * yChunks * zChunks;
-        baseListCount = count * 2;
+        baseListCount = count * Chunk.PASS_COUNT;
         if (baseListCount > 0) baseListId = GL11.glGenLists(baseListCount);
         chunkCache = new Chunk[count];
         loadQueue = new Chunk[count];
@@ -126,7 +126,14 @@ public final class LevelRenderer {
             for (int cy = 0; cy < yChunks; cy++)
                 for (int cz = 0; cz < zChunks; cz++) {
                     int idx = (cz * yChunks + cy) * xChunks + cx;
-                    Chunk c = new Chunk(level, cx << 4, cy << 4, cz << 4, 16, baseListId + idx * 2);
+                    Chunk c =
+                            new Chunk(
+                                    level,
+                                    cx << 4,
+                                    cy << 4,
+                                    cz << 4,
+                                    16,
+                                    baseListId + idx * Chunk.PASS_COUNT);
                     chunkCache[idx] = loadQueue[idx] = c;
                     markDirty(c);
                 }
@@ -183,7 +190,7 @@ public final class LevelRenderer {
                                             sy << 4,
                                             (cz + dz) << 4,
                                             16,
-                                            GL11.glGenLists(2));
+                                            GL11.glGenLists(Chunk.PASS_COUNT));
                             infiniteCache.put(key, c);
                             markDirty(c);
                         }
@@ -227,13 +234,7 @@ public final class LevelRenderer {
             buffer.clear();
             if (len > 0) {
                 buffer.put(chunkDataCache, 0, len).flip();
-                GL11.glBindTexture(
-                        GL11.GL_TEXTURE_2D,
-                        textureManager.load(
-                                infinite && pass == 1
-                                        ? "/water.png"
-                                        : net.classicremastered.minecraft.render.BlockTextureAtlas
-                                                .RESOURCE));
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureManager.load(BlockTextureAtlas.RESOURCE));
                 GL11.glCallLists(buffer);
             }
             if (pass == 0) renderPistonMotion(partial);
@@ -243,6 +244,30 @@ public final class LevelRenderer {
             return len;
         } finally {
             net.classicremastered.minecraft.util.Debug.recordSortChunks(System.nanoTime() - start);
+        }
+    }
+
+    public void renderOpaqueGlass(Player player, float partial) {
+        sortChunks(player, Chunk.GLASS_PASS, partial);
+    }
+
+    public void renderFabulousTerrain(Player player) {
+        var visible = new ArrayList<Chunk>();
+        if (isInfiniteLevel()) visible.addAll(renderWindow);
+        else if (loadQueue != null) Collections.addAll(visible, loadQueue);
+        visible.removeIf(chunk -> !chunk.visible || !chunk.hasTransparency());
+        visible.sort(
+                Comparator.comparingDouble((Chunk chunk) -> chunk.distanceSquared(player))
+                        .reversed());
+
+        int atlas = textureManager.load(BlockTextureAtlas.RESOURCE);
+        if (waterReady) {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureManager.load("/water.png"));
+            GL11.glCallList(listId + 1);
+        }
+        for (Chunk chunk : visible) {
+            chunk.drawPass(1, atlas);
+            chunk.drawPass(Chunk.GLASS_PASS, atlas);
         }
     }
 

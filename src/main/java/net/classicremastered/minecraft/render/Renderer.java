@@ -45,18 +45,40 @@ public final class Renderer {
 
     private boolean localPlayerVisible = true;
     public float thirdPersonDistance = 4;
+    private Player cameraPlayer;
+    private Level cameraLevel;
+    private int previousCameraMode = -1;
+    private long previousCameraFrame;
 
     public boolean shouldRenderLocalPlayer() {
         return minecraft.cameraMode != 0 && localPlayerVisible;
     }
 
     public void setupCamera(float partial) {
+        setupCamera(partial, System.nanoTime());
+    }
+
+    public void setupCamera(float partial, long frameNanos) {
         Player player = minecraft.player;
         if (player == null) return;
-        CameraView view = CameraView.resolve(player, minecraft.cameraMode, partial);
+        int mode = minecraft.cameraMode;
+        CameraView view = CameraView.resolve(player, mode, partial);
+        if (mode != 0 && previousCameraMode == mode && cameraPlayer == player
+                && cameraLevel == player.level && view.distance() > thirdPersonDistance) {
+            double seconds = Math.max(0, Math.min(.05, (frameNanos - previousCameraFrame) * 1e-9));
+            float gap = view.distance() - thirdPersonDistance;
+            float remaining = gap * (float) Math.exp(-12.0 * seconds);
+            if (remaining > .015f)
+                view = view.withDistance(view.distance() - remaining);
+        }
+        cameraPlayer = player;
+        cameraLevel = player.level;
+        previousCameraMode = mode;
+        previousCameraFrame = frameNanos;
         thirdPersonDistance = view.distance();
-        localPlayerVisible = minecraft.cameraMode != 0 && view.outsidePlayer(player);
-        if (minecraft.cameraMode != 0) GL11.glTranslatef(0, 0, -view.distance());
+        localPlayerVisible = mode != 0 && view.outsidePlayer(player);
+        if (mode != 0)
+            GL11.glTranslatef(0, 0, -view.distance());
         GL11.glRotatef(view.pitch(), 1, 0, 0);
         GL11.glRotatef(view.yaw(), 0, 1, 0);
         GL11.glTranslatef(-view.focus().x, -view.focus().y, -view.focus().z);
@@ -219,7 +241,7 @@ public final class Renderer {
     public void updateFog() {
         Level lvl = this.minecraft.level;
         Player pl = this.minecraft.player;
-        GL11.glFog(2918, this.createBuffer(this.fogRed, this.fogBlue, this.fogGreen, 1.0F));
+        GL11.glFog(2918, this.createBuffer(this.fogRed, this.fogGreen, this.fogBlue, 1.0F));
         GL11.glNormal3f(0.0F, -1.0F, 0.0F);
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 

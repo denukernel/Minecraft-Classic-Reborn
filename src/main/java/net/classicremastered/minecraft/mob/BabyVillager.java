@@ -16,22 +16,8 @@ public class BabyVillager extends Villager {
 
         this.modelName = "villager_baby";
         this.textureName = "/mob/villager.png";
-        // === Alpha-like sound palette ===
-        // Idle = rare groans, using same sound pool as hurt but pitched low
-        this.soundIdle = "random/classic_hurt";
-        this.idlePitchMin = 1.45F;
-        this.idlePitchMax = 1.65F;
-        this.coinDrop = -9;
-
-        // Hurt = low pitched "ugh" (steve grunt reused)
-        this.soundHurt = "random/classic_hurt";
-        this.hurtPitchMin = 1.4F;
-        this.hurtPitchMax = 1.5F;
-
-        // Death = slightly louder, deeper grunt
-        this.soundDeath = "random/classic_hurt";
-        this.deathPitchMin = 1.35F;
-        this.deathPitchMax = 1.45F;
+        makeStepSound = false;
+        coinDrop = -9;
 
         // Proper hitbox
         this.setSize(0.42F, 1.17F);

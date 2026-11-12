@@ -8,7 +8,6 @@ import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 
 import java.awt.Desktop;
-import java.io.File;
 import java.net.URI;
 
 public final class ErrorScreen extends GuiScreen {
@@ -16,7 +15,8 @@ public final class ErrorScreen extends GuiScreen {
     private String title;
     private String text;
     private boolean screenshotTaken = false;
-    private final String githubUrl = "https://github.com/denukernel/Minecraft-Classic-Reborn/issues";
+    private final String githubUrl =
+            "https://github.com/denukernel/Minecraft-Classic-Reborn/issues";
     private GuiScreen parent;
 
     public ErrorScreen(String title, String text) {
@@ -32,9 +32,10 @@ public final class ErrorScreen extends GuiScreen {
 
     public ErrorScreen(String title, Throwable error) {
         this.title = title;
-        Throwable cause = (error instanceof CrashReportException && error.getCause() != null)
-                ? error.getCause()
-                : error;
+        Throwable cause =
+                (error instanceof CrashReportException && error.getCause() != null)
+                        ? error.getCause()
+                        : error;
 
         String message = cause.getClass().getName();
         if (cause.getMessage() != null && !cause.getMessage().isEmpty()) {
@@ -46,6 +47,11 @@ public final class ErrorScreen extends GuiScreen {
     public ErrorScreen(String title, Throwable error, GuiScreen parent) {
         this(title, error);
         this.parent = parent;
+    }
+
+    @Override
+    public boolean pausesLocalWorld() {
+        return parent != null && parent.pausesLocalWorld();
     }
 
     public boolean hasParent() {
@@ -69,7 +75,7 @@ public final class ErrorScreen extends GuiScreen {
     }
 
     private String[] wrapText(String text, int maxLen) {
-        if (text == null) return new String[]{"(no details)"};
+        if (text == null) return new String[] {"(no details)"};
         text = text.replace("\r", "").replace("\n", " ");
         java.util.List<String> lines = new java.util.ArrayList<>();
         while (text.length() > maxLen) {
@@ -110,8 +116,12 @@ public final class ErrorScreen extends GuiScreen {
 
             GL11.glPushMatrix();
             GL11.glScalef(1.1F, 1.1F, 1.0F);
-            drawCenteredString(this.fontRenderer, this.title,
-                (int)(this.width / 2.2F), (int)(60 / 1.1F), 0xFFFFFF);
+            drawCenteredString(
+                    this.fontRenderer,
+                    this.title,
+                    (int) (this.width / 2.2F),
+                    (int) (60 / 1.1F),
+                    0xFFFFFF);
             GL11.glPopMatrix();
 
             // Exception/Error text
@@ -131,8 +141,12 @@ public final class ErrorScreen extends GuiScreen {
 
         GL11.glPushMatrix();
         GL11.glScalef(0.9F, 0.9F, 1.0F);
-        drawCenteredString(this.fontRenderer, this.title,
-            (int)(this.width / 1.8F), (int)(95 / 0.9F), 0xFFFFFF);
+        drawCenteredString(
+                this.fontRenderer,
+                this.title,
+                (int) (this.width / 1.8F),
+                (int) (95 / 0.9F),
+                0xFFFFFF);
         GL11.glPopMatrix();
 
         // Exception text
@@ -144,22 +158,30 @@ public final class ErrorScreen extends GuiScreen {
         }
 
         y += 8;
-        drawCenteredString(this.fontRenderer,
-            "A screenshot was saved automatically for debugging.",
-            this.width / 2, y, 0xAAAAAA);
+        drawCenteredString(
+                this.fontRenderer,
+                "A screenshot was saved automatically for debugging.",
+                this.width / 2,
+                y,
+                0xAAAAAA);
         y += 10;
-        drawCenteredString(this.fontRenderer,
-            "(Read the advice below)",
-            this.width / 2, y, 0x55FFFF);
+        drawCenteredString(
+                this.fontRenderer, "(Read the advice below)", this.width / 2, y, 0x55FFFF);
 
         y += 18;
-        drawCenteredString(this.fontRenderer,
-            "If this issue keeps happening, please report it on GitHub issues.",
-            this.width / 2, y, 0xAAAAAA);
+        drawCenteredString(
+                this.fontRenderer,
+                "If this issue keeps happening, please report it on GitHub issues.",
+                this.width / 2,
+                y,
+                0xAAAAAA);
         y += 10;
-        drawCenteredString(this.fontRenderer,
-            "Include these files when reporting the bug:",
-            this.width / 2, y, 0xAAAAAA);
+        drawCenteredString(
+                this.fontRenderer,
+                "Include these files when reporting the bug:",
+                this.width / 2,
+                y,
+                0xAAAAAA);
 
         y += 10;
         drawCenteredString(this.fontRenderer, getCrashPath(), this.width / 2, y, 0x55FFFF);
@@ -167,8 +189,7 @@ public final class ErrorScreen extends GuiScreen {
         drawCenteredString(this.fontRenderer, getLogPath(), this.width / 2, y, 0x55FFFF);
 
         y += 18;
-        drawCenteredString(this.fontRenderer, "Developer: denukernel",
-            this.width / 2, y, 0x777777);
+        drawCenteredString(this.fontRenderer, "Developer: denukernel", this.width / 2, y, 0x777777);
         y += 10;
 
         // --- Clickable GitHub link ---
@@ -176,7 +197,8 @@ public final class ErrorScreen extends GuiScreen {
         String githubText = "GitHub: " + githubUrl;
         int textWidth = this.fontRenderer.getWidth(githubText);
         int textX = (this.width / 2) - (textWidth / 2);
-        int color = isMouseOverLink(mouseX, mouseY, textX, linkY, textWidth, 10) ? 0x66FFFF : 0x777777;
+        int color =
+                isMouseOverLink(mouseX, mouseY, textX, linkY, textWidth, 10) ? 0x66FFFF : 0x777777;
 
         drawCenteredString(this.fontRenderer, githubText, this.width / 2, linkY, color);
 
@@ -213,7 +235,8 @@ public final class ErrorScreen extends GuiScreen {
         while (Mouse.next()) {
             if (Mouse.getEventButtonState()) {
                 int mouseX = Mouse.getEventX() * this.width / Display.getWidth();
-                int mouseY = this.height - Mouse.getEventY() * this.height / Display.getHeight() - 1;
+                int mouseY =
+                        this.height - Mouse.getEventY() * this.height / Display.getHeight() - 1;
 
                 // Get link bounds dynamically
                 String githubText = "GitHub: " + githubUrl;
@@ -228,7 +251,6 @@ public final class ErrorScreen extends GuiScreen {
         }
     }
 
-
     private void openLinkInBrowser(String url) {
         try {
             if (Desktop.isDesktopSupported()) {
@@ -236,11 +258,12 @@ public final class ErrorScreen extends GuiScreen {
             } else {
                 String os = System.getProperty("os.name").toLowerCase();
                 if (os.contains("mac")) {
-                    Runtime.getRuntime().exec(new String[]{"open", url});
+                    Runtime.getRuntime().exec(new String[] {"open", url});
                 } else if (os.contains("win")) {
-                    Runtime.getRuntime().exec(new String[]{"rundll32", "url.dll,FileProtocolHandler", url});
+                    Runtime.getRuntime()
+                            .exec(new String[] {"rundll32", "url.dll,FileProtocolHandler", url});
                 } else {
-                    Runtime.getRuntime().exec(new String[]{"xdg-open", url});
+                    Runtime.getRuntime().exec(new String[] {"xdg-open", url});
                 }
             }
             System.out.println("[ErrorScreen] Opened " + url);

@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.player.Player;
 
 import java.util.Random;
 
@@ -36,21 +37,19 @@ public class FakeHerobrine extends Mob {
 
     @Override
     public void aiStep() {
-        // Always face the player
-        if (this.level != null && this.level.player != null) {
-            this.yRot =
-                    this.yRotO =
-                            (float)
-                                    (Math.toDegrees(
-                                                    Math.atan2(
-                                                            this.level.player.z - this.z,
-                                                            this.level.player.x - this.x))
-                                            - 90F);
+        Player player =
+                this.level != null && this.level.player instanceof Player p && !p.isSpectator()
+                ? p
+                : null;
+        if (player != null) {
+            this.yRot = this.yRotO =
+                    (float) (Math.toDegrees(Math.atan2(player.z - this.z, player.x - this.x))
+                            - 90F);
         }
 
         // Texture corruption at 7M+
-        if (this.level != null && this.level.player != null) {
-            double dist = Math.max(Math.abs(this.level.player.x), Math.abs(this.level.player.z));
+        if (player != null) {
+            double dist = Math.max(Math.abs(player.x), Math.abs(player.z));
             if (dist >= 7_000_000) {
                 if (++snapTimer >= 100) { // every 5s
                     snapTimer = 0;

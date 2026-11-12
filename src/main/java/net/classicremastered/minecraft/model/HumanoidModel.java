@@ -10,15 +10,22 @@ public class HumanoidModel extends Model {
     // detect tall skin
     private final boolean tallSkin;
     private float sneakProgress;
+    private boolean ridingPose;
     private net.classicremastered.minecraft.player.Player developerPlayer;
     private float renderPartial;
 
     @Override
     public void preAnimate(Object entity) {
+        ridingPose = entity instanceof net.classicremastered.minecraft.Entity rider
+                && rider.riding != null;
         developerPlayer =
                 entity instanceof net.classicremastered.minecraft.player.Player player
                         ? player
                         : null;
+    }
+
+    protected final boolean isRidingPose() {
+        return ridingPose;
     }
 
     public HumanoidModel() {
@@ -30,6 +37,7 @@ public class HumanoidModel extends Model {
     }
 
     public HumanoidModel(float inflate, int skinHeight) {
+        groundOffset = 24.0F;
         this.tallSkin = (skinHeight == 64);
 
         int prevW = TexturedQuad.ATLAS_W;
@@ -257,5 +265,15 @@ public class HumanoidModel extends Model {
         leftArm.roll = -(MathHelper.cos(ageInTicks * 0.09F) * 0.05F + 0.05F);
         rightArm.pitch += MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
         leftArm.pitch -= MathHelper.sin(ageInTicks * 0.067F) * 0.05F;
+        rightLeg.yaw = leftLeg.yaw = rightLeg.roll = leftLeg.roll = 0f;
+        if (ridingPose) {
+            rightArm.pitch -= .62831855f;
+            leftArm.pitch -= .62831855f;
+            rightLeg.pitch = leftLeg.pitch = -1.4137167f;
+            rightLeg.yaw = .31415927f;
+            leftLeg.yaw = -.31415927f;
+            rightLeg.roll = .07853982f;
+            leftLeg.roll = -.07853982f;
+        }
     }
 }

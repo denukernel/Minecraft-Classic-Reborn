@@ -113,7 +113,10 @@ try {
     if ($entryPoints.Count -ne 1) { throw 'jar and shade entry points must agree' }
     $entryPoint = $entryPoints[0]
     $candidate = Join-Path $stage 'game.jar'
-    & $archiver --create --file $candidate --main-class $entryPoint -C $content .
+    $releaseBuild = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    $launcherManifest = Join-Path $stage 'launcher.mf'
+    [System.IO.File]::WriteAllText($launcherManifest, "Classic-Reborn-Build: $releaseBuild`r`n", $utf8)
+    & $archiver --create --file $candidate --manifest $launcherManifest --main-class $entryPoint -C $content .
     if ($LASTEXITCODE -ne 0) { throw 'jar packaging failed' }
 
     $serverCandidate = Join-Path $stage 'server.jar'
@@ -124,15 +127,19 @@ try {
     Assert-RunnableJar $candidate $entryPoint @(
         'textures/block/tiles.properties', 'textures/entity/chest.png', 'org/lwjgl/opengl/GL11.class', 'net/java/games/input/Controller.class',
         'net/java/games/util/plugins/Plugin.class', 'paulscode/sound/SoundSystem.class',
-        'paulscode/sound/codecs/CodecJOrbis.class'
+        'paulscode/sound/codecs/CodecJOrbis.class', 'net/classicremastered/launcher/LauncherUpdater.class',
+        'sound/item/gravity_gun/grab.wav', 'sound/item/gravity_gun/drop.wav', 'sound/item/gravity_gun/launch.wav'
     )
     Assert-RunnableJar $serverCandidate $serverEntryPoint @()
     $serverArtifact = Join-Path $target 'ClassicReborn-Server-Creator.jar'
     Move-Item -LiteralPath $serverCandidate -Destination $serverArtifact -Force
 
-    $artifact = Join-Path $target 'ClassicRemastered-0.45-all.jar'
+    $artifact = Join-Path $target "ClassicRemastered-$($pom.project.version)-all.jar"
     Move-Item -LiteralPath $candidate -Destination $artifact -Force
-    Get-FileHash -LiteralPath $artifact -Algorithm SHA256 | Format-List Path, Hash
+    $artifactHash = Get-FileHash -LiteralPath $artifact -Algorithm SHA256
+    $artifactHash | Format-List Path, Hash
+    $release = Join-Path $target 'launcher-release.txt'
+    [System.IO.File]::WriteAllText($release, "$releaseBuild $($artifactHash.Hash.ToLowerInvariant())`n", $utf8)
     Write-Output "built and verified: $artifact"
 } finally {
     # Delete only the fresh staging directory directly beneath this project target.

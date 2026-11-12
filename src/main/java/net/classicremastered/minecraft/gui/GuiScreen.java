@@ -19,12 +19,25 @@ public class GuiScreen extends Screen {
     protected FontRenderer fontRenderer;
     private final GuiScreen parentScreen;
 
-    public GuiScreen() { this(null); }
+    public GuiScreen() {
+        this(null);
+    }
 
-    protected GuiScreen(GuiScreen parent) { this.parentScreen = parent; }
+    protected GuiScreen(GuiScreen parent) {
+        this.parentScreen = parent;
+    }
 
     /** Start menu rendering with explicit state instead of inheriting world fog or lighting. */
     protected final void drawMenuBackground() {
+        drawTiledBackground(
+                "/dirt.png", minecraft.settings != null ? minecraft.settings.menuLighting : .6f);
+    }
+
+    protected final void drawOptionsBackground() {
+        drawTiledBackground("/gui/options_dirt.png", .55f);
+    }
+
+    private void drawTiledBackground(String texture, float light) {
         GL11.glColorMask(true, true, true, true);
         GL11.glDepthMask(true);
         this.minecraft.renderer.enableGuiMode();
@@ -42,16 +55,19 @@ public class GuiScreen extends Screen {
         GL11.glTexEnvi(GL11.GL_TEXTURE_ENV, GL11.GL_TEXTURE_ENV_MODE, GL11.GL_MODULATE);
         GL11.glClearColor(0, 0, 0, 1);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.minecraft.textureManager.load("/dirt.png"));
-        float light = this.minecraft.settings != null ? this.minecraft.settings.menuLighting : .6f;
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.minecraft.textureManager.load(texture));
         GL11.glColor4f(light, light, light, 1);
         float scroll = (System.currentTimeMillis() % 20000L) / 5000f;
         float u = this.width / 32f, v = this.height / 32f;
         GL11.glBegin(GL11.GL_QUADS);
-        GL11.glTexCoord2f(scroll, v + scroll); GL11.glVertex2f(0, this.height);
-        GL11.glTexCoord2f(u + scroll, v + scroll); GL11.glVertex2f(this.width, this.height);
-        GL11.glTexCoord2f(u + scroll, scroll); GL11.glVertex2f(this.width, 0);
-        GL11.glTexCoord2f(scroll, scroll); GL11.glVertex2f(0, 0);
+        GL11.glTexCoord2f(scroll, v + scroll);
+        GL11.glVertex2f(0, this.height);
+        GL11.glTexCoord2f(u + scroll, v + scroll);
+        GL11.glVertex2f(this.width, this.height);
+        GL11.glTexCoord2f(u + scroll, scroll);
+        GL11.glVertex2f(this.width, 0);
+        GL11.glTexCoord2f(scroll, scroll);
+        GL11.glVertex2f(0, 0);
         GL11.glEnd();
         GL11.glColor4f(1, 1, 1, 1);
     }
@@ -66,7 +82,11 @@ public class GuiScreen extends Screen {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 
             byte state = 1;
-            boolean hover = var1 >= btn.x && var2 >= btn.y && var1 < btn.x + btn.width && var2 < btn.y + btn.height;
+            boolean hover =
+                    var1 >= btn.x
+                            && var2 >= btn.y
+                            && var1 < btn.x + btn.width
+                            && var2 < btn.y + btn.height;
             if (!btn.active) {
                 state = 0;
             } else if (hover) {
@@ -74,7 +94,13 @@ public class GuiScreen extends Screen {
             }
 
             btn.drawImage(btn.x, btn.y, 0, 46 + state * 20, btn.width / 2, btn.height);
-            btn.drawImage(btn.x + btn.width / 2, btn.y, 200 - btn.width / 2, 46 + state * 20, btn.width / 2, btn.height);
+            btn.drawImage(
+                    btn.x + btn.width / 2,
+                    btn.y,
+                    200 - btn.width / 2,
+                    46 + state * 20,
+                    btn.width / 2,
+                    btn.height);
 
             int color;
             if (!btn.active) {
@@ -85,7 +111,8 @@ public class GuiScreen extends Screen {
                 color = 14737632;
             }
 
-            drawCenteredString(fr, btn.text, btn.x + btn.width / 2, btn.y + (btn.height - 8) / 2, color);
+            drawCenteredString(
+                    fr, btn.text, btn.x + btn.width / 2, btn.y + (btn.height - 8) / 2, color);
         }
     }
 
@@ -100,21 +127,15 @@ public class GuiScreen extends Screen {
         if (button == 0) {
             for (int i = 0; i < this.buttons.size(); ++i) {
                 Button btn = (Button) this.buttons.get(i);
-                boolean over = btn.visible && btn.active && mx >= btn.x && my >= btn.y && mx < btn.x + btn.width && my < btn.y + btn.height;
+                boolean over =
+                        btn.visible
+                                && btn.active
+                                && mx >= btn.x
+                                && my >= btn.y
+                                && mx < btn.x + btn.width
+                                && my < btn.y + btn.height;
                 if (over) {
-                    try {
-                        if (minecraft != null && minecraft.settings != null && minecraft.settings.sound && minecraft.soundPC != null) {
-                            if (minecraft.soundPC.farlandsActive) {
-                                // corrupted: random pitch clicks
-                                float randomPitch = 0.2f + minecraft.soundPC.rng.nextFloat() * 2.5f;
-                                minecraft.soundPC.playSoundClean("random/click", 0.8f, randomPitch);
-                                } else {
-                                // normal click
-                                minecraft.soundPC.playSoundClean("random/click", 0.8f, 1.0f);
-                            }
-                        }
-                    } catch (Throwable ignored) {}
-
+                    playButtonClickSound();
                     this.onButtonClick(btn);
                     return;
                 }
@@ -122,8 +143,8 @@ public class GuiScreen extends Screen {
         }
     }
 
-    protected void onButtonClick(Button btn) {
-    }
+    protected void onButtonClick(Button btn) {}
+
     public boolean grabsMouse() {
         return false;
     }
@@ -136,19 +157,47 @@ public class GuiScreen extends Screen {
         this.onOpen();
     }
 
-    public void onOpen() {
+    public boolean pausesLocalWorld() {
+        return parentScreen != null && parentScreen.pausesLocalWorld();
     }
 
+    public void onOpen() {}
+
     public final void doInput() {
-        while (this.minecraft.currentScreen == this && Mouse.next()) this.mouseEvent();
-        while (this.minecraft.currentScreen == this && Keyboard.next()) this.keyboardEvent();
+        while (Mouse.isCreated() && this.minecraft.currentScreen == this && Mouse.next())
+            this.mouseEvent();
+        while (Keyboard.isCreated() && this.minecraft.currentScreen == this && Keyboard.next())
+            this.keyboardEvent();
     }
 
     public void mouseEvent() {
-        if (Mouse.getEventButtonState()) {
-            int x = Mouse.getEventX() * this.width / this.minecraft.width;
-            int y = this.height - Mouse.getEventY() * this.height / this.minecraft.height - 1;
-            this.onMouseClick(x, y, Mouse.getEventButton());
+        int button = Mouse.getEventButton();
+        if (button < 0) return;
+        int x = Mouse.getEventX() * this.width / this.minecraft.width;
+        int y = this.height - Mouse.getEventY() * this.height / this.minecraft.height - 1;
+        dispatchMouseButton(x, y, button, Mouse.getEventButtonState());
+    }
+
+    protected final void dispatchMouseButton(int x, int y, int button, boolean pressed) {
+        if (pressed) onMouseClick(x, y, button);
+        else onMouseRelease(x, y, button);
+    }
+
+    protected void onMouseRelease(int x, int y, int button) {}
+
+    protected final void playButtonClickSound() {
+        try {
+            if (minecraft != null
+                    && minecraft.settings != null
+                    && minecraft.settings.sound
+                    && minecraft.soundPC != null) {
+                float pitch =
+                        minecraft.soundPC.farlandsActive
+                                ? 0.2f + minecraft.soundPC.rng.nextFloat() * 2.5f
+                                : 1.0f;
+                minecraft.soundPC.playSoundClean("random/click", 0.8f, pitch);
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -158,9 +207,7 @@ public class GuiScreen extends Screen {
         }
     }
 
-    public void tick() {
-    }
+    public void tick() {}
 
-    public void onClose() {
-    }
+    public void onClose() {}
 }

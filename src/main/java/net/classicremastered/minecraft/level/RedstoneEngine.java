@@ -29,6 +29,8 @@ public final class RedstoneEngine {
         public transient float previousLid, lid;
         public boolean on, extended, lootInitialized;
         public int[] items = new int[27], counts = new int[27];
+        public final net.classicremastered.minecraft.level.itemstack.PackedTurret[] crates =
+                new net.classicremastered.minecraft.level.itemstack.PackedTurret[27];
 
         public State(int block) {
             this.block = block;
@@ -133,18 +135,24 @@ public final class RedstoneEngine {
             }
             if (old.block == Block.CHEST.id) {
                 ChestController.removed(level, p, old);
-                for (int slot = 0; slot < 27; slot++) drop(p, old.items[slot], old.counts[slot]);
+                for (int slot = 0; slot < 27; slot++)
+                    drop(p, old.items[slot], old.counts[slot], old.crates[slot]);
             }
         }
         if (tracked(id)) state(x, y, z);
     }
 
-    private void drop(Pos p, int id, int count) {
+    private void drop(
+            Pos p,
+            int id,
+            int count,
+            net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
         if (id <= 0 || count <= 0 || level.isNetworkMode()) return;
         if (id >= 256)
             level.addEntity(
                     new net.classicremastered.minecraft.entity.DroppedItem(
-                            level, p.x + .5f, p.y + .5f, p.z + .5f, id - 256, count));
+                                    level, p.x + .5f, p.y + .5f, p.z + .5f, id - 256, count)
+                            .withCrate(crate));
         else
             level.addEntity(
                     new net.classicremastered.minecraft.entity.DroppedBlock(
@@ -200,7 +208,7 @@ public final class RedstoneEngine {
             if (!loaded(pos)) continue;
             if (Block.blocks[state.block] instanceof CircuitBlock block && block.needsSupport()) {
                 int face =
-                        state.block == Block.REDSTONE_WIRE.id
+                        block.needsFloorSupport()
                                 ? 1
                                 : block.kind == CircuitBlock.Kind.LEVER
                                         ? state.mount
@@ -348,7 +356,8 @@ public final class RedstoneEngine {
                 if (wire.y > pos.y) connections |= 1 << (direction + 4);
             } else if (Block.blocks[tile(side)] instanceof CircuitBlock block) {
                 switch (block.kind) {
-                    case REPEATER, COMPARATOR -> {
+                    case COMPARATOR -> connections |= 1 << direction;
+                    case REPEATER -> {
                         int facing = state(side.x, side.y, side.z).facing;
                         if ((direction & ~1) == (facing & ~1)) connections |= 1 << direction;
                     }
@@ -579,6 +588,7 @@ public final class RedstoneEngine {
                     slot.putInt("Slot", i);
                     slot.putInt("Id", s.items[i]);
                     slot.putInt("Count", s.counts[i]);
+                    if (s.crates[i] != null) slot.put(s.crates[i].save());
                     inventory.add(slot);
                 }
             tag.put(inventory);
@@ -629,9 +639,24 @@ public final class RedstoneEngine {
                 int slot = item.getInt("Slot");
                 if (slot >= 0 && slot < 27) {
                     s.items[slot] = item.getInt("Id");
-                    s.counts[slot] = Math.max(0, Math.min(64, item.getInt("Count")));
+                    if (s.items[slot]
+                            == net.classicremastered.minecraft.level.itemstack.TurretItems.PACKED
+                                    + 256) {
+                        s.crates[slot] =
+                                net.classicremastered.minecraft.level.itemstack.PackedTurret.load(
+                                        item);
+                    }
+                    s.counts[slot] = Math.max(0, Math.min(99, item.getInt("Count")));
                 }
             }
+            net.classicremastered.minecraft.player.Inventory.splitOversized(
+                    27,
+                    slot -> s.items[slot],
+                    slot -> s.counts[slot],
+                    (slot, id, count) -> {
+                        s.items[slot] = id;
+                        s.counts[slot] = count;
+                    });
             states.put(p, s);
         }
     }

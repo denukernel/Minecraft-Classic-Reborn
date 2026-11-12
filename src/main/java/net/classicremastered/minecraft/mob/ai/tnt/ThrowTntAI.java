@@ -9,12 +9,11 @@ import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.goal.tnt.ThrowTntGoal;
 import net.classicremastered.minecraft.mob.ai.goal.tnt.TntFrenzyGoal;
 import net.classicremastered.minecraft.mob.ai.goal.tnt.TntRevengeGoal;
-import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.util.MathHelper;
 
 public class ThrowTntAI extends BasicAI {
 
-    public Player playerTarget;
+    public Mob playerTarget;
     private transient net.classicremastered.minecraft.mob.ai.goal.GoalSelector combatGoals;
 
     // --- movement / spacing for TNT mode ---
@@ -61,6 +60,7 @@ public class ThrowTntAI extends BasicAI {
     public int frenzyInterval = 0;
     public int frenzyTicks = 0;
     public boolean combatActive;
+
     @Override
     protected boolean usesPlannedWandering() {
         return !combatActive;
@@ -78,18 +78,28 @@ public class ThrowTntAI extends BasicAI {
 
     @Override
     public void tick(Level level, Mob mob) {
-        playerTarget = level.getNearestPlayer(mob.x, mob.y, mob.z, 32.0F);
-        combatActive = playerTarget != null && playerTarget.health > 0 && !playerTarget.removed
-                && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(playerTarget);
+        playerTarget =
+                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                        mob, 32, playerTarget);
+        attackTarget = playerTarget;
+        combatActive =
+                playerTarget != null
+                        && playerTarget.health > 0
+                        && !playerTarget.removed
+                        && !net.classicremastered.minecraft.util.CreativeModeHelper
+                                .shouldIgnoreTarget(playerTarget);
         super.tick(level, mob);
-        if (!combatActive)
-            return;
+        if (!combatActive) return;
         if (revengeTicks > 0 && (revengeTarget == null || revengeTarget.removed)) {
             revengeTicks = 0;
             revengeTarget = null;
         }
         if (combatGoals == null)
-            combatGoals = createGoalSelector(new TntRevengeGoal(this), new TntFrenzyGoal(this), new ThrowTntGoal(this));
+            combatGoals =
+                    createGoalSelector(
+                            new TntRevengeGoal(this),
+                            new TntFrenzyGoal(this),
+                            new ThrowTntGoal(this));
         combatGoals.tick();
     }
 
@@ -97,8 +107,7 @@ public class ThrowTntAI extends BasicAI {
     @Override
     public void hurt(Entity src, int amount) {
         super.hurt(src, amount);
-        if (level != null && level.creativeMode)
-            return; // <- no revenge
+        if (level != null && level.creativeMode) return; // <- no revenge
         try {
             if (src instanceof Arrow) {
                 Entity owner = ((Arrow) src).getOwner();
@@ -120,20 +129,18 @@ public class ThrowTntAI extends BasicAI {
     public void faceSmooth(Mob mob, float dx, float dz) {
         float desiredYaw = (float) (Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
         float dyaw = desiredYaw - mob.yRot;
-        while (dyaw < -180.0F)
-            dyaw += 360.0F;
-        while (dyaw >= 180.0F)
-            dyaw -= 360.0F;
+        while (dyaw < -180.0F) dyaw += 360.0F;
+        while (dyaw >= 180.0F) dyaw -= 360.0F;
         mob.yRot += dyaw * 0.25F;
     }
 
-    public boolean hasLineOfSight(Level level, Mob mob, Player target) {
+    public boolean hasLineOfSight(Level level, Mob mob, Mob target) {
         float sx = mob.x;
-        float sy = mob.y + mob.heightOffset + 0.6F;
+        float sy = mob.bb.y0 + mob.bbHeight * .85f;
         float sz = mob.z;
 
         float tx = target.x;
-        float ty = target.y + 0.8F;
+        float ty = target.bb.y0 + target.bbHeight * .5f;
         float tz = target.z;
 
         float dx = tx - sx, dy = ty - sy, dz = tz - sz;

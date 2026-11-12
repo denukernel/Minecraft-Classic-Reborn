@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft;
 
+import net.classicremastered.minecraft.gui.GuiCrafting;
+import net.classicremastered.minecraft.gui.InventoryScreen;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -13,25 +15,34 @@ import net.classicremastered.minecraft.render.Renderer;
 import net.classicremastered.minecraft.util.Screenshot;
 import net.classicremastered.util.MathHelper;
 
+import org.lwjgl.BufferUtils;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.glu.GLU;
 
 import java.awt.*;
+import java.nio.FloatBuffer;
 
 /** Renders one client frame, including picking, world passes, held items, and GUI. */
 final class ClientFrameRenderer {
+    private static final FloatBuffer PARTICLE_VIEW = BufferUtils.createFloatBuffer(16);
+
     private ClientFrameRenderer() {}
 
     static void render(Minecraft mc) {
         Minecraft.checkGLError("Pre render");
         GL11.glEnable(3553);
+        boolean fabulous =
+                mc.transparency.prepare(
+                        mc.settings,
+                        mc.level == null ? 0 : mc.width,
+                        mc.level == null ? 0 : mc.height);
         if (!mc.online) {
-            mc.gamemode.applyCracks(mc.timer.delta);
-            float partial = mc.timer.delta;
+            float partial = mc.worldRenderPartial();
+            if (!mc.isLocalWorldPaused()) mc.gamemode.applyCracks(partial);
             if (mc.level != null) {
-                mc.level.setRenderPartial(mc.timer.delta);
+                mc.level.setRenderPartial(partial);
                 mc.level.updateDayNightColorsSmooth();
             }
             Renderer r = mc.renderer;
@@ -44,7 +55,7 @@ final class ClientFrameRenderer {
             int uiH;
             int mouseDY;
             int mouseDX;
-            if (r.minecraft.hasMouse) {
+            if (r.minecraft.hasMouse && !r.minecraft.updateParsecMouseLook()) {
                 mouseDX = 0;
                 mouseDY = 0;
                 if (r.minecraft.levelLoaded) {
@@ -82,6 +93,7 @@ final class ClientFrameRenderer {
                     ClientTargetPicker.pick(r, partial);
                     Player player;
 
+                    long cameraFrameNanos = System.nanoTime();
                     int stereoEye = 0;
                     while (true) {
                         if (stereoEye >= 2) {
@@ -106,14 +118,14 @@ final class ClientFrameRenderer {
                         float skyG = (float) (levelRef.skyColor >> 8 & 255) / 255.0F;
                         float skyB = (float) (levelRef.skyColor & 255) / 255.0F;
                         r2.fogRed = (float) (levelRef.fogColor >> 16 & 255) / 255.0F;
-                        r2.fogBlue = (float) (levelRef.fogColor >> 8 & 255) / 255.0F;
-                        r2.fogGreen = (float) (levelRef.fogColor & 255) / 255.0F;
+                        r2.fogGreen = (float) (levelRef.fogColor >> 8 & 255) / 255.0F;
+                        r2.fogBlue = (float) (levelRef.fogColor & 255) / 255.0F;
                         r2.fogRed += (skyR - r2.fogRed) * invViewDist;
-                        r2.fogBlue += (skyG - r2.fogBlue) * invViewDist;
-                        r2.fogGreen += (skyB - r2.fogGreen) * invViewDist;
+                        r2.fogGreen += (skyG - r2.fogGreen) * invViewDist;
+                        r2.fogBlue += (skyB - r2.fogBlue) * invViewDist;
                         r2.fogRed *= r2.fogColorMultiplier;
-                        r2.fogBlue *= r2.fogColorMultiplier;
                         r2.fogGreen *= r2.fogColorMultiplier;
+                        r2.fogBlue *= r2.fogColorMultiplier;
 
                         Block feetBlock;
                         if ((feetBlock =
@@ -127,27 +139,27 @@ final class ClientFrameRenderer {
                             LiquidType lt;
                             if ((lt = feetBlock.getLiquidType()) == LiquidType.WATER) {
                                 r2.fogRed = 0.02F;
-                                r2.fogBlue = 0.02F;
-                                r2.fogGreen = 0.2F;
+                                r2.fogGreen = 0.02F;
+                                r2.fogBlue = 0.2F;
                             } else if (lt == LiquidType.LAVA) {
                                 r2.fogRed = 0.6F;
-                                r2.fogBlue = 0.1F;
-                                r2.fogGreen = 0.0F;
+                                r2.fogGreen = 0.1F;
+                                r2.fogBlue = 0.0F;
                             }
                         }
 
                         if (r2.minecraft.settings.anaglyph) {
                             float rGray =
-                                    (r2.fogRed * 30.0F + r2.fogBlue * 59.0F + r2.fogGreen * 11.0F)
+                                    (r2.fogRed * 30.0F + r2.fogGreen * 59.0F + r2.fogBlue * 11.0F)
                                             / 100.0F;
-                            float gGray = (r2.fogRed * 30.0F + r2.fogBlue * 70.0F) / 100.0F;
-                            float bGray = (r2.fogRed * 30.0F + r2.fogGreen * 70.0F) / 100.0F;
+                            float gGray = (r2.fogRed * 30.0F + r2.fogGreen * 70.0F) / 100.0F;
+                            float bGray = (r2.fogRed * 30.0F + r2.fogBlue * 70.0F) / 100.0F;
                             r2.fogRed = rGray;
-                            r2.fogBlue = gGray;
-                            r2.fogGreen = bGray;
+                            r2.fogGreen = gGray;
+                            r2.fogBlue = bGray;
                         }
 
-                        GL11.glClearColor(r2.fogRed, r2.fogBlue, r2.fogGreen, 0.0F);
+                        GL11.glClearColor(r2.fogRed, r2.fogGreen, r2.fogBlue, 0.0F);
                         GL11.glClear(16640);
                         r2.fogColorMultiplier = 1.0F;
                         GL11.glEnable(2884);
@@ -194,12 +206,15 @@ final class ClientFrameRenderer {
                         camPlayer = r2.minecraft.player;
                         if (mc.cameraMode == 0) GL11.glTranslatef(0.0F, 0.0F, -0.1F);
                         // Replace vanilla camera placement with mode-aware setup
-                        mc.renderer.setupCamera(mc.timer.delta);
+                        mc.renderer.setupCamera(renderPartial, cameraFrameNanos);
 
                         Frustrum fr = FrustrumImpl.update();
                         // sky: stars + sun/moon background pass (rendered before terrain chunks so
                         // blocks occlude them)
                         if (mc.skyRenderer != null) {
+                            if (feetBlock == null
+                                    || feetBlock.getLiquidType() == LiquidType.NOT_LIQUID)
+                                mc.skyRenderer.renderGradient(camPlayer, renderPartial, r2.fogEnd);
                             mc.skyRenderer.renderStars(mc.player, renderPartial);
                             mc.skyRenderer.renderSunMoon(mc.player, renderPartial);
                         }
@@ -208,17 +223,17 @@ final class ClientFrameRenderer {
                         // For finite: uses chunkCache. For infinite: uses your SimpleChunkManager
                         // path.
                         lr.sortChunks(camPlayer, 0, renderPartial);
+                        if (!fabulous) lr.renderOpaqueGlass(camPlayer, renderPartial);
 
                         r2.updateFog();
                         GL11.glEnable(2912);
-                        int pass;
-                        int texId;
                         ShapeRenderer shape;
                         int f;
                         int zTile;
                         int yTile;
                         int xTile;
-                        if (camLevel.isSolid(camPlayer.x, camPlayer.y, camPlayer.z, 0.1F)) {
+                        if (!camPlayer.isSpectator()
+                                && camLevel.isSolid(camPlayer.x, camPlayer.y, camPlayer.z, 0.1F)) {
                             // Integer camera cell
                             final int cx = (int) camPlayer.x;
                             final int cy = (int) camPlayer.y;
@@ -267,42 +282,8 @@ final class ClientFrameRenderer {
                         lr.level.blockMap.render(camVec, fr, lr.textureManager, renderPartial);
                         r2.setLighting(false);
                         r2.updateFog();
-                        float particlesPartial = renderPartial;
-                        ParticleManager pmRef = pm;
-                        float cosYaw2 = -MathHelper.cos(camPlayer.yRot * 3.1415927F / 180.0F);
-                        float sinYawNeg =
-                                -(skyR = -MathHelper.sin(camPlayer.yRot * 3.1415927F / 180.0F))
-                                        * MathHelper.sin(camPlayer.xRot * 3.1415927F / 180.0F);
-                        float sinYaw2 =
-                                cosYaw2 * MathHelper.sin(camPlayer.xRot * 3.1415927F / 180.0F);
-                        float cosPitch2 = MathHelper.cos(camPlayer.xRot * 3.1415927F / 180.0F);
-
-                        for (pass = 0; pass < 2; ++pass) {
-                            if (pmRef.particles[pass].size() != 0) {
-                                texId = 0;
-                                if (pass == 0) texId = pmRef.textureManager.load("/particles.png");
-                                if (pass == 1)
-                                    texId =
-                                            pmRef.textureManager.load(
-                                                    net.classicremastered.minecraft.render
-                                                            .BlockTextureAtlas.RESOURCE);
-                                GL11.glBindTexture(3553, texId);
-                                ShapeRenderer ps = ShapeRenderer.instance;
-                                ShapeRenderer.instance.begin();
-                                for (xTile = 0; xTile < pmRef.particles[pass].size(); ++xTile) {
-                                    ((Particle) pmRef.particles[pass].get(xTile))
-                                            .render(
-                                                    ps,
-                                                    particlesPartial,
-                                                    cosYaw2,
-                                                    cosPitch2,
-                                                    skyR,
-                                                    sinYawNeg,
-                                                    sinYaw2);
-                                }
-                                ps.end();
-                            }
-                        }
+                        if (!fabulous)
+                            renderParticles(pm, renderPartial);
                         GL11.glDisable(3553);
                         r2.updateFog();
                         GL11.glDisable(3553);
@@ -322,7 +303,7 @@ final class ClientFrameRenderer {
                         GL11.glEnable(3553);
                         r2.updateFog();
 
-                        if (r2.minecraft.selected != null) {
+                        if (mc.selected != null && (!mc.hudHidden || lr.cracks > 0.0F)) {
                             GL11.glDisable(3008);
                             MovingObjectPosition pick = r2.minecraft.selected;
                             LevelRenderer lrPick = lr;
@@ -382,7 +363,7 @@ final class ClientFrameRenderer {
                             GL11.glDepthMask(false);
                             float eps = 0.002F;
                             int id = lr.level.getTile(pick.x, pick.y, pick.z);
-                            if (id > 0) {
+                            if (id > 0 && !mc.hudHidden) {
                                 AABB bb =
                                         Block.blocks[id]
                                                 .getSelectionBox(
@@ -419,35 +400,42 @@ final class ClientFrameRenderer {
                             GL11.glEnable(3008);
                         }
 
-                        GL11.glBlendFunc(770, 771);
                         r2.updateFog();
-                        GL11.glEnable(3553);
-                        GL11.glEnable(3042);
-                        if (lr.waterReady) {
-                            GL11.glBindTexture(3553, lr.textureManager.load("/water.png"));
-                            GL11.glCallList(lr.listId + 1);
+                        GL11.glEnable(GL11.GL_TEXTURE_2D);
+                        if (fabulous && mc.transparency.begin(mc.settings)) {
+                            try {
+                                lr.renderFabulousTerrain(camPlayer);
+                                renderParticles(pm, renderPartial);
+                            } finally {
+                                mc.transparency.composite();
+                            }
+                        } else {
+                            if (fabulous) {
+                                lr.renderOpaqueGlass(camPlayer, renderPartial);
+                                renderParticles(pm, renderPartial);
+                            }
+                            GL11.glBlendFunc(770, 771);
+                            GL11.glEnable(3042);
+                            if (lr.waterReady) {
+                                GL11.glBindTexture(3553, lr.textureManager.load("/water.png"));
+                                GL11.glCallList(lr.listId + 1);
+                            }
+                            GL11.glColorMask(false, false, false, false);
+                            xTile = lr.sortChunks(camPlayer, 1, renderPartial);
+                            GL11.glColorMask(true, true, true, true);
+                            if (r2.minecraft.settings.anaglyph) {
+                                if (stereoEye == 0) GL11.glColorMask(false, true, true, false);
+                                else GL11.glColorMask(true, false, false, false);
+                            }
+                            if (xTile > 0) GL11.glCallLists(lr.buffer);
+                            GL11.glDepthMask(true);
+                            GL11.glDisable(3042);
                         }
-                        GL11.glDisable(3042);
-                        GL11.glEnable(3042);
-                        GL11.glColorMask(false, false, false, false);
-                        xTile = lr.sortChunks(camPlayer, 1, renderPartial);
-                        GL11.glColorMask(true, true, true, true);
-                        if (r2.minecraft.settings.anaglyph) {
-                            if (stereoEye == 0) GL11.glColorMask(false, true, true, false);
-                            else GL11.glColorMask(true, false, false, false);
-                        }
-                        if (xTile > 0) {
-                            GL11.glBindTexture(
-                                    3553,
-                                    lr.textureManager.load(
-                                            net.classicremastered.minecraft.render.BlockTextureAtlas
-                                                    .RESOURCE));
-                            GL11.glCallLists(lr.buffer);
-                        }
-                        GL11.glDepthMask(true);
-                        GL11.glDisable(3042);
                         GL11.glDisable(2912);
 
+                        if (mc.debugHitboxes) {
+                            EntityHitboxRenderer.render(mc, camVec, fr, renderPartial);
+                        }
                         ClientWeatherRenderer.render(r2, renderPartial);
                         net.classicremastered.minecraft.render.DeveloperPowerRenderer.render(
                                 mc, renderPartial);
@@ -460,17 +448,14 @@ final class ClientFrameRenderer {
                         if (!r2.minecraft.settings.anaglyph) break;
                         ++stereoEye;
                     }
-                    // Hide HUD hotbar when inventory/crafting/furnace GUI is open
-                    boolean hideHUD =
-                            (mc.currentScreen
-                                            instanceof
-                                            net.classicremastered.minecraft.gui.InventoryScreen)
-                                    || (mc.currentScreen
-                                            instanceof
-                                            net.classicremastered.minecraft.gui.GuiCrafting);
-
                     mc.renderer.renderUnderwaterOverlay(partial);
-                    r.minecraft.hud.render(partial, hideHUD, mouseUiX, uiH);
+                    if (!mc.hudHidden) {
+                        boolean hideHotbar = mc.currentScreen instanceof InventoryScreen
+                                || mc.currentScreen instanceof GuiCrafting;
+                        mc.hud.render(partial, hideHotbar, mouseUiX, uiH);
+                    } else if (mc.currentScreen != null) {
+                        r.enableGuiMode();
+                    }
 
                 } else {
                     GL11.glViewport(0, 0, r.minecraft.width, r.minecraft.height);
@@ -496,6 +481,36 @@ final class ClientFrameRenderer {
                 Thread.yield();
                 Display.update();
             }
+        }
+    }
+
+    private static void renderParticles(ParticleManager manager, float partial) {
+        if (manager.particles[0].isEmpty() && manager.particles[1].isEmpty())
+            return;
+        PARTICLE_VIEW.clear();
+        GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, PARTICLE_VIEW);
+        Vec3D right = new Vec3D(PARTICLE_VIEW.get(0), PARTICLE_VIEW.get(4), PARTICLE_VIEW.get(8));
+        Vec3D up = new Vec3D(PARTICLE_VIEW.get(1), PARTICLE_VIEW.get(5), PARTICLE_VIEW.get(9));
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT);
+        try {
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glEnable(GL11.GL_ALPHA_TEST);
+            for (int pass = 0; pass < 2; pass++) {
+                var particles = manager.particles[pass];
+                if (particles.isEmpty())
+                    continue;
+                String texture = pass == 0 ? "/particles.png" : BlockTextureAtlas.RESOURCE;
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, manager.textureManager.load(texture));
+                ShapeRenderer shape = ShapeRenderer.instance;
+                shape.begin();
+                for (Object particle : particles) {
+                    ((Particle) particle).render(shape, partial, right, up);
+                }
+                shape.end();
+            }
+        } finally {
+            GL11.glPopAttrib();
         }
     }
 }

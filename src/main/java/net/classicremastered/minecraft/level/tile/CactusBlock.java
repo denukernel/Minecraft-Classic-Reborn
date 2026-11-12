@@ -7,7 +7,8 @@ import net.classicremastered.minecraft.level.Level;
 
 public final class CactusBlock extends Block {
     private static final int SIDE_TEX = 179; // cactus_side
-    private static final int TOP_TEX  = 180; // cactus_top
+    private static final int TOP_TEX = 180; // cactus_top
+    private static final int BOTTOM_TEX = 214; // cactus_bottom
 
     public CactusBlock(int id) {
         super(id, SIDE_TEX, "Cactus");
@@ -24,6 +25,11 @@ public final class CactusBlock extends Block {
     @Override
     public boolean canPlaceOnFace(Level level, int x, int y, int z, int face) {
         return hasSupport(level, x, y, z);
+    }
+
+    @Override
+    public int getDropCount() {
+        return 0;
     }
 
     @Override
@@ -77,7 +83,6 @@ public final class CactusBlock extends Block {
                 && level.setTile(x, y, z, 0)) {
             if (level.particleEngine != null)
                 spawnBreakParticles(level, x, y, z, level.particleEngine);
-            dropItems(level, x, y, z, 1);
         } else if (level.getTile(x, y, z) == id) {
             scheduleGrowth(level, x, y, z);
         }
@@ -85,7 +90,7 @@ public final class CactusBlock extends Block {
 
     @Override
     protected int getTextureId(int side) {
-        return side == 0 ? 204 : side == 1 ? TOP_TEX : SIDE_TEX;
+        return side == 0 ? BOTTOM_TEX : side == 1 ? TOP_TEX : SIDE_TEX;
     }
 
     private static final float INSET = 1 / 16f;

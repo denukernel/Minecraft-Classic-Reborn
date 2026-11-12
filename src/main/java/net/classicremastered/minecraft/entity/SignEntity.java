@@ -1,8 +1,9 @@
-// File: src/net/classicremastered/minecraft/item/SignEntity.java
 package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.Minecraft;
+import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.nbt.CompoundTag;
 import net.classicremastered.minecraft.gui.FontRenderer;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.ModelPart;
@@ -10,10 +11,7 @@ import net.classicremastered.minecraft.render.TextureManager;
 
 import org.lwjgl.opengl.GL11;
 
-/**
- * Port of Survival Test 0.24 Sign (entity form, not a block). Renders a wooden board + stick, with
- * hardcoded 4 lines of text.
- */
+/** A stationary, editable standing sign. */
 public final class SignEntity extends Entity {
 
     private static final ModelPart board = new ModelPart(0, 0);
@@ -28,78 +26,95 @@ public final class SignEntity extends Entity {
         stick.setBounds(-1.0F, -2.0F, -1.0F, 2, 14, 2, 0.0F);
     }
 
-    private float rot;
-    private final String[] messages = {
-        "This is a test", "of the signs.", "Each line can", "be 15 chars!"
-    };
+    public static final int LINE_COUNT = 4;
+    public static final int INK_COLOR = 0x17120D;
+    public static final int LINE_LENGTH = 15;
+    private final String[] messages = {"", "", "", ""};
+    private final int blockX, blockY, blockZ;
+    private final float rot;
+    private int health = 4;
 
-    private final FontRenderer font;
+    public SignEntity(Level level, int x, int y, int z, float rotation) {
+        super(level);
+        blockX = x;
+        blockY = y;
+        blockZ = z;
+        rot = rotation;
+        setSize(.7f, 1.625f);
+        heightOffset = bbHeight / 2;
+        moveTo(x + .5f, y + heightOffset, z + .5f, rotation, 0);
+        makeStepSound = false;
+    }
 
-    // --- NEW: simple health system ---
-    private int health = 4; // punches required
+    public boolean hasSupport() {
+        if (!level.isInBounds(blockX, blockY, blockZ)
+                || blockY <= 0
+                || blockY + bbHeight > level.depth) return false;
+        Block below = Block.blocks[level.getTile(blockX, blockY - 1, blockZ)];
+        return below != null && below.isSolid() && below.isCube();
+    }
 
-    public SignEntity(Minecraft mc, float x, float y, float z, float yaw) {
-        super(mc.level);
-        this.setSize(0.5F, 1.5F);
-        this.heightOffset = this.bbHeight / 2.0F;
+    public String line(int row) {
+        return messages[row];
+    }
 
-        this.setPos(x, y, z);
-        this.rot = -yaw;
-        this.heightOffset = 1.5F;
+    public void setLine(int row, String line) {
+        StringBuilder filtered = new StringBuilder();
+        for (int i = 0; i < line.length() && filtered.length() < LINE_LENGTH; i++) {
+            char c = line.charAt(i);
+            if (c >= 32 && c < 127) filtered.append(c);
+        }
+        messages[row] = filtered.toString();
+    }
 
-        // Initial thrown velocity
-        this.xd = -(float) Math.sin(this.rot * Math.PI / 180.0) * 0.05F;
-        this.yd = 0.2F;
-        this.zd = -(float) Math.cos(this.rot * Math.PI / 180.0) * 0.05F;
+    public CompoundTag save() {
+        CompoundTag tag = new CompoundTag(null);
+        tag.putInt("X", blockX);
+        tag.putInt("Y", blockY);
+        tag.putInt("Z", blockZ);
+        tag.putFloat("Rotation", rot);
+        for (int i = 0; i < LINE_COUNT; i++) tag.putString("Line" + i, messages[i]);
+        return tag;
+    }
 
-        this.makeStepSound = false;
-        this.font = mc.fontRenderer;
+    public static SignEntity load(Level level, CompoundTag tag) {
+        float rotation = tag.getFloat("Rotation");
+        int x = tag.getInt("X"), y = tag.getInt("Y"), z = tag.getInt("Z");
+        if (!Float.isFinite(rotation) || !level.isInBounds(x, y, z)) return null;
+        SignEntity sign = new SignEntity(level, x, y, z, rotation);
+        if (!sign.hasSupport()) return null;
+        for (int i = 0; i < LINE_COUNT; i++) sign.setLine(i, tag.getString("Line" + i));
+        return sign;
     }
 
     @Override
     public boolean isPickable() {
-        return !this.removed;
+        return !removed;
     }
 
-    // --- NEW: can take damage ---
+    @Override
+    public boolean isPushable() {
+        return false;
+    }
+
     @Override
     public void hurt(Entity attacker, int damage) {
-        if (this.removed) return;
-        this.health -= damage;
-        if (this.health <= 0) {
-            this.remove();
-        }
+        if (removed || level.isNetworkMode() || damage <= 0) return;
+        health -= damage;
+        if (health <= 0 || level.creativeMode) breakSign();
     }
 
     @Override
     public void tick() {
-        this.xo = this.x;
-        this.yo = this.y;
-        this.zo = this.z;
-
-        this.yd -= 0.04F; // gravity
-        this.move(this.xd, this.yd, this.zd);
-
-        this.xd *= 0.98F;
-        this.yd *= 0.98F;
-        this.zd *= 0.98F;
-
-        if (this.onGround) {
-            this.xd *= 0.7F;
-            this.zd *= 0.7F;
-            this.yd *= -0.5F;
-        }
+        if (!hasSupport() || !level.getCubes(bb).isEmpty()) breakSign();
     }
 
-    @Override
-    public void remove() {
-        if (!this.removed && this.level != null) {
-            // Drop a wooden plank block when sign is destroyed
-            this.level.addEntity(
-                    new net.classicremastered.minecraft.entity.DroppedBlock(
-                            this.level, this.x, this.y, this.z, Block.WOOD.id));
+    private void breakSign() {
+        if (removed) return;
+        if (!level.creativeMode && !level.isNetworkMode() && Item.OAK_SIGN != null) {
+            level.addEntity(new DroppedItem(level, x, y, z, Item.OAK_SIGN.id, 1));
         }
-        super.remove();
+        remove();
     }
 
     @Override
@@ -108,7 +123,7 @@ public final class SignEntity extends Entity {
 
         // Position
         float px = this.xo + (this.x - this.xo) * partial;
-        float py = this.yo + (this.y - this.yo) * partial - this.heightOffset / 2.0F;
+        float py = blockY + .75f;
         float pz = this.zo + (this.z - this.zo) * partial;
         GL11.glTranslatef(px, py, pz);
 
@@ -128,20 +143,26 @@ public final class SignEntity extends Entity {
         GL11.glPopMatrix();
 
         // Draw text overlay
+        FontRenderer font = level.minecraft == null ? null : level.minecraft.fontRenderer;
         if (font != null) {
-            float scale = 0.016666668F;
-            GL11.glTranslatef(0.0F, 0.5F, 0.09F);
+            float scale = 0.015625F;
+            GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT);
+            GL11.glTranslatef(0, .5f, .075f);
             GL11.glScalef(scale, -scale, scale);
             GL11.glNormal3f(0.0F, 0.0F, -1.0F * scale);
             GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
             for (int i = 0; i < messages.length; i++) {
                 String msg = messages[i];
-                int width = font.getWidth(msg);
-                font.renderNoShadow(msg, -width / 2, i * 10 - messages.length * 5, 0x202020);
+                int width = font.getLiteralWidth(msg);
+                GL11.glPushMatrix();
+                GL11.glScalef(Math.min(1f, 88f / Math.max(1, width)), 1, 1);
+                font.renderLiteral(msg, -width / 2, i * 10 - 19, INK_COLOR);
+                GL11.glPopMatrix();
             }
 
-            GL11.glDisable(GL11.GL_BLEND);
+            GL11.glPopAttrib();
         }
 
         GL11.glPopMatrix();

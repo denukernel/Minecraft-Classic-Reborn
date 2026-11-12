@@ -42,8 +42,9 @@ public class Recipe {
                             ? ingredients[(mirror ? width - 1 - rx : rx) + ry * width]
                             : -1;
                     int actual = Item.inventoryId(grid[x + y * gridWidth]);
-                    if (expected != actual && !(isEmpty(expected) && isEmpty(actual)))
-                        match = false;
+                    if (!net.classicremastered.minecraft.level.itemstack.OreMaterials.matches(
+                                    expected, actual)
+                            && !(isEmpty(expected) && isEmpty(actual))) match = false;
                 }
             if (match)
                 return true;

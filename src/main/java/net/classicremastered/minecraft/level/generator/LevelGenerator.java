@@ -456,6 +456,8 @@ public final class LevelGenerator {
             Random structRand = new Random(this.random.nextLong() ^ 0x5F3759DFL);
             StructureRegistry.INSTANCE.bootstrapDefaults();
             StructureRegistry.INSTANCE.placeAll(var65, structRand);
+            net.classicremastered.minecraft.level.structure.CobblestoneTower.placeFinite(
+                    var65, structRand.nextLong());
         } catch (Throwable t) {
             t.printStackTrace();
         }

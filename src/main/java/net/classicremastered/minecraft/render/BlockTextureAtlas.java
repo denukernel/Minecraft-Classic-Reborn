@@ -16,6 +16,10 @@ public final class BlockTextureAtlas {
     private BlockTextureAtlas() {}
 
     public static BufferedImage create(ZipFile pack) throws IOException {
+        return create(pack, false);
+    }
+
+    public static BufferedImage create(ZipFile pack, boolean opaqueLeaves) throws IOException {
         Properties tiles = new Properties();
         try (InputStream input = open("/textures/block/tiles.properties", null)) {
             tiles.load(input);
@@ -39,10 +43,24 @@ public final class BlockTextureAtlas {
                         null);
             }
             graphics.drawImage(read("/textures/entity/chest.png", pack), 192, 192, 64, 64, null);
+            if (opaqueLeaves) {
+                fillLeafHoles(atlas, 22);
+                fillLeafHoles(atlas, 24);
+            }
         } finally {
             graphics.dispose();
         }
         return atlas;
+    }
+
+    private static void fillLeafHoles(BufferedImage atlas, int tile) {
+        int left = tile % 16 * 16, top = tile / 16 * 16;
+        for (int y = top; y < top + 16; y++) {
+            for (int x = left; x < left + 16; x++) {
+                int pixel = atlas.getRGB(x, y);
+                atlas.setRGB(x, y, (pixel >>> 24) < 128 ? 0xFF284719 : pixel | 0xFF000000);
+            }
+        }
     }
 
     private static BufferedImage read(String path, ZipFile pack) throws IOException {

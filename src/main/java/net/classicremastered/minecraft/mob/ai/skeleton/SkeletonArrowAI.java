@@ -13,7 +13,7 @@ public class SkeletonArrowAI extends BasicAI {
     public float preferredMax = 16.0F;
     public float walkSpeed = 0.025F;
 
-    public int windupTicks = 8;
+    public int windupTicks = 20;
     public int cooldownTicks = 40;
     public float arrowSpeed = 1.2F;
 

@@ -9,10 +9,21 @@ public class OreBlock extends Block {
     public final int getDrop() {
         return this == COAL_ORE
                 ? net.classicremastered.minecraft.level.itemstack.Item.COAL_ID + 256
-                : (this == GOLD_ORE ? GOLD_BLOCK.id : (this == IRON_ORE ? IRON_ORE.id : this.id));
+                : this == GOLD_ORE
+                        ? net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_GOLD
+                                + 256
+                        : this == IRON_ORE
+                                ? net.classicremastered.minecraft.level.itemstack.OreMaterials
+                                                .RAW_IRON
+                                        + 256
+                                : this == DIAMOND_ORE_NEW
+                                        ? net.classicremastered.minecraft.level.itemstack
+                                                        .OreMaterials.DIAMOND
+                                                + 256
+                                        : this.id;
     }
 
     public final int getDropCount() {
-        return this == IRON_ORE ? 1 : random.nextInt(3) + 1;
+        return this == COAL_ORE ? random.nextInt(3) + 1 : 1;
     }
 }

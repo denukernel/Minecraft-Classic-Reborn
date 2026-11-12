@@ -1,9 +1,12 @@
 package net.classicremastered.minecraft.gui;
 
+import net.classicremastered.launcher.Constants;
 import net.classicremastered.minecraft.ChatLine;
 import net.classicremastered.minecraft.Minecraft;
+import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.chat.ChatInputScreen;
 import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
+import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Inventory;
@@ -17,6 +20,7 @@ import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 public final class HUDScreen extends Screen {
@@ -24,6 +28,8 @@ public final class HUDScreen extends Screen {
     public List<ChatLine> chat = new ArrayList<>();
     private final Random random = new Random();
     private final Minecraft mc;
+    private Long debugBiomeSeed;
+    private BiomeLevelGenerator debugBiomes;
     public int width;
     public int height;
     public String hoveredPlayer = null;
@@ -35,10 +41,88 @@ public final class HUDScreen extends Screen {
         this.height = h * 240 / h;
     }
 
+    private void renderDebugOverlay(FontRenderer font, long maxMemory) {
+        Player player = mc.player;
+        int x = (int) Math.floor(player.x);
+        int y = (int) Math.floor(player.bb.y0);
+        int z = (int) Math.floor(player.z);
+        float yaw = (float) Math.IEEEremainder(player.aimYaw(1f), 360);
+        String facing = switch (Math.floorMod(Math.round(yaw / 90f), 4)) {
+            case 0 -> "north (-Z)";
+            case 1 -> "east (+X)";
+            case 2 -> "south (+Z)";
+            default -> "west (-X)";
+        };
+        String mode = mc.gamemode.isSpectator() ? "Spectator"
+                : mc.gamemode.isSurvival()      ? "Survival"
+                                                : "Creative";
+        List<String> world = new ArrayList<>(List.of(
+                "Minecraft Classic Reborn " + Constants.MINECRAFT_VERSION, mc.debug, "",
+                String.format(
+                        Locale.ROOT, "XYZ: %.3f / %.3f / %.3f", player.x, player.bb.y0, player.z),
+                "Block: " + x + " " + y + " " + z,
+                "Chunk: " + (x >> 4) + " " + (y >> 4) + " " + (z >> 4),
+                String.format(Locale.ROOT, "Facing: %s (%.1f / %.1f)", facing, yaw, player.xRot),
+                String.format(Locale.ROOT, "Client brightness: %.2f",
+                        mc.level.lightEngine.getBrightness(x, y, z)),
+                "Time: " + mc.level.timeOfDay,
+                "Mode: " + mode + " / " + mc.settings.difficulty.getLabel()));
+        if (mc.level.biomeSeed != null) {
+            if (!mc.level.biomeSeed.equals(debugBiomeSeed)) {
+                debugBiomeSeed = mc.level.biomeSeed;
+                debugBiomes = new BiomeLevelGenerator(debugBiomeSeed);
+            }
+            world.add("Biome: " + debugBiomes.biomeAt(x, z).name().toLowerCase(Locale.ROOT));
+        }
+        world.add("");
+        world.add("F3 + N: Toggle spectator");
+        world.add("F3 + B: Toggle entity hitboxes");
+
+        Runtime runtime = Runtime.getRuntime();
+        long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
+        List<String> system = new ArrayList<>(List.of("Java: " + System.getProperty("java.version"),
+                "Mem: " + usedMemory + " / " + maxMemory + " MiB",
+                "Display: " + mc.width + "x" + mc.height));
+        MovingObjectPosition blockHit = mc.debugBlockTarget;
+        if (blockHit != null) {
+            int id = mc.level.getTile(blockHit.x, blockHit.y, blockHit.z);
+            Block block = Block.blocks[id];
+            system.add("");
+            system.add("Targeted Block: " + blockHit.x + " " + blockHit.y + " " + blockHit.z);
+            if (block != null)
+                system.add(block.name + " (" + id + ")");
+        }
+        if (mc.selected != null && mc.selected.entity != null) {
+            system.add("");
+            system.add("Targeted Entity");
+            system.add(mc.selected.entity.getClass().getSimpleName());
+        }
+        int leftWidth = world.stream().mapToInt(font::getWidth).max().orElse(0);
+        int rightWidth = system.stream().mapToInt(font::getWidth).max().orElse(0);
+        drawDebugLines(font, world, 2, false);
+        drawDebugLines(
+                font, system, leftWidth + rightWidth + 8 < width ? 2 : 2 + world.size() * 9, true);
+        GL11.glColor4f(1, 1, 1, 1);
+    }
+
+    private void drawDebugLines(FontRenderer font, List<String> lines, int y, boolean right) {
+        for (String line : lines) {
+            if (!line.isEmpty()) {
+                int lineWidth = font.getWidth(line);
+                int x = right ? width - 2 - lineWidth : 2;
+                drawBox(x - 1, y - 1, x + lineWidth + 1, y + 8, 0x90505050);
+                font.render(line, x, y, 0xE0E0E0);
+            }
+            y += 9;
+        }
+    }
+
     public final void render(float partial, boolean mouseOver, int mx, int my) {
         FontRenderer font = this.mc.fontRenderer;
         this.mc.renderer.enableGuiMode();
-        renderBossBar(font);
+        boolean showDebug = mc.debugOverlay && mc.currentScreen == null;
+        if (!showDebug)
+            renderBossBar(font);
 
         TextureManager tm = this.mc.textureManager;
         ShapeRenderer sr = ShapeRenderer.instance;
@@ -116,76 +200,80 @@ public final class HUDScreen extends Screen {
             }
         }
 
-        // --------------------------------------------------------------------
-        // HOTBAR background + selector ==> gui.png
-        // --------------------------------------------------------------------
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_GUI);
+        if (!this.mc.gamemode.isSpectator()) {
+            // --------------------------------------------------------------------
+            // HOTBAR background + selector ==> gui.png
+            // --------------------------------------------------------------------
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_GUI);
 
-        Inventory inv = this.mc.player.inventory;
-        this.imgZ = -90.0F;
+            Inventory inv = this.mc.player.inventory;
+            this.imgZ = -90.0F;
 
-        this.drawImage(this.width / 2 - 91, this.height - 22, 0, 0, 182, 22);
-        this.drawImage(
-                this.width / 2 - 91 - 1 + inv.selected * 20, this.height - 22 - 1, 0, 22, 24, 22);
+            this.drawImage(this.width / 2 - 91, this.height - 22, 0, 0, 182, 22);
+            this.drawImage(this.width / 2 - 91 - 1 + inv.selected * 20, this.height - 22 - 1, 0, 22,
+                    24, 22);
 
-        // --------------------------------------------------------------------
-        // Crosshair ==> icons.png
-        // --------------------------------------------------------------------
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
-        this.drawImage(this.width / 2 - 7, this.height / 2 - 7, 0, 0, 16, 16);
+            // --------------------------------------------------------------------
+            // Crosshair ==> icons.png
+            // --------------------------------------------------------------------
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
+            this.drawImage(this.width / 2 - 7, this.height / 2 - 7, 0, 0, 16, 16);
 
-        // --------------------------------------------------------------------
-        // Hotbar items (ONLY first 9 slots, even if inventory is larger)
-        // --------------------------------------------------------------------
-        int hotbar = Math.min(9, inv.slots.length);
-        for (int slot = 0; slot < hotbar; ++slot) {
-            int id = inv.slots[slot];
-            if (id <= 0) continue;
+            // --------------------------------------------------------------------
+            // Hotbar items (ONLY first 9 slots, even if inventory is larger)
+            // --------------------------------------------------------------------
+            int hotbar = Math.min(9, inv.slots.length);
+            for (int slot = 0; slot < hotbar; ++slot) {
+                int id = inv.slots[slot];
+                if (id <= 0 || inv.getCount(slot) <= 0)
+                    continue;
 
-            int x = this.width / 2 - 90 + slot * 20;
-            int y = this.height - 16;
-            float pop = (inv.popTime[slot] - partial) / Inventory.POP_TIME_DURATION;
+                int x = this.width / 2 - 90 + slot * 20;
+                int y = this.height - 16;
+                float pop = (inv.popTime[slot] - partial) / Inventory.POP_TIME_DURATION;
 
-            GL11.glPushMatrix();
-            GL11.glTranslatef(x, y, -50);
-            if (pop > 0) {
-                float bounce = MathHelper.sin(pop * pop * (float) Math.PI);
-                GL11.glTranslatef(10, 10 - bounce * 8.0F, 0);
-                GL11.glScalef(1.0F + bounce, 1.0F + MathHelper.sin(pop * (float) Math.PI), 1.0F);
-                GL11.glTranslatef(-10, -10, 0);
-            }
+                GL11.glPushMatrix();
+                GL11.glTranslatef(x, y, -50);
+                if (pop > 0) {
+                    float bounce = MathHelper.sin(pop * pop * (float) Math.PI);
+                    GL11.glTranslatef(10, 10 - bounce * 8.0F, 0);
+                    GL11.glScalef(1.0F + bounce, 1.0F + MathHelper.sin(pop * (float) Math.PI),
+                            1.0F);
+                    GL11.glTranslatef(-10, -10, 0);
+                }
 
-            id = net.classicremastered.minecraft.level.itemstack.Item.iconId(id);
-            if (id < 256 && Block.blocks[id] != null) {
-                GL11.glScalef(10, 10, 10);
-                GL11.glTranslatef(1.0F, 0.5F, 0.0F);
-                GL11.glRotatef(-30, 1, 0, 0);
-                GL11.glRotatef(45, 0, 1, 0);
-                GL11.glTranslatef(-1.5F, 0.5F, 0.5F);
-                GL11.glScalef(-1, -1, -1);
+                id = net.classicremastered.minecraft.level.itemstack.Item.iconId(id);
+                if (id < 256 && Block.blocks[id] != null) {
+                    GL11.glScalef(10, 10, 10);
+                    GL11.glTranslatef(1.0F, 0.5F, 0.0F);
+                    GL11.glRotatef(-30, 1, 0, 0);
+                    GL11.glRotatef(45, 0, 1, 0);
+                    GL11.glTranslatef(-1.5F, 0.5F, 0.5F);
+                    GL11.glScalef(-1, -1, -1);
 
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_TERR);
-                sr.begin();
-                Block.blocks[id].renderFullbright(sr);
-                sr.end();
+                    GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_TERR);
+                    sr.begin();
+                    Block.blocks[id].renderFullbright(sr);
+                    sr.end();
 
-                // restore icons for subsequent 2D HUD draws if any
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
-            } else if (id >= 256) {
-                int itemId = id - 256;
-                if (itemId >= 0 && itemId < Item.items.length) {
-                    Item it = Item.items[itemId];
-                    if (it != null) {
-                        GL11.glTranslatef(2, -4, 0);
-                        it.renderIcon(this.mc.textureManager, sr);
+                    // restore icons for subsequent 2D HUD draws if any
+                    GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
+                } else if (id >= 256) {
+                    int itemId = id - 256;
+                    if (itemId >= 0 && itemId < Item.items.length) {
+                        Item it = Item.items[itemId];
+                        if (it != null) {
+                            GL11.glTranslatef(2, -4, 0);
+                            it.renderIcon(this.mc.textureManager, sr);
+                        }
                     }
                 }
-            }
-            GL11.glPopMatrix();
+                GL11.glPopMatrix();
 
-            if (inv.count[slot] > 1) {
-                String countStr = "" + inv.count[slot];
-                font.render(countStr, x + 19 - font.getWidth(countStr), y + 6, 0xFFFFFF);
+                if (inv.count[slot] > 1) {
+                    String countStr = "" + inv.count[slot];
+                    font.render(countStr, x + 19 - font.getWidth(countStr), y + 6, 0xFFFFFF);
+                }
             }
         }
 
@@ -203,30 +291,27 @@ public final class HUDScreen extends Screen {
                     this.width / 2 - 90,
                     this.height - 51,
                     0xD0D0D0);
-        // Title string with colored segments
-        if (this.mc != null && this.mc.settings != null && this.mc.settings.showFrameRate) {
-            String diff = "&7Difficulty: &e" + this.mc.settings.difficulty.getLabel();
-            font.render(diff, 2, 12, 0xFFFFFF);
-        }
         long totalMem = Runtime.getRuntime().maxMemory() / (1024L * 1024L);
-        if (totalMem < 4000) {
+        if (!showDebug && totalMem < 4000) {
             String warn = "WARNING: Your PC has less than 4 GB RAM. Expect performance issues.";
             int color = (ticks / 20 % 2 == 0) ? 0xFF4444 : 0xFF8888;
             drawCenteredString(this.mc.fontRenderer, warn, this.width / 2, 2, color);
         }
-        if (this.mc.settings.showFrameRate) {
+        if (showDebug) {
+            renderDebugOverlay(font, totalMem);
+        } else if (this.mc.settings.showFrameRate) {
             font.render("&7Minecraft &6Classic &b0.30", 2, 2, 0xFFFFFF);
+            font.render("&7Difficulty: &e" + mc.settings.difficulty.getLabel(), 2, 12, 0xFFFFFF);
             font.render(this.mc.debug, 2, 22, 0xFFFFFF);
         }
-        if (this.mc.settings.showFrameRate) {
-            font.render(this.mc.debug, 2, 22, 16777215);
-        }
-        if (this.mc.gamemode instanceof SurvivalGameMode) {
+        if (!showDebug && this.mc.gamemode instanceof SurvivalGameMode) {
             String score = "Score: &e" + this.mc.player.getScore();
             font.render(score, this.width - font.getWidth(score) - 2, 2, 0xFFFFFF);
 
             String coins = "MineCoins: &6" + this.mc.player.coins;
-            font.render(coins, this.width - font.getWidth(coins) - 2, 12, 0xFFFFFF);
+            int coinX = this.width - font.getWidth(coins) - 2;
+            drawMinecoinIcon(tm, coinX - 11, 11);
+            font.render(coins, coinX, 12, 0xFFFFFF);
 
             String rep = "Reputation: " + this.mc.player.villagerReputation;
             int repColor =
@@ -295,6 +380,7 @@ public final class HUDScreen extends Screen {
             GL11.glDisable(GL11.GL_CULL_FACE);
             GL11.glDisable(GL11.GL_FOG);
             int barWidth = Math.min(182, width - 20), left = (width - barWidth) / 2;
+            boolean enraged = boss.isEnraged();
             drawBox(left - 1, 14, left + barWidth + 1, 22, 0xff111111);
             drawBox(left, 15, left + barWidth, 21, 0xff402030);
             drawBox(
@@ -314,18 +400,42 @@ public final class HUDScreen extends Screen {
                                                                                     .StickFigure
                                                                                     .MAX_HEALTH))),
                     21,
-                    0xffc82c4c);
-            String name = "Stick Figure";
-            if (boss.isEnraged()) name += " - RAGE";
+                    enraged ? 0xffed5432 : 0xffc82c4c);
+            int rageMarker = left + Math.round(barWidth * .25f);
+            drawBox(rageMarker, 14, rageMarker + 1, 22, 0xffffbe70);
+            String cue = enraged ? "Enraged" : "";
             if (boss.ai
                     instanceof
                     net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI ai) {
-                if (ai.powers.phase
-                        != net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers
-                                .Phase.IDLE) name += " - " + ai.powers.phase.name();
-                else if (ai.powers.rushTicks > 0) name += " - RUSH";
+                cue =
+                        switch (ai.powers.phase) {
+                            case IDLE -> cue;
+                            case THROW -> {
+                                if (ai.powers.phaseTicks
+                                        >= net.classicremastered.minecraft.mob.ai.stickfigure
+                                                .StickFigurePowers.THROW_RELEASE_TICK)
+                                    yield "Recovering";
+                                yield ai.powers.heldBlockId() > 0
+                                        ? "Block incoming"
+                                        : "Throw incoming";
+                            }
+                            case FIREBALL -> "Fireball incoming";
+                            case UPPERCUT -> "Uppercut incoming";
+                            case BARRAGE ->
+                                    ai.powers.canPlayerEscape(mc.player)
+                                            ? "Press Jump to escape"
+                                            : "Aerial barrage";
+                            case SLAM -> "Slam incoming";
+                            case PHYSICS_GUN -> "Physics gun hold";
+                            case RAGE_TRANSITION -> "Entering rage";
+                            case RUSH_WINDUP -> "Charge incoming";
+                            case RUSH -> "Charging";
+                            case STAGGER -> "Staggered";
+                        };
             }
-            drawCenteredString(font, name, width / 2, 4, 0xffffff);
+            drawCenteredString(font, "Stick Figure", width / 2, 4, 0xffffff);
+            if (!cue.isEmpty())
+                drawCenteredString(font, cue, width / 2, 25, enraged ? 0xffffbe70 : 0xffffff);
         } finally {
             GL11.glPopAttrib();
         }

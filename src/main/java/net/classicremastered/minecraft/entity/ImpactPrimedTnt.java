@@ -217,7 +217,8 @@ public class ImpactPrimedTnt extends Entity {
                 if (e == this) continue;
                 if (ownerIgnoreTicks > 0 && e == ownerRef) continue;
 
-                if (e instanceof Player) {
+                if (e instanceof Player
+                        || e instanceof net.classicremastered.minecraft.mob.Defender) {
                     explode();
                     return;
                 }

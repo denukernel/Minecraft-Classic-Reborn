@@ -42,6 +42,6 @@ public final class CreativeModeHelper {
 
     /** Clears hostility/retaliation if target is Creative. */
     public static boolean shouldIgnoreTarget(Entity target) {
-        return isCreativePlayer(target);
+        return isCreativePlayer(target) || target instanceof Player player && player.isSpectator();
     }
 }

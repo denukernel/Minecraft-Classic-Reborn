@@ -24,9 +24,7 @@ public class Spider extends QuadrupedMob {
         this.footSize = 0.45F;
         this.seatFactor = 0.60f;
         this.health = this.lastHealth = 16;
-        this.soundIdle = "mob/spider/say";
-        this.soundHurt = "mob/spider/say";
-        this.soundDeath = "mob/spider/death";
+        initSounds();
 
         // Beta-style spider AI (neutral in light, hostile in dark/provoked).
         // Difficulty-based poison/paralysis is handled inside BetaSpiderAI.attack().
@@ -38,13 +36,21 @@ public class Spider extends QuadrupedMob {
         this.setPos(x, y, z);
     }
 
+    private void initSounds() {
+        soundIdle = soundHurt = "mob/spider/say";
+        soundDeath = "mob/spider/death";
+    }
+
+    private void readObject(java.io.ObjectInputStream input)
+            throws java.io.IOException, ClassNotFoundException {
+        input.defaultReadObject();
+        initSounds();
+    }
+
     @Override
     public void tick() {
         float previousX = x, previousZ = z;
         super.tick();
-
-        // Hug slopes visually
-        this.renderOffset = this.ySlideOffset;
 
         // Lightweight wall-climb feel
         if (health > 0 && this.horizontalCollision && !isInWater() && this.yd < 0.20F) {

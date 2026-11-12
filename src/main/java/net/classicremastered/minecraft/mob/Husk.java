@@ -7,8 +7,9 @@ import net.classicremastered.minecraft.level.Level;
  * Desert variant of Zombie.
  * Same model, unique texture, immune to sunlight.
  */
-public final class Husk extends Zombie {
+public class Husk extends Zombie {
     public static final long serialVersionUID = 0L;
+    public static final short REGISTRY_ID = 8;
 
     public Husk(Level level, float x, float y, float z) {
         super(level, x, y, z);

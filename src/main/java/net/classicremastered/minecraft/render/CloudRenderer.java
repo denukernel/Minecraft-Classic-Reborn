@@ -20,6 +20,7 @@ public final class CloudRenderer {
         {1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1}
     };
     private int textureId = -1, width, height;
+    private final ByteBuffer colorMask = BufferUtils.createByteBuffer(16);
     private boolean[] occupied;
     private int previousX = Integer.MIN_VALUE, previousZ, previousRadius;
     private final FloatBuffer[] faces = new FloatBuffer[6];
@@ -31,6 +32,8 @@ public final class CloudRenderer {
             float bottom,
             float ticks,
             int radius,
+            boolean flat,
+            String maskTexture,
             float red,
             float green,
             float blue) {
@@ -38,7 +41,9 @@ public final class CloudRenderer {
         GL11.glPushClientAttrib(GL11.GL_CLIENT_VERTEX_ARRAY_BIT);
         GL11.glPushMatrix();
         try {
-            loadMask(textures.load("/clouds.png"));
+            loadMask(textures.load(maskTexture));
+            colorMask.clear();
+            GL11.glGetBoolean(GL11.GL_COLOR_WRITEMASK, colorMask);
             double cloudX = cameraX + (ticks % (width * 400L)) * .03;
             double cloudZ = cameraZ + 3.96;
             long worldCellX = (long) Math.floor(cloudX / CELL_SIZE);
@@ -66,12 +71,16 @@ public final class CloudRenderer {
             GL11.glDepthMask(true);
             GL11.glDepthFunc(GL11.GL_LEQUAL);
             GL11.glDisable(GL11.GL_BLEND);
-            draw(red, green, blue);
-            GL11.glColorMask(true, true, true, true);
+            draw(red, green, blue, flat);
+            GL11.glColorMask(
+                    colorMask.get(0) != 0,
+                    colorMask.get(1) != 0,
+                    colorMask.get(2) != 0,
+                    colorMask.get(3) != 0);
             GL11.glDepthMask(false);
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            draw(red, green, blue);
+            draw(red, green, blue, flat);
         } finally {
             GL11.glPopMatrix();
             GL11.glPopClientAttrib();
@@ -131,10 +140,12 @@ public final class CloudRenderer {
         previousRadius = radius;
     }
 
-    private void draw(float red, float green, float blue) {
+    private void draw(float red, float green, float blue, boolean flat) {
         for (int face = 0; face < faces.length; face++) {
             FloatBuffer vertices = faces[face];
-            GL11.glColor4f(red * SHADE[face], green * SHADE[face], blue * SHADE[face], .85f);
+            if (flat && face != 0) continue;
+            float shade = flat ? 1 : SHADE[face];
+            GL11.glColor4f(red * shade, green * shade, blue * shade, .85f);
             GL11.glVertexPointer(3, 0, vertices);
             GL11.glDrawArrays(GL11.GL_QUADS, 0, vertices.limit() / 3);
         }

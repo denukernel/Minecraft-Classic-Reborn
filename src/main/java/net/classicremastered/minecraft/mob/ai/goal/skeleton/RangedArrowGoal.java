@@ -22,12 +22,13 @@ public final class RangedArrowGoal extends MobGoal<SkeletonArrowAI> {
     public void tick() {
 
         Mob battleTarget = net.classicremastered.minecraft.level.itemstack.MobBattle.target(ai.mob);
-        if (ai.level.creativeMode && battleTarget == null) return;
 
         Mob player =
                 battleTarget != null
                         ? battleTarget
-                        : ai.level.getNearestPlayer(ai.mob.x, ai.mob.y, ai.mob.z, 32.0F);
+                        : net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                                ai.mob, 32, ai.attackTarget);
+        ai.attackTarget = player;
         if (player == null || player.removed || player.health <= 0) return;
 
         // Face the player
@@ -53,7 +54,7 @@ public final class RangedArrowGoal extends MobGoal<SkeletonArrowAI> {
             return;
         }
 
-        if (ai.windup < ai.windupTicks) {
+        if (ai.windup < Math.max(20, ai.windupTicks)) {
             ai.windup++;
             ai.mob.attackTime = Math.max(ai.mob.attackTime, Mob.ATTACK_DURATION);
             return;
@@ -96,7 +97,7 @@ public final class RangedArrowGoal extends MobGoal<SkeletonArrowAI> {
                         mob.x + offX,
                         mob.y + offY,
                         mob.z + offZ,
-                        yaw,
+                        yaw + 180f,
                         pitch,
                         ai.arrowSpeed));
     }

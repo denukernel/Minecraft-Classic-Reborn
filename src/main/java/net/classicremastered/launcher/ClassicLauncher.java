@@ -31,6 +31,10 @@ import javax.swing.*;
 public final class ClassicLauncher {
     public static void main(String[] args) {
         try {
+            if (args.length == 0
+                    && LauncherUpdater.handOff(resolveMcDir().toPath().resolve("updates"))) {
+                return;
+            }
             LwjglNativesDownloader.setupWindowsNatives();
             JInputBootstrap.setupWindows();
             ClassicLauncher app = new ClassicLauncher();

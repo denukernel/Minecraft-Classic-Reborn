@@ -7,6 +7,7 @@ import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers;
 import net.classicremastered.minecraft.render.BlockItemRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
+
 import org.lwjgl.opengl.GL11;
 
 public final class StickFigureModel extends Model {
@@ -25,7 +26,8 @@ public final class StickFigureModel extends Model {
             leftLeg,
             leftShin;
     private int strikeTicks, throwTicks = -1, heldBlockId, heldBlockSize;
-    private boolean kicking, holdingPhysicsGun, rushing;
+    private boolean kicking, holdingPhysicsGun;
+    private StickFigurePowers.Phase combatPhase = StickFigurePowers.Phase.IDLE;
     private float swimAmount, previousSwimAmount, swimBlend;
     private float runLean, runBounce;
 
@@ -81,21 +83,21 @@ public final class StickFigureModel extends Model {
     public void preAnimate(Object entity) {
         throwTicks = -1;
         holdingPhysicsGun = false;
-        rushing = false;
+        combatPhase = StickFigurePowers.Phase.IDLE;
         heldBlockId = heldBlockSize = 0;
         if (entity instanceof StickFigure s) {
             strikeTicks = s.strikeTicks;
             kicking = s.kicking;
             previousSwimAmount = s.getSwimAmount(0);
             swimAmount = s.getSwimAmount(1);
-            rushing = s.ai instanceof StickFigureAI ai && ai.powers.rushTicks > 0;
-            holdingPhysicsGun = s.ai instanceof StickFigureAI ai
-                    && ai.powers.phase == StickFigurePowers.Phase.PHYSICS_GUN;
-            if (s.ai instanceof StickFigureAI ai
-                    && ai.powers.phase == StickFigurePowers.Phase.THROW) {
-                throwTicks = ai.powers.phaseTicks;
-                heldBlockId = ai.powers.heldBlockId();
-                heldBlockSize = ai.powers.heldBlockSize();
+            if (s.ai instanceof StickFigureAI ai) {
+                combatPhase = ai.powers.phase;
+                holdingPhysicsGun = combatPhase == StickFigurePowers.Phase.PHYSICS_GUN;
+                if (combatPhase == StickFigurePowers.Phase.THROW) {
+                    throwTicks = ai.powers.phaseTicks;
+                    heldBlockId = ai.powers.heldBlockId();
+                    heldBlockSize = ai.powers.heldBlockSize();
+                }
             }
         } else {
             strikeTicks = 0;
@@ -119,15 +121,18 @@ public final class StickFigureModel extends Model {
         leftLeg.pitch = leftLeg.yaw = leftLeg.roll = 0;
         leftShin.pitch = leftShin.yaw = leftShin.roll = 0;
         float movement = Math.max(0, Math.min(1, amount));
-        swimBlend = previousSwimAmount
-                + (swimAmount - previousSwimAmount) * (age - (float) Math.floor(age));
+        swimBlend =
+                previousSwimAmount
+                        + (swimAmount - previousSwimAmount) * (age - (float) Math.floor(age));
         float cycle = swing * .9f;
+        boolean rushing = combatPhase == StickFigurePowers.Phase.RUSH;
         float stride = (float) Math.cos(cycle) * (rushing ? 1.4f : 1.15f) * movement;
         boolean running = !holdingPhysicsGun && throwTicks < 0 && strikeTicks == 0;
         runLean = running ? (rushing ? 22f : 14f) * movement * (1 - swimBlend) : 0;
-        runBounce = running
-                ? Math.abs((float) Math.sin(cycle)) * .065f * movement * (1 - swimBlend)
-                : 0;
+        runBounce =
+                running
+                        ? Math.abs((float) Math.sin(cycle)) * .065f * movement * (1 - swimBlend)
+                        : 0;
         head.yaw = Math.max(-.7f, Math.min(.7f, yaw / 57.295776f));
         head.pitch = Math.max(-.4f, Math.min(.4f, pitch / 57.295776f));
         rightLeg.pitch = stride;
@@ -143,8 +148,10 @@ public final class StickFigureModel extends Model {
             float stroke = age * .24f;
             head.pitch = blend(head.pitch, -.85f, swimBlend);
             // A bounded stroke prevents angle wrapping from snapping during transitions.
-            rightArm.pitch = blend(rightArm.pitch, -1.5f + (float) Math.sin(stroke) * 1.2f, swimBlend);
-            leftArm.pitch = blend(leftArm.pitch, -1.5f - (float) Math.sin(stroke) * 1.2f, swimBlend);
+            rightArm.pitch =
+                    blend(rightArm.pitch, -1.5f + (float) Math.sin(stroke) * 1.2f, swimBlend);
+            leftArm.pitch =
+                    blend(leftArm.pitch, -1.5f - (float) Math.sin(stroke) * 1.2f, swimBlend);
             rightArm.roll = blend(rightArm.roll, .3f, swimBlend);
             leftArm.roll = blend(leftArm.roll, -.3f, swimBlend);
             rightForearm.pitch = blend(rightForearm.pitch, -.45f, swimBlend);
@@ -155,12 +162,26 @@ public final class StickFigureModel extends Model {
             rightShin.pitch = blend(rightShin.pitch, .2f + Math.max(0, -kick), swimBlend);
             leftShin.pitch = blend(leftShin.pitch, .2f + Math.max(0, kick), swimBlend);
         }
-        if (holdingPhysicsGun) {
+        if (combatPhase == StickFigurePowers.Phase.RUSH_WINDUP
+                || combatPhase == StickFigurePowers.Phase.RAGE_TRANSITION) {
+            runBounce = 0;
+            runLean = combatPhase == StickFigurePowers.Phase.RUSH_WINDUP ? 20 : 8;
+            rightLeg.pitch = -.35f;
+            leftLeg.pitch = .2f;
+            rightShin.pitch = leftShin.pitch = .5f;
+            rightArm.pitch = leftArm.pitch = -.6f;
+            rightForearm.pitch = leftForearm.pitch = -1.25f;
+        } else if (combatPhase == StickFigurePowers.Phase.STAGGER) {
+            runBounce = 0;
+            runLean = -14;
+            head.pitch = .3f;
+            rightArm.roll = .8f;
+            leftArm.roll = -.8f;
+        } else if (holdingPhysicsGun) {
             rightArm.pitch = -(float) Math.PI / 2;
             rightArm.roll = 0;
             rightForearm.pitch = 0;
-        } else if (throwTicks >= 0)
-            animateThrow(throwTicks + (age - (float) Math.floor(age)));
+        } else if (throwTicks >= 0) animateThrow(throwTicks + (age - (float) Math.floor(age)));
         else if (strikeTicks > 0) {
             float phase = (14 - strikeTicks) / 14f;
             float reach = (float) Math.sin(Math.min(1, phase * 1.7f) * Math.PI);
@@ -184,18 +205,18 @@ public final class StickFigureModel extends Model {
         return from + (to - from) * amount;
     }
 
-    private record ThrowPose(float arm, float forearm, float windup, float swing, float recovery) {
-    }
+    private record ThrowPose(float arm, float forearm, float windup, float swing, float recovery) {}
 
     private static ThrowPose throwPose(float ticks) {
         float release = StickFigurePowers.THROW_RELEASE_TICK;
         float windup = Math.min(1, ticks / (release - 3));
         float swing = Math.max(0, Math.min(1, (ticks - release + 3) / 3));
-        float recovery = Math.max(
-                0,
-                1
-                        - Math.max(0, ticks - release)
-                                / (StickFigurePowers.THROW_END_TICK - release));
+        float recovery =
+                Math.max(
+                        0,
+                        1
+                                - Math.max(0, ticks - release)
+                                        / (StickFigurePowers.THROW_END_TICK - release));
         return new ThrowPose(
                 (-1.1f - 2.45f * windup + 2.1f * swing) * recovery,
                 (-.4f - .5f * windup + .75f * swing) * recovery,
@@ -232,8 +253,7 @@ public final class StickFigureModel extends Model {
     }
 
     public void renderHeldBlock(TextureManager textures, float scale, float brightness) {
-        if (heldBlockId == 0)
-            return;
+        if (heldBlockId == 0) return;
         GL11.glPushMatrix();
         try {
             // Both arms share a pitch, so removing the shoulder's x offset gives their

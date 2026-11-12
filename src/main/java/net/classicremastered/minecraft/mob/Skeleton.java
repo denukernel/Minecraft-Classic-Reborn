@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft.mob;
 
+import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.level.Level;
@@ -9,11 +11,14 @@ import net.classicremastered.minecraft.util.CreativeModeHelper;
 public class Skeleton extends Zombie {
 
     public static final long serialVersionUID = 0L;
-    public static final int BOW_DRAW_TICKS = 16;
-    public static final int BOW_RECOVERY_TICKS = 4;
+    public static final int BOW_DRAW_TICKS = 20;
+    public static final int BOW_RECOVERY_TICKS = 40;
+    private static final int HARD_BOW_RECOVERY_TICKS = 20;
     private boolean drawingBow;
     private int bowDrawTicks, previousBowDrawTicks, bowRecoveryTicks;
     private transient Entity bowTarget;
+    private transient Entity aimMount;
+    private transient float mountedYaw, previousMountedYaw;
 
     public Skeleton(Level level, float x, float y, float z) {
         super(level, x, y, z);
@@ -53,27 +58,103 @@ public class Skeleton extends Zombie {
                 : f > .4f ? "/items/bow_pulling_1.png" : "/items/bow_pulling_0.png";
     }
 
-    public float getBowAimYaw() {
-        return bowTarget == null
-                ? yRot
-                : (float) Math.toDegrees(Math.atan2(bowTarget.z - z, bowTarget.x - x)) - 90;
+    @Override
+    public float renderBodyYaw(float partial) {
+        if (!(riding instanceof Mob mount))
+            return super.renderBodyYaw(partial);
+        return aimMount == mount
+                ? previousMountedYaw + (mountedYaw - previousMountedYaw) * partial
+                : mount.renderBodyYaw(partial);
     }
 
-    public float getBowAimPitch() {
-        if (bowTarget == null) return xRot;
-        double dx = bowTarget.x - x, dz = bowTarget.z - z;
-        double dy = (bowTarget.bb.y0 + bowTarget.bb.y1) * .5 - (bb.y0 + bbHeight * .8f);
+    public float seatedLegYaw(float partial) {
+        return riding instanceof Spider spider
+                ? wrapAngle(spider.renderBodyYaw(partial) - renderBodyYaw(partial))
+                : 0;
+    }
+
+    @Override
+    public float renderHeadYaw(float partial) {
+        Entity target = lookTarget();
+        if (target == null)
+            return riding instanceof Mob ? 0 : super.renderHeadYaw(partial);
+        return (float) Math.IEEEremainder(aimYaw(target, partial) - renderBodyYaw(partial), 360);
+    }
+
+    @Override
+    public float renderHeadPitch(float partial) {
+        Entity target = lookTarget();
+        if (target == null)
+            return riding instanceof Mob ? 0 : super.renderHeadPitch(partial);
+        float remaining = 1f - partial;
+        double dx = target.x - x + (target.xo - target.x - xo + x) * remaining;
+        double dz = target.z - z + (target.zo - target.z - zo + z) * remaining;
+        double dy = (target.bb.y0 + target.bb.y1) * .5 - (bb.y0 + getEyeHeight(partial))
+                + (target.yo - target.y - yo + y) * remaining;
         return (float) -Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz)));
+    }
+
+    private Entity lookTarget() {
+        Entity target = bowTarget;
+        if (target == null && riding != null && ai instanceof BasicAI combat)
+            target = combat.attackTarget;
+        return target != null
+                        && target != riding
+                        && target.level == level
+                        && !target.removed
+                        && target.bb != null
+                        && (!(target instanceof Mob mob) || mob.health > 0)
+                        && !CreativeModeHelper.shouldIgnoreTarget(target)
+                ? target
+                : null;
+    }
+
+    private void updateMountedYaw() {
+        if (!(riding instanceof Mob mount)) {
+            aimMount = null;
+            return;
+        }
+        float mountYaw = mount.renderBodyYaw(1);
+        if (aimMount != mount) mountedYaw = mountYaw;
+        aimMount = mount;
+        previousMountedYaw = mountedYaw;
+        Entity target = lookTarget();
+        float turn = wrapAngle(mountYaw - mountedYaw);
+        if (target != null) {
+            float bearing = aimYaw(target, 1);
+            float relative = wrapAngle(bearing - mountedYaw);
+            float towardMount = Math.max(-12, Math.min(12, turn));
+            turn = Math.max(relative - 80, Math.min(relative + 80, towardMount));
+        }
+        mountedYaw += Math.max(-25, Math.min(25, turn));
+    }
+
+    private static float wrapAngle(float angle) {
+        return (float) Math.IEEEremainder(angle, 360);
+    }
+
+    private float aimYaw(Entity target, float partial) {
+        float remaining = 1f - partial;
+        double dx = target.x - x + (target.xo - target.x - xo + x) * remaining;
+        double dz = target.z - z + (target.zo - target.z - zo + z) * remaining;
+        return (float) Math.toDegrees(Math.atan2(dz, dx)) - 90;
+    }
+
+    @Override
+    public float getEyeHeight(float partial) {
+        return bbHeight * .8f;
     }
 
     public void cancelBowAttack() {
         drawingBow = false;
-        bowDrawTicks = previousBowDrawTicks = bowRecoveryTicks = 0;
+        bowDrawTicks = previousBowDrawTicks = 0;
         bowTarget = null;
     }
 
     public void updateBowAttack(Entity target, boolean visible) {
         previousBowDrawTicks = bowDrawTicks;
+        boolean recovering = bowRecoveryTicks > 0;
+        if (recovering) bowRecoveryTicks--;
         if (health <= 0
                 || removed
                 || level == null
@@ -88,25 +169,25 @@ public class Skeleton extends Zombie {
             cancelBowAttack();
             return;
         }
+        if (target != bowTarget) cancelBowAttack();
         bowTarget = target;
-        if (bowRecoveryTicks > 0) {
-            bowRecoveryTicks--;
-            drawingBow = false;
-            bowDrawTicks = 0;
-            return;
-        }
+        if (recovering) return;
         drawingBow = true;
         if (++bowDrawTicks >= BOW_DRAW_TICKS) {
             shootArrow(level, target);
             drawingBow = false;
             bowDrawTicks = previousBowDrawTicks = 0;
-            bowRecoveryTicks = BOW_RECOVERY_TICKS;
+            bowRecoveryTicks =
+                    CombatRules.difficulty(level).ordinal() >= Difficulty.HARD.ordinal()
+                            ? HARD_BOW_RECOVERY_TICKS
+                            : BOW_RECOVERY_TICKS;
         }
     }
 
     @Override
     public void tick() {
         super.tick();
+        updateMountedYaw();
         if (health <= 0
                 || removed
                 || net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.isHeld(this))
@@ -130,9 +211,8 @@ public class Skeleton extends Zombie {
                 dz = target.z - z,
                 horizontal = Math.max(.001, Math.hypot(dx, dz));
         float launchOffset = this instanceof BabySkeleton ? bbWidth * .8f : .5f;
-        float sx = x + (float) (dx / horizontal * launchOffset),
-                sy = bb.y0 + bbHeight * .8f,
-                sz = z + (float) (dz / horizontal * launchOffset);
+        float sx = x + (float) (dx / horizontal * launchOffset), sy = bb.y0 + getEyeHeight(1),
+              sz = z + (float) (dz / horizontal * launchOffset);
         float tx = target.x, tz = target.z, ty = (target.bb.y0 + target.bb.y1) * .5f;
         double leadX = Math.max(-.35, Math.min(.35, target.x - target.xo));
         double leadZ = Math.max(-.35, Math.min(.35, target.z - target.zo));

@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.level.itemstack;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.AI;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.player.Player;
 
 public final class MobBattle {
     public record Fight(Mob target, AI original, boolean persistent) {}
@@ -10,7 +11,8 @@ public final class MobBattle {
     private MobBattle() {}
 
     public static void fight(Mob mob, Mob target) {
-        if (mob == target || mob.level != target.level || mob.health <= 0 || target.health <= 0)
+        if (mob == target || mob.level != target.level || mob.health <= 0 || target.health <= 0
+                || target instanceof Player player && player.isSpectator())
             return;
         Fight old = mob.battle;
         mob.battle =
@@ -34,10 +36,8 @@ public final class MobBattle {
     public static void tick(Mob mob) {
         Fight fight = mob.battle;
         if (fight == null) return;
-        if (fight.target.removed
-                || fight.target.health <= 0
-                || fight.target.level != mob.level
-                || mob.health <= 0) {
+        if (fight.target.removed || fight.target instanceof Player player && player.isSpectator()
+                || fight.target.health <= 0 || fight.target.level != mob.level || mob.health <= 0) {
             stop(mob);
             return;
         }

@@ -44,7 +44,28 @@ public class LocateStructureCommand implements Command {
             }
         }
         if (target == null) {
-            hud(mc, "&cUnknown structure id: &f" + id);
+            hud(
+                    mc,
+                    "&cUnknown structure id: &f"
+                            + id
+                            + "&7. Valid ids: &f"
+                            + String.join(
+                                    ", ",
+                                    StructureRegistry.INSTANCE.getEntries().stream()
+                                            .map(entry -> entry.structure.id())
+                                            .toList()));
+            return;
+        }
+
+        if (target instanceof net.classicremastered.minecraft.level.structure.CobblestoneTower) {
+            var nearest =
+                    lvl.cobblestoneTowers.stream()
+                            .min(
+                                    java.util.Comparator.comparingDouble(
+                                            site -> site.distanceSquared(sender.x, sender.z)))
+                            .orElse(null);
+            hud(mc, nearest == null ? "&eNo Cobblestone Tower has generated yet"
+                    : "&aCobblestone Tower at &f" + nearest.x() + " " + nearest.y() + " " + nearest.z());
             return;
         }
 

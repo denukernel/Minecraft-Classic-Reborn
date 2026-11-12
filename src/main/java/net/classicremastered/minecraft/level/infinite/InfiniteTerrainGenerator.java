@@ -5,8 +5,6 @@ import net.classicremastered.minecraft.level.generator.noise.CombinedNoise;
 import net.classicremastered.minecraft.level.generator.noise.OctaveNoise;
 import net.classicremastered.minecraft.level.generator.noise.PerlinNoise;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.mob.Villager;
-import net.classicremastered.minecraft.mob.ai.villager.VillagerAI;
 
 import java.util.Random;
 
@@ -108,7 +106,26 @@ public final class InfiniteTerrainGenerator {
             generateHouseIfSpawned(c, worldX, worldZ, level);
         }
 
+        populateFlowers(c, dirtTops, waterLevel);
         c.meshed = false;
+    }
+
+    private void populateFlowers(SimpleChunk chunk, int[] dirtTops, int waterLevel) {
+        Random flowers = new Random(
+                seed ^ chunk.cx * 341873128712L ^ chunk.cz * 132897987541L ^ 0x464C4F574552L);
+        for (int z = 0; z < CHUNK; z++) {
+            for (int x = 0; x < CHUNK; x++) {
+                int y = dirtTops[x + z * CHUNK];
+                if (y <= waterLevel || y + 1 >= height || flowers.nextInt(32) != 0)
+                    continue;
+                int ground = SimpleChunk.idx(x, y, z, height);
+                int plant = SimpleChunk.idx(x, y + 1, z, height);
+                if ((chunk.blocks[ground] & 255) == Block.GRASS.id && chunk.blocks[plant] == 0) {
+                    chunk.blocks[plant] = (byte) (flowers.nextBoolean() ? Block.DANDELION.id
+                            : Block.ROSE.id);
+                }
+            }
+        }
     }
 
     public void carveCaves(SimpleChunk c, int worldX, int worldZ, int[] dirtTops, int seaLevel) {
@@ -389,42 +406,8 @@ public final class InfiniteTerrainGenerator {
                 c.blocks[SimpleChunk.idx(doorX & 15, padY + 1, doorZ & 15, height)] = 0;
                 c.blocks[SimpleChunk.idx(doorX & 15, padY + 2, doorZ & 15, height)] = 0;
 
-                // 6. Spawn Villagers
-                int baseY = padY + 1;
-                net.classicremastered.minecraft.level.GeneratedOccupant.offer(
-                        c.generatedOccupants, seed, false, hx + W / 2, baseY, hz + D / 2);
-                int minX = hx + 2, maxX = hx + W - 3;
-                int minZ = hz + 2, maxZ = hz + D - 3;
-                int toSpawn = 1 + (chunkRand.nextBoolean() ? (1 + chunkRand.nextInt(2)) : 0);
-
-                for (int sx = minX; sx <= maxX && toSpawn > 0; sx++) {
-                    for (int sz = minZ; sz <= maxZ && toSpawn > 0; sz++) {
-                        int lx = sx & 15;
-                        int lz = sz & 15;
-
-                        if (c.blocks[SimpleChunk.idx(lx, baseY - 1, lz, height)]
-                                        == (byte) Block.COBBLESTONE.id
-                                && c.blocks[SimpleChunk.idx(lx, baseY, lz, height)] == 0
-                                && c.blocks[SimpleChunk.idx(lx, baseY + 1, lz, height)] == 0) {
-
-                            final int vx = sx, vz = sz;
-                            c.residents.add(
-                                    () -> {
-                                        if (level == null || level.isNetworkMode()) return;
-                                        Villager v =
-                                                new Villager(level, vx + .5f, baseY + 1, vz + .5f);
-                                        v.setHome(hx + W * .5f, baseY + 1, hz + D * .5f, 2.5f);
-                                        v.setHomeDoor(doorX, baseY, doorZ);
-                                        if (v.ai instanceof VillagerAI vai) {
-                                            vai.suppressRandomJump = true;
-                                            vai.runSpeed = .8f;
-                                        }
-                                        level.addEntity(v);
-                                    });
-                            toSpawn--;
-                        }
-                    }
-                }
+                net.classicremastered.minecraft.level.GeneratedOccupant.offerHouse(c.generatedOccupants,
+                        seed, hx + W / 2, padY + 1, hz + D / 2);
             }
         }
     }

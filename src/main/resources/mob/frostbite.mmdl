@@ -1,0 +1,171 @@
+{
+  "name": "Frostbite",
+  "atlasW": 128,
+  "atlasH": 64,
+  "parts": [
+    {
+      "name": "head",
+      "u": 0,
+      "v": 0,
+      "x": -4.0,
+      "y": -8.0,
+      "z": -4.0,
+      "w": 8,
+      "h": 8,
+      "d": 8,
+      "posX": 0.0,
+      "posY": 0.0,
+      "posZ": 0.0,
+      "inflate": 0.0,
+      "children": []
+    },
+    {
+      "name": "body",
+      "u": 16,
+      "v": 16,
+      "x": -4.0,
+      "y": 0.0,
+      "z": -2.0,
+      "w": 8,
+      "h": 12,
+      "d": 4,
+      "posX": 0.0,
+      "posY": 0.0,
+      "posZ": 0.0,
+      "inflate": 0.0,
+      "children": []
+    },
+    {
+      "name": "right_arm",
+      "u": 40,
+      "v": 16,
+      "x": -3.0,
+      "y": -2.0,
+      "z": -2.0,
+      "w": 4,
+      "h": 12,
+      "d": 4,
+      "posX": -5.0,
+      "posY": 2.0,
+      "posZ": 0.0,
+      "inflate": 0.0,
+      "children": [
+        {
+          "name": "right_arm_ice",
+          "u": 104,
+          "v": 16,
+          "x": -3.0,
+          "y": -2.0,
+          "z": -2.0,
+          "w": 4,
+          "h": 12,
+          "d": 4,
+          "posX": 0.0,
+          "posY": 0.0,
+          "posZ": 0.0,
+          "inflate": 0.25,
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "left_arm",
+      "u": 32,
+      "v": 48,
+      "x": -1.0,
+      "y": -2.0,
+      "z": -2.0,
+      "w": 4,
+      "h": 12,
+      "d": 4,
+      "posX": 5.0,
+      "posY": 2.0,
+      "posZ": 0.0,
+      "inflate": 0.0,
+      "children": [
+        {
+          "name": "left_arm_ice",
+          "u": 96,
+          "v": 48,
+          "x": -1.0,
+          "y": -2.0,
+          "z": -2.0,
+          "w": 4,
+          "h": 12,
+          "d": 4,
+          "posX": 0.0,
+          "posY": 0.0,
+          "posZ": 0.0,
+          "inflate": 0.25,
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "right_leg",
+      "u": 0,
+      "v": 16,
+      "x": -2.0,
+      "y": 0.0,
+      "z": -2.0,
+      "w": 4,
+      "h": 12,
+      "d": 4,
+      "posX": -2.0,
+      "posY": 12.0,
+      "posZ": 0.0,
+      "inflate": 0.0,
+      "children": [
+        {
+          "name": "right_leg_ice",
+          "u": 64,
+          "v": 16,
+          "x": -2.0,
+          "y": 0.0,
+          "z": -2.0,
+          "w": 4,
+          "h": 12,
+          "d": 4,
+          "posX": 0.0,
+          "posY": 0.0,
+          "posZ": 0.0,
+          "inflate": 0.25,
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "left_leg",
+      "u": 16,
+      "v": 48,
+      "x": -2.0,
+      "y": 0.0,
+      "z": -2.0,
+      "w": 4,
+      "h": 12,
+      "d": 4,
+      "posX": 2.0,
+      "posY": 12.0,
+      "posZ": 0.0,
+      "inflate": 0.0,
+      "children": [
+        {
+          "name": "left_leg_ice",
+          "u": 80,
+          "v": 48,
+          "x": -2.0,
+          "y": 0.0,
+          "z": -2.0,
+          "w": 4,
+          "h": 12,
+          "d": 4,
+          "posX": 0.0,
+          "posY": 0.0,
+          "posZ": 0.0,
+          "inflate": 0.25,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -60,7 +60,8 @@ public class BowItem extends ToolItem {
         if (level.creativeMode ? player.inventory.hasResource(ammo) : player.inventory.removeResource(ammo)) {
             float draw = ticks / 20f;
             float velocity = (.7f + 1.7f * draw) * drawRate(player);
-            Arrow arrow = new Arrow(level, player, player.x, player.y, player.z, player.yRot, player.xRot, velocity);
+            Arrow arrow = new Arrow(level, player, player.x, player.y, player.z, player.aimYaw(1f),
+                    player.xRot, velocity);
             // Start on the crosshair ray. The legacy constructor offsets arrows sideways.
             arrow.setPos(player.x, player.y, player.z);
             arrow.xo = player.x;

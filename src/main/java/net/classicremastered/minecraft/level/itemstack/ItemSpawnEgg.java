@@ -17,7 +17,7 @@ public final class ItemSpawnEgg extends Item {
     private final String mobName;
 
     public ItemSpawnEgg(int id, short mobId, String mobName) {
-        super(id, mobName + " Spawn Egg", "/items/egg_colored.png", 64);
+        super(id, MobRegistry.displayName(mobId) + " Spawn Egg", "/items/egg_colored.png", 64);
         this.mobId = mobId;
         this.mobName = mobName;
     }

@@ -1,11 +1,13 @@
 package net.classicremastered.minecraft.gui;
 
-import java.io.File;
 
-import net.classicremastered.minecraft.Minecraft;
-import net.classicremastered.minecraft.level.Level;
 
 public final class PauseScreen extends GuiScreen {
+
+    @Override
+    public boolean pausesLocalWorld() {
+        return true;
+    }
 
     // IDs
     private static final int ID_OPTIONS = 0;
@@ -35,33 +37,36 @@ public final class PauseScreen extends GuiScreen {
     @Override
     protected void onButtonClick(Button b) {
         switch (b.id) {
-        case ID_OPTIONS:
-            this.minecraft.setCurrentScreen(new OptionsScreen(this, this.minecraft.settings));
-            return;
+            case ID_OPTIONS:
+                this.minecraft.setCurrentScreen(new OptionsScreen(this, this.minecraft.settings));
+                return;
 
-        case ID_SELECTLEVEL:
-            this.minecraft.setCurrentScreen(new SelectLevelScreen(this));
-            return;
+            case ID_SELECTLEVEL:
+                this.minecraft.setCurrentScreen(new SelectLevelScreen(this));
+                return;
 
-        case ID_MARKETPLACE:
-            this.minecraft.setCurrentScreen(new ShopScreen(this));
-            return;
+            case ID_MARKETPLACE:
+                this.minecraft.setCurrentScreen(new ShopScreen(this));
+                return;
 
-        case ID_BACK:
-            this.minecraft.setCurrentScreen((GuiScreen) null);
-            this.minecraft.grabMouse();
-            return;
+            case ID_BACK:
+                this.minecraft.setCurrentScreen((GuiScreen) null);
+                this.minecraft.grabMouse();
+                return;
 
-        case ID_QUITMENU:
-            quitToMainMenu();
-            return;
+            case ID_QUITMENU:
+                quitToMainMenu();
+                return;
         }
     }
 
     private void quitToMainMenu() {
         if (!this.minecraft.saveCurrentLevel()) {
-            this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save",
-                    "Could not save the level. The level is still open.", this));
+            this.minecraft.setCurrentScreen(
+                    new ErrorScreen(
+                            "Failed to save",
+                            "Could not save the level. The level is still open.",
+                            this));
             return;
         }
         if (this.minecraft.networkManager != null) {

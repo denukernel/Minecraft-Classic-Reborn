@@ -1,10 +1,15 @@
 package net.classicremastered.minecraft;
 
+import net.classicremastered.minecraft.entity.BoatEntity;
 import net.classicremastered.minecraft.level.BlockMap;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.Tile$SoundType;
+import net.classicremastered.minecraft.mob.CrossbowTurret;
+import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.Skeleton;
+import net.classicremastered.minecraft.mob.Spider;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.net.PositionUpdate;
 import net.classicremastered.minecraft.phys.AABB;
@@ -126,14 +131,10 @@ public abstract class Entity implements Serializable {
     }
 
     public void remove() {
-        if (this.rider != null) {
-            this.rider.unmount();
-            this.rider = null;
-        }
+        ejectPassengers();
         if (this.riding != null) {
             this.unmount();
         }
-        this.syncBBToPos();
         this.removed = true;
     }
 
@@ -149,95 +150,154 @@ public abstract class Entity implements Serializable {
     }
 
     public void mount(Entity target) {
-        if (target == null || target == this)
+        if (target == null
+                || target == this
+                || target.level != level
+                || !target.canAcceptPassenger(this)
+                || target.riding != null
+                || rider != null
+                || !isAliveEntity(target)
+                || !isAliveEntity(this)) return;
+        if (!target.hasRiderClearance(this))
             return;
-        if (this.riding != null)
-            this.unmount();
-
-        this.riding = target;
-        target.rider = this;
-
-        float ny = target.getSeatY() + this.riderYOffset;
-
-        // Set BOTH previous and current to avoid first-frame pop
-        this.xo = this.x = target.x;
-        this.yo = this.y = ny;
-        this.zo = this.z = target.z;
-
-        this.yRotO = this.yRot = target.yRot;
-
-        this.xd = target.xd;
-        this.yd = target.yd;
-        this.zd = target.zd;
-        this.syncBBToPos();
+        if (riding != null)
+            unmount();
+        riding = target;
+        target.addPassenger(this);
+        if (this instanceof Player && target instanceof Mob mount) {
+            mount.yRotO = mount.yRot = yRot;
+            mount.yBodyRotO = mount.yBodyRot = mount.yRot;
+        } else if (!(this instanceof Player)) {
+            yRot = target.yRot;
+        }
+        syncRidingPosition();
+        resetInterpolation();
+        if (blockMap != null)
+            blockMap.moved(this);
     }
 
-    // ---- Per-mount & per-rider tuning (already have these fields if you followed
-    // earlier steps)
-    public float seatFactor = 0.75f; // set on the MOUNT
-    public float riderYOffset = 0.00f; // set on the RIDER
-
-    // Bottom (feet) Y now/prev, derived from y/yo and heightOffset
-    private float getBottomY() {
-        return this.y - this.heightOffset + this.ySlideOffset;
+    protected boolean canAcceptPassenger(Entity passenger) {
+        if (this instanceof net.classicremastered.minecraft.mob.Cow cow)
+            return rider == null && cow.isSaddled();
+        return rider == null && !(passenger instanceof Player);
     }
 
-    private float getBottomYPrev() {
-        return this.yo - this.heightOffset + this.ySlideOffset;
+    protected void addPassenger(Entity passenger) {
+        rider = passenger;
     }
 
-    // Seat Y computed from true bottom so heightOffset is respected
+    protected boolean hasPassenger(Entity passenger) {
+        return rider == passenger;
+    }
+
+    protected void removePassenger(Entity passenger) {
+        if (rider == passenger) rider = null;
+    }
+
+    public void ejectPassengers() {
+        while (rider != null) {
+            if (rider.riding == this) rider.unmount();
+            else removePassenger(rider);
+        }
+    }
+
+    public float seatFactor = 0.75f;
+    public float riderYOffset;
+
     public float getSeatY() {
-        return getBottomY() + this.bbHeight * seatFactor;
+        return bb.y0 + bbHeight * seatFactor;
+    }
+
+    private float passengerFeet(Entity passenger) {
+        if (this instanceof Spider && passenger instanceof Skeleton skeleton) {
+            // The seated skeleton's bent legs leave its hips above its collision origin.
+            float seatOffset = skeleton.isBaby() ? .36f : .54f;
+            return Math.max(bb.y0, getSeatY() - seatOffset) + passenger.riderYOffset;
+        }
+        float babyAdjustment = this instanceof net.classicremastered.minecraft.mob.Cow
+                        && passenger instanceof Mob mob && mob.isBaby()
+                ? .25f
+                : 0f;
+        return getSeatY() + passenger.riderYOffset + babyAdjustment;
+    }
+
+    protected float ridingWidth(Entity passenger) {
+        float width = Math.max(bbWidth, passenger.bbWidth);
+        return this instanceof net.classicremastered.minecraft.mob.Cow ? Math.max(1.15f, width) : width;
+    }
+
+    protected float ridingHeight(Entity passenger) {
+        return Math.max(bbHeight, passengerFeet(passenger) - bb.y0 + passenger.bbHeight);
+    }
+
+    protected AABB ridingBounds(Entity passenger) {
+        float half = ridingWidth(passenger) * .5f;
+        return new AABB(x - half, bb.y0, z - half, x + half, bb.y0 + ridingHeight(passenger), z + half);
+    }
+
+    public boolean hasRiderClearance(Entity passenger) {
+        return level.getCubes(ridingBounds(passenger)).isEmpty();
     }
 
     public float getSeatYPrev() {
-        return getBottomYPrev() + this.bbHeight * seatFactor;
+        return getSeatY() + yo - y;
+    }
+
+    public void resetInterpolation() {
+        xo = x;
+        yo = y;
+        zo = z;
+        yRotO = yRot;
+        xRotO = xRot;
+    }
+
+    public void syncRidingPosition() {
+        if (riding == null)
+            return;
+        if (!riding.hasPassenger(this) || !isAliveEntity(riding)) {
+            unmount();
+            return;
+        }
+        Vec3D seat = riding.passengerPosition(this);
+        bb.move(seat.x - x, seat.y - bb.y0, seat.z - z);
+        x = seat.x;
+        y = seat.y + heightOffset;
+        z = seat.z;
+        ySlideOffset = 0f;
+        xd = yd = zd = 0f;
+        fallDistance = 0f;
+        onGround = false;
+    }
+
+    protected Vec3D passengerPosition(Entity passenger) {
+        return new Vec3D(x, passengerFeet(passenger), z);
     }
 
     public void unmount() {
-        if (this.riding == null)
+        if (riding == null)
             return;
-        Entity mount = this.riding;
-
-        float nx = mount.x;
-        float ny = mount.y + mount.bbHeight + 0.05f;
-        float nz = mount.z;
-
-        if (mount.rider == this)
-            mount.rider = null;
-        this.riding = null;
-
-        this.xo = nx;
-        this.yo = ny;
-        this.zo = nz;
-        this.x = nx;
-        this.y = ny;
-        this.z = nz;
-
-        this.xd = mount.xd * 0.6f;
-        this.yd = Math.max(0.0f, mount.yd);
-        this.zd = mount.zd * 0.6f;
-
-        this.onGround = false;
-        this.syncBBToPos(); // <— important
-    }
-
-    // --- keep BB centered on current x/y/z (no allocs) ---
-    // com/mojang/minecraft/Entity.java
-    private void syncBBToPos() {
-        float hw = this.bbWidth * 0.5F;
-        float hh = this.bbHeight * 0.5F;
-        if (this.bb == null) {
-            this.bb = new AABB(this.x - hw, this.y - hh, this.z - hw, this.x + hw, this.y + hh, this.z + hw);
-        } else {
-            this.bb.x0 = this.x - hw;
-            this.bb.y0 = this.y - hh;
-            this.bb.z0 = this.z - hw;
-            this.bb.x1 = this.x + hw;
-            this.bb.y1 = this.y + hh;
-            this.bb.z1 = this.z + hw;
+        Entity mount = riding;
+        riding = null;
+        mount.removePassenger(this);
+        float gap = (mount.bbWidth + bbWidth) * .5f + .1f;
+        for (int side = 0; side < 4; side++) {
+            float dx = side == 0 ? gap : side == 1 ? -gap : 0f;
+            float dz = side == 2 ? gap : side == 3 ? -gap : 0f;
+            AABB landing = bb.cloneMove(mount.x + dx - x, mount.bb.y0 - bb.y0, mount.z + dz - z);
+            if (level.getCubes(landing).stream().anyMatch(box -> landing.intersects((AABB) box)))
+                continue;
+            bb = landing;
+            x = mount.x + dx;
+            y = bb.y0 + heightOffset;
+            z = mount.z + dz;
+            break;
         }
+        xd = yd = zd = 0f;
+        fallDistance = 0f;
+        onGround = false;
+        resetInterpolation();
+        if (blockMap != null)
+            blockMap.moved(this);
     }
 
     public void setPos(PositionUpdate var1) {
@@ -298,32 +358,9 @@ public abstract class Entity implements Serializable {
     }
 
     public void tick() {
-        if (this.riding != null) {
-            float seatPrev = this.riding.getSeatYPrev() + this.riderYOffset;
-            float seatCurr = this.riding.getSeatY() + this.riderYOffset;
-
-            // keep OUR previous for smooth interpolation regardless of tick order
-            this.xo = this.x;
-            this.yo = this.y;
-            this.zo = this.z;
-            this.yRotO = this.yRot;
-
-            this.x = this.riding.x;
-            this.y = seatCurr;
-            this.z = this.riding.z;
-
-            // smooth yaw toward mount
-            float dyaw = this.riding.yRot - this.yRot;
-            while (dyaw < -180.0F)
-                dyaw += 360.0F;
-            while (dyaw >= 180.0F)
-                dyaw -= 360.0F;
-            this.yRot += dyaw * 0.6F;
-
-            this.xd = this.riding.xd;
-            this.yd = this.riding.yd;
-            this.zd = this.riding.zd;
-            this.syncBBToPos();
+        if (riding != null) {
+            resetInterpolation();
+            syncRidingPosition();
         }
         if (this.level != null && this.level.tickCount % 1 == 0) {
             stepSoundsThisTick = 0; // reset every tick
@@ -348,7 +385,9 @@ public abstract class Entity implements Serializable {
                 hurt(null, 1, "cactus");
                 cactusDamageCooldown = 10;
             }
-            if (isInWater() || isUnderWater()) {
+            if (isInWater() || isUnderWater()
+                    || this instanceof net.classicremastered.minecraft.mob.Zombie undead
+                            && undead.isInWaterOrOnWater()) {
                 remainingFireTicks = 0;
                 fireDamageCooldown = 0;
             } else {
@@ -385,7 +424,46 @@ public abstract class Entity implements Serializable {
         return this.level.getCubes(var4).size() > 0 ? false : !this.level.containsAnyLiquid(var4);
     }
 
+    private ArrayList<AABB> movementColliders(AABB swept) {
+        ArrayList<AABB> collisions = level.getCubes(swept);
+        if (level.blockMap == null) {
+            return collisions;
+        }
+        if (this instanceof BoatEntity) {
+            for (Entity entity : level.blockMap.getEntities(this, swept, new ArrayList<>())) {
+                if (entity instanceof BoatEntity && !entity.removed) collisions.add(entity.bb);
+            }
+            return collisions;
+        }
+        if (!(this instanceof Mob mover) || mover.health <= 0) return collisions;
+        for (Object entity : level.findEntities(this, swept)) {
+            if (entity instanceof Mob other && other.health > 0 && !other.removed && !other.noPhysics
+                    && other != rider && other != riding
+                    && (mover instanceof CrossbowTurret || other instanceof CrossbowTurret)) {
+                collisions.add(other.bb);
+            }
+        }
+        return collisions;
+    }
+
     public void move(float var1, float var2, float var3) {
+        if (rider == null || noPhysics) {
+            moveWithBounds(var1, var2, var3);
+            return;
+        }
+        // Travel with room for both bodies while keeping their individual hitboxes for combat.
+        AABB body = bb;
+        bb = ridingBounds(rider);
+        float startX = bb.x0, startY = bb.y0, startZ = bb.z0;
+        try {
+            moveWithBounds(var1, var2, var3);
+        } finally {
+            body.move(bb.x0 - startX, bb.y0 - startY, bb.z0 - startZ);
+            bb = body;
+        }
+    }
+
+    private void moveWithBounds(float var1, float var2, float var3) {
         if (this.noPhysics) {
             this.bb.move(var1, var2, var3);
             this.x = (this.bb.x0 + this.bb.x1) / 2.0F;
@@ -394,54 +472,26 @@ public abstract class Entity implements Serializable {
         } else {
             float var4 = this.x;
             float var5 = this.z;
+            if (this instanceof net.classicremastered.minecraft.player.Player player
+                    && player.sneaking
+                    && !player.isFlying
+                    && var2 <= 0
+                    && (onGround || fallDistance < .6f && hasSneakSupport(0, 0))) {
+                if (!Float.isFinite(var1)) var1 = 0;
+                if (!Float.isFinite(var3)) var3 = 0;
+                while (var1 != 0 && !hasSneakSupport(var1, 0)) var1 = trimSneakStep(var1);
+                while (var3 != 0 && !hasSneakSupport(0, var3)) var3 = trimSneakStep(var3);
+                while (var1 != 0 && var3 != 0 && !hasSneakSupport(var1, var3)) {
+                    var1 = trimSneakStep(var1);
+                    var3 = trimSneakStep(var3);
+                }
+            }
             float var6 = var1;
             float var7 = var2;
             float var8 = var3;
             AABB var9 = this.bb.copy();
 
-            // --- Sneak edge clamp: trim motion that would step over air when on ground ---
-            if (this instanceof net.classicremastered.minecraft.player.Player) {
-                net.classicremastered.minecraft.player.Player p = (net.classicremastered.minecraft.player.Player) this;
-                if (p.sneaking && !p.isFlying && this.onGround) {
-                    final float step = 0.05F; // iterative trim amount
-                    // Use true feet Y from the current AABB
-                    final int feetBelow = (int) Math.floor(this.bb.y0 - 0.01F) - 1; // block immediately under feet
-
-                    // reduce X motion until there's support under the future x,z
-                    while (var1 != 0.0F) {
-                        float nx = this.x + var1;
-                        int bx = (int) Math.floor(nx);
-                        int bz = (int) Math.floor(this.z);
-                        if (!this.level.isSolidTile(bx, feetBelow, bz)) {
-                            if (Math.abs(var1) <= step) {
-                                var1 = 0.0F;
-                                break;
-                            }
-                            var1 += (var1 > 0 ? -step : step);
-                            continue;
-                        }
-                        break;
-                    }
-
-                    // reduce Z motion similarly
-                    while (var3 != 0.0F) {
-                        float nz = this.z + var3;
-                        int bx = (int) Math.floor(this.x);
-                        int bz = (int) Math.floor(nz);
-                        if (!this.level.isSolidTile(bx, feetBelow, bz)) {
-                            if (Math.abs(var3) <= step) {
-                                var3 = 0.0F;
-                                break;
-                            }
-                            var3 += (var3 > 0 ? -step : step);
-                            continue;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            ArrayList var10 = this.level.getCubes(this.bb.expand(var1, var2, var3));
+            ArrayList var10 = movementColliders(this.bb.expand(var1, var2, var3));
 
             for (int var11 = 0; var11 < var10.size(); ++var11) {
                 var2 = ((AABB) var10.get(var11)).clipYCollide(this.bb, var2);
@@ -489,7 +539,7 @@ public abstract class Entity implements Serializable {
                 var3 = var8;
                 AABB var14 = this.bb.copy();
                 this.bb = var9.copy();
-                var10 = this.level.getCubes(this.bb.expand(var6, var2, var8));
+                var10 = movementColliders(this.bb.expand(var6, var2, var8));
 
                 int var15;
                 for (var15 = 0; var15 < var10.size(); ++var15) {
@@ -579,8 +629,18 @@ public abstract class Entity implements Serializable {
         }
     }
 
-    protected void causeFallDamage(float var1) {
+    private boolean hasSneakSupport(float dx, float dz) {
+        float inset = .001f;
+        AABB probe = new AABB(bb.x0 + dx + inset, bb.y0 - .601f, bb.z0 + dz + inset,
+                bb.x1 + dx - inset, bb.y0 + inset, bb.z1 + dz - inset);
+        return !level.getCubes(probe).isEmpty();
     }
+
+    private static float trimSneakStep(float motion) {
+        return Math.abs(motion) <= .05f ? 0 : motion - Math.copySign(.05f, motion);
+    }
+
+    protected void causeFallDamage(float var1) {}
 
     private boolean eyesInWall() {
         float eye =

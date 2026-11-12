@@ -49,7 +49,7 @@ public final class GunRenderer {
     }
 
     public static Vec3D cameraToWorld(Player p, Vec3D point, float partial) {
-        double yaw = Math.toRadians(p.yRotO + (p.yRot - p.yRotO) * partial);
+        double yaw = Math.toRadians(p.aimYaw(partial));
         double pitch = Math.toRadians(p.xRotO + (p.xRot - p.xRotO) * partial);
         double y = point.y * Math.cos(pitch) + point.z * Math.sin(pitch);
         double z = -point.y * Math.sin(pitch) + point.z * Math.cos(pitch);
@@ -85,7 +85,7 @@ public final class GunRenderer {
             return;
         GL11.glPushMatrix();
         GL11.glTranslatef(p.xo + (p.x - p.xo) * partial, p.yo + (p.y - p.yo) * partial, p.zo + (p.z - p.zo) * partial);
-        GL11.glRotatef(-(p.yRotO + (p.yRot - p.yRotO) * partial), 0, 1, 0);
+        GL11.glRotatef(-p.aimYaw(partial), 0, 1, 0);
         GL11.glRotatef(-(p.xRotO + (p.xRot - p.xRotO) * partial), 1, 0, 0);
         thirdPersonPose().apply();
         GunModel.render(id, p.getRenderBrightness(partial));

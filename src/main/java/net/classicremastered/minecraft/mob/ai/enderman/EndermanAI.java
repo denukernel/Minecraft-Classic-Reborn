@@ -11,6 +11,7 @@ import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanTargetGoal;
 import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanTeleportation;
 import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanWaterEscapeGoal;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 public final class EndermanAI extends BasicAI {
 
@@ -39,45 +40,44 @@ public final class EndermanAI extends BasicAI {
     @Override
     protected void update() {
         super.update();
-        if (teleportCooldown > 0)
-            teleportCooldown--;
-        if (sunTeleportCooldown > 0)
-            sunTeleportCooldown--;
+        if (teleportCooldown > 0) teleportCooldown--;
+        if (sunTeleportCooldown > 0) sunTeleportCooldown--;
         if (!hasPlayer()) {
             goalSelector().stopAll();
+            clearTarget();
+        } else if (!canTargetPlayer() && angry) {
             clearTarget();
         }
     }
 
     public boolean hasPlayer() {
-        return mob instanceof Enderman && level != null && level.player instanceof Player
-                && !level.player.removed && ((Player) level.player).health > 0;
+        return mob instanceof Enderman
+                && level != null
+                && net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                                mob, 64, attackTarget)
+                        != null;
     }
 
     public boolean canTargetPlayer() {
-        return hasPlayer() && !level.creativeMode && !((Player) level.player).creativeInvulnerable;
+        return hasPlayer();
     }
 
     public void clearTarget() {
         angry = false;
         farFromTargetTicks = 0;
         attackTarget = null;
-        if (mob instanceof Enderman)
-            ((Enderman) mob).isAttacking = false;
+        if (mob instanceof Enderman) ((Enderman) mob).isAttacking = false;
         running = false;
-        if (navigation != null)
-            navigation.clear();
+        if (navigation != null) navigation.clear();
     }
 
     public EndermanTeleportation teleportation() {
-        if (teleportation == null)
-            teleportation = new EndermanTeleportation(this);
+        if (teleportation == null) teleportation = new EndermanTeleportation(this);
         return teleportation;
     }
 
     public EndermanNavigation navigation() {
-        if (navigation == null)
-            navigation = new EndermanNavigation();
+        if (navigation == null) navigation = new EndermanNavigation();
         return navigation;
     }
 
@@ -88,8 +88,8 @@ public final class EndermanAI extends BasicAI {
     @Override
     public void hurt(Entity src, int dmg) {
         super.hurt(src, dmg);
-        if (src instanceof Player && level != null && (level.creativeMode || ((Player) src).creativeInvulnerable))
-            return;
+        if (CreativeModeHelper.shouldIgnoreTarget(src)
+                || src instanceof Player && level != null && Player.creativeInvulnerable) return;
         angry = true;
     }
 }

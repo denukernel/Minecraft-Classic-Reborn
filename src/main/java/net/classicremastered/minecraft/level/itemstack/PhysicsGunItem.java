@@ -1,6 +1,5 @@
 package net.classicremastered.minecraft.level.itemstack;
 
-import java.util.*;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.Level;
@@ -9,7 +8,10 @@ import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
+
 import org.lwjgl.input.Keyboard;
+
+import java.util.*;
 
 /**
  * Hold RMB to grab, release to drop, LMB/G to launch, J/K to adjust distance.
@@ -45,7 +47,7 @@ public final class PhysicsGunItem extends ToolItem {
     }
 
     private static Vec3D look(Player player) {
-        float yaw = -player.yRot * .017453292f - (float) Math.PI;
+        float yaw = -player.aimYaw(1f) * .017453292f - (float) Math.PI;
         float pitch = -player.xRot * .017453292f;
         float cp = MathHelper.cos(pitch);
         return new Vec3D(MathHelper.sin(yaw) * cp, MathHelper.sin(pitch), MathHelper.cos(yaw) * cp);
@@ -83,8 +85,8 @@ public final class PhysicsGunItem extends ToolItem {
         if (grabbed.containsValue(target))
             return;
         // The two tools must not apply competing forces to the same mob.
-        if (GravityGunItem.grabbedMobs.containsValue(target))
-            return;
+        if (GravityGunItem.grabbedMobs.containsValue(target)
+                || JockeyToolTarget.isGrappled(target, level)) return;
         grabbed.put(player, target);
         holdDist.put(player, Math.max(MIN_DISTANCE, Math.min(MAX_RANGE,
                 eye(player).distance(new Vec3D(target.x, (target.bb.y0 + target.bb.y1) * .5f, target.z)))));
@@ -185,6 +187,7 @@ public final class PhysicsGunItem extends ToolItem {
             return;
         mob.xd = mob.yd = mob.zd = 0;
         mob.fallDistance = 0;
+        mob.markForcedFall(player);
         armed.remove(mob);
         impactSpeed.remove(mob);
         thrownBy.remove(mob);
@@ -212,6 +215,7 @@ public final class PhysicsGunItem extends ToolItem {
         mob.yd = direction.y * THROW_FORCE;
         mob.zd = direction.z * THROW_FORCE;
         mob.fallDistance = 0;
+        mob.markForcedFall(player);
         thrownBy.put(mob, player);
         armed.put(mob, ARMED_TICKS);
         impactSpeed.put(mob, THROW_FORCE * THROW_FORCE);

@@ -1,12 +1,17 @@
 package net.classicremastered.minecraft.sound;
 
 import net.classicremastered.minecraft.GameSettings;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.util.MathHelper;
+import paulscode.sound.Channel;
 import paulscode.sound.SoundSystem;
 import paulscode.sound.SoundSystemConfig;
+import paulscode.sound.SoundSystemException;
+import paulscode.sound.Source;
 import paulscode.sound.codecs.CodecJOrbis;
 import paulscode.sound.codecs.CodecWav;
+import paulscode.sound.libraries.LibraryJavaSound;
 import paulscode.sound.libraries.LibraryLWJGLOpenAL;
 
 import java.io.File;
@@ -22,6 +27,12 @@ public final class PaulsCodeSoundManager {
 
     private static final String FAR_LANDS_MELODY = "FarLandsMelody";
     private static final String FAR_LANDS_HARMONY = "FarLandsHarmony";
+    private static final String MOB_SOURCE_PREFIX = "mob_sfx_";
+    private static final float SOUND_RANGE = 32f;
+    private static final float MOB_PAN_LIMIT = .6f;
+    private static final float MOB_PAN_RADIUS = 8f;
+    // Mob gain is set from the real distance. Linear attenuation keeps JavaSound panning enabled.
+    private static final float MOB_PAN_RANGE = Float.MAX_VALUE;
     private static final float MINOR_THIRD = (float) Math.pow(2.0, 3.0 / 12.0);
     private final SoundSystem sys;
     private int farLandsTrackTick;
@@ -35,7 +46,67 @@ public final class PaulsCodeSoundManager {
     private int herobrineCounter = 0; // NEW: timer for fake chat
 
     private float master = 1.0f;
-    private int seq = 0;
+    private long seq;
+    private volatile ListenerPosition listener;
+    private final Map<String, MobPlayback> mobPlaybacks = new HashMap<>();
+
+    private record MobPlayback(float x, float y, float z, float volume, long started) {
+    }
+
+    private record ListenerPosition(float x, float y, float z, float forwardX, float forwardZ) {
+        float mobGain(float sourceX, float sourceY, float sourceZ) {
+            float dx = sourceX - x, dy = sourceY - y, dz = sourceZ - z;
+            return Math.max(0f, 1f - MathHelper.sqrt(dx * dx + dy * dy + dz * dz) / SOUND_RANGE);
+        }
+
+        Vec3D mobPanPosition(float sourceX, float sourceY, float sourceZ) {
+            float dx = sourceX - x, dy = sourceY - y, dz = sourceZ - z;
+            float distance = MathHelper.sqrt(dx * dx + dy * dy + dz * dz);
+            float right = distance > 0f ? (dx * -forwardZ + dz * forwardX) / distance : 0f;
+            float side = right * MOB_PAN_LIMIT;
+            float forward = MathHelper.sqrt(1f - side * side);
+            return new Vec3D(x + MOB_PAN_RADIUS * (forwardX * forward - forwardZ * side), y,
+                    z + MOB_PAN_RADIUS * (forwardZ * forward + forwardX * side));
+        }
+    }
+
+    public static final class MobBudgetOpenAL extends LibraryLWJGLOpenAL {
+        public MobBudgetOpenAL() throws SoundSystemException {
+        }
+
+        @Override
+        public void play(Source source) {
+            if (canPlay(source, normalChannels))
+                super.play(source);
+            else
+                removeSource(source.sourcename);
+        }
+    }
+
+    public static final class MobBudgetJavaSound extends LibraryJavaSound {
+        public MobBudgetJavaSound() throws SoundSystemException {
+        }
+
+        @Override
+        public void play(Source source) {
+            if (canPlay(source, normalChannels))
+                super.play(source);
+            else
+                removeSource(source.sourcename);
+        }
+    }
+
+    private static boolean canPlay(Source source, List<Channel> channels) {
+        if (source == null || !source.sourcename.startsWith(MOB_SOURCE_PREFIX))
+            return true;
+        int reserve = Math.min(4, Math.max(0, channels.size() - 1));
+        int free = 0;
+        for (Channel channel : channels) {
+            if (!channel.playing() && ++free > reserve)
+                return true;
+        }
+        return false;
+    }
 
     private GameSettings settings;
 
@@ -43,10 +114,11 @@ public final class PaulsCodeSoundManager {
         this.settings = settings;   // <--- REQUIRED
         try {
             try {
-                SoundSystemConfig.addLibrary(LibraryLWJGLOpenAL.class);
+                SoundSystemConfig.addLibrary(MobBudgetOpenAL.class);
             } catch (Throwable openalMissing) {
-                SoundSystemConfig.addLibrary(paulscode.sound.libraries.LibraryJavaSound.class);
+                System.err.println("[Audio] OpenAL unavailable: " + openalMissing);
             }
+            SoundSystemConfig.addLibrary(MobBudgetJavaSound.class);
             SoundSystemConfig.setCodec("ogg", CodecJOrbis.class);
             SoundSystemConfig.setCodec("wav", CodecWav.class);
         } catch (Throwable t) {
@@ -101,15 +173,17 @@ public final class PaulsCodeSoundManager {
     /* ---------------- listener (Classic Player) ---------------- */
 
     public void setListener(Player p, float partial) {
-        if (p == null)
+        if (p == null) {
+            clearMobPlayback();
             return;
+        }
 
         float x = p.xo + (p.x - p.xo) * partial;
         float y = p.yo + (p.y - p.yo) * partial;
         float z = p.zo + (p.z - p.zo) * partial;
 
         float pitch = p.xRotO + (p.xRot - p.xRotO) * partial;
-        float yaw = p.yRotO + (p.yRot - p.yRotO) * partial;
+        float yaw = p.aimYaw(partial);
 
         float cy = MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
         float sy = MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
@@ -119,26 +193,60 @@ public final class PaulsCodeSoundManager {
         float fx = sy * cp, fy = sp, fz = cy * cp;
         float ux = -sy * sp, uy = cp, uz = -cy * sp;
 
-        sys.setListenerPosition(x, y, z);
-        sys.setListenerOrientation(fx, fy, fz, ux, uy, uz);
+        var next = new ListenerPosition(x, y, z, sy, cy);
+        synchronized (SoundSystemConfig.THREAD_SYNC) {
+            sys.setListenerPosition(x, y, z);
+            sys.setListenerOrientation(fx, fy, fz, ux, uy, uz);
+            boolean changed = !next.equals(listener);
+            listener = next;
+            long now = System.nanoTime();
+            var entries = mobPlaybacks.entrySet().iterator();
+            while (entries.hasNext()) {
+                var entry = entries.next();
+                String id = entry.getKey();
+                MobPlayback sound = entry.getValue();
+                // The sound thread may not have processed the queued play command yet.
+                if (now - sound.started > 250_000_000L && !sys.playing(id)) {
+                    entries.remove();
+                } else if (changed) {
+                    Vec3D position = next.mobPanPosition(sound.x, sound.y, sound.z);
+                    sys.setPosition(id, position.x, position.y, position.z);
+                    sys.setVolume(id, sound.volume * master * next.mobGain(sound.x, sound.y, sound.z));
+                }
+            }
+        }
+    }
+
+    private void clearMobPlayback() {
+        synchronized (SoundSystemConfig.THREAD_SYNC) {
+            listener = null;
+            for (String id : mobPlaybacks.keySet())
+                sys.removeSource(id);
+            mobPlaybacks.clear();
+        }
     }
 
     /* ---------------- playback ---------------- */
 
     // Normal play (subject to corruption if farlandsActive)
     public void playSound(String key, float volume, float pitch) {
-        playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, false);
+        playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, false, false);
     }
 
     // Positional play (subject to corruption if farlandsActive)
     public void playSoundAt(String key, float x, float y, float z, float volume, float pitch) {
-        playSoundInternal(key, x, y, z, volume, pitch, true, false);
+        playSoundAt(key, x, y, z, volume, pitch, false);
+    }
+
+    public void playSoundAt(String key, float x, float y, float z, float volume, float pitch,
+            boolean mobSound) {
+        playSoundInternal(key, x, y, z, volume, pitch, true, false, mobSound);
     }
 
     // Clean play (NEVER corrupted, for GUI/menu sounds)
     public void playSoundClean(String key, float volume, float pitch) {
         if (!settings.sound) return;
-        playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, true);
+        playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, true, false);
     }
 
 
@@ -155,9 +263,14 @@ public final class PaulsCodeSoundManager {
         return folder + "/" + base;
     }
 
-    private void playSoundInternal(String key, float x, float y, float z, float volume, float pitch, boolean positional,
-            boolean forceClean) {
+    private void playSoundInternal(String key, float x, float y, float z, float volume, float pitch,
+            boolean positional, boolean forceClean, boolean mobSound) {
         if (key == null || volume <= 0f)
+            return;
+        ListenerPosition currentListener = listener;
+        boolean mixedMob = mobSound && currentListener != null;
+        float distanceGain = mixedMob ? currentListener.mobGain(x, y, z) : 1f;
+        if (distanceGain <= 0f)
             return;
         key = key.replace('\\', '/');
 
@@ -169,8 +282,8 @@ public final class PaulsCodeSoundManager {
 
         String chosenKey = key;
 
-        if (farlandsActive && !forceClean && (playerDist > 5_000_000
-                || playerDist > 1_000_000 && rng.nextFloat() < 0.3f)) {
+        if (farlandsActive && !forceClean
+                && (playerDist > 5_000_000 || playerDist > 1_000_000 && rng.nextFloat() < 0.3f)) {
             chosenKey = randomFarLandsSoundKey(key);
         }
 
@@ -186,23 +299,21 @@ public final class PaulsCodeSoundManager {
         }
 
         URL u = list.get(rng.nextInt(list.size()));
-        String id = "sfx_" + (seq = (seq + 1) & 0xFF);
-        boolean priority = volume > 1.0f;
-
-        // --- FIXED attenuation ---
-        // Was 16.0f → way too short, caused mobs to sound quiet up close.
-        // Use ~32f like vanilla MC, fade out by ~32 blocks.
-        float attDist = 32.0f; // or 64.0f if you want longer mob sounds
-        int attModel  = positional ? SoundSystemConfig.ATTENUATION_LINEAR : SoundSystemConfig.ATTENUATION_NONE;
-
-        if (positional) {
-            sys.newSource(priority, id, u, u.toString(), false, x, y, z, attModel, attDist);
-        } else {
-            sys.newSource(priority, id, u, u.toString(), false, 0, 0, 0, 0, 0);
+        int attenuation = positional ? SoundSystemConfig.ATTENUATION_LINEAR
+                : SoundSystemConfig.ATTENUATION_NONE;
+        synchronized (SoundSystemConfig.THREAD_SYNC) {
+            String id = (mobSound ? MOB_SOURCE_PREFIX : "sfx_") + ++seq;
+            Vec3D position = mixedMob ? currentListener.mobPanPosition(x, y, z) : new Vec3D(x, y, z);
+            float sourceVolume = Math.min(1f, volume);
+            if (mixedMob)
+                mobPlaybacks.put(id, new MobPlayback(x, y, z, sourceVolume, System.nanoTime()));
+            sys.newSource(mobSound || volume > 1f, id, u, u.toString(), false, position.x, position.y,
+                    position.z, attenuation, mixedMob ? MOB_PAN_RANGE : positional ? SOUND_RANGE : 0f);
+            sys.setTemporary(id, true);
+            sys.setPitch(id, Math.max(0.01f, pitch));
+            sys.setVolume(id, sourceVolume * master * distanceGain);
+            sys.play(id);
         }
-        sys.setPitch(id, Math.max(0.01f, pitch));
-        sys.setVolume(id, Math.min(1f, volume) * master);
-        sys.play(id);
     }
 
     /* ---------------- music ---------------- */
@@ -366,6 +477,7 @@ public final class PaulsCodeSoundManager {
     }
 
     public void resetAudioState() {
+        clearMobPlayback();
         farlandsActive = false;
         stopFarLandsSoundtrack();
         playerDist = 0;

@@ -19,7 +19,9 @@ public final class ZombieSunlightGoal extends Goal {
     @Override
     public void tick() { // --- Sunlight burning (skip if variant is sun-immune; also don't burn in/onto
         // water) ---
-        if (zombie.isSunlightVulnerable() && zombie.level.shouldUndeadBurnAt(zombie) && !zombie.isInWaterOrOnWater()) {
+        if (zombie.canBurnInSunlight()
+                && zombie.level.shouldUndeadBurnAt(zombie)
+                && !zombie.isInWaterOrOnWater()) {
             // Spawn nice fire & smoke particles as a visual sun-burn illusion
             if (zombie.level.particleEngine != null) {
                 if (zombie.level.random.nextInt(4) == 0) {

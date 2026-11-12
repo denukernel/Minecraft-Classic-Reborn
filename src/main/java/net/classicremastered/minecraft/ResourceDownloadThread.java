@@ -20,7 +20,8 @@ public class ResourceDownloadThread extends Thread {
     private final Minecraft mc;
     private final File resDir; // mcDir/resources
 
-    private static final String ARCHIVE_URL = "https://classicremastered.net/downloads/resources.zip";
+    private static final String ARCHIVE_URL =
+            "https://classicremastered.net/downloads/resources.zip";
 
     private static final int CONNECT_TIMEOUT_MS = 15000;
     private static final int READ_TIMEOUT_MS = 30000;
@@ -37,7 +38,7 @@ public class ResourceDownloadThread extends Thread {
 
     public static boolean resourcesPresent(File mcDir) {
         File r = new File(mcDir, "resources");
-        for (String root : new String[] { "sound", "newsound", "sound3", "music" }) {
+        for (String root : new String[] {"sound", "newsound", "sound3", "music"}) {
             if (hasAudio(new File(r, root))) return true;
         }
         return false;
@@ -65,8 +66,7 @@ public class ResourceDownloadThread extends Thread {
         finished = false;
         running = true;
         try {
-            if (!resDir.exists())
-                resDir.mkdirs();
+            if (!resDir.exists()) resDir.mkdirs();
 
             // Reuse a local archive for offline installs, otherwise fetch from our website.
             if (!resourcesPresent(mcDir)) {
@@ -76,31 +76,56 @@ public class ResourceDownloadThread extends Thread {
                     extracted = extractZip(archive, resDir);
                 }
                 if (extracted) safeDelete(archive);
-                else System.err.println("[Resources] Could not install audio resources; retrying next launch.");
+                else
+                    System.err.println(
+                            "[Resources] Could not install audio resources; retrying next launch.");
             }
 
             // Register assets into PaulsCode.
             if (mc.soundPC instanceof PaulsCodeSoundManager) {
                 PaulsCodeSoundManager sm = mc.soundPC;
-                scanDir(new File(resDir, "sound"), (f, rel) -> {
-                    sm.registerSound(f, rel);
-                    sfxCount++;
-                });
-                scanDir(new File(resDir, "newsound"), (f, rel) -> {
-                    sm.registerSound(f, rel);
-                    sfxCount++;
-                });
-                scanDir(new File(resDir, "sound3"), (f, rel) -> {
-                    sm.registerSound(f, rel);
-                    sfxCount++;
-                }); // <--- added
+                scanDir(
+                        new File(resDir, "sound"),
+                        (f, rel) -> {
+                            sm.registerSound(f, rel);
+                            sfxCount++;
+                        });
+                scanDir(
+                        new File(resDir, "newsound"),
+                        (f, rel) -> {
+                            sm.registerSound(f, rel);
+                            sfxCount++;
+                        });
+                scanDir(
+                        new File(resDir, "sound3"),
+                        (f, rel) -> {
+                            sm.registerSound(f, rel);
+                            sfxCount++;
+                        }); // <--- added
                 registerBundledSound(sm, "mob/cow/classic_idle.ogg");
                 registerBundledSound(sm, "mob/cow/classic_hurt.ogg");
-                scanDir(new File(resDir, "music"), (f, rel) -> {
-                    registerMusic(sm, f, rel);
-                    musicCount++;
-                });
-                System.out.println("[Resources] Registered SFX=" + sfxCount + ", music=" + musicCount);
+                for (int i = 1; i <= 3; i++)
+                    registerBundledSound(sm, "mob/villager/idle" + i + ".ogg");
+                for (int i = 1; i <= 4; i++)
+                    registerBundledSound(sm, "mob/villager/hit" + i + ".ogg");
+                registerBundledSound(sm, "mob/villager/death.ogg");
+                registerBundledSound(sm, "item/ender_pearl/throw.ogg");
+                registerBundledSound(sm, "item/ender_pearl/teleport.ogg");
+                registerBundledSound(sm, "block/glass/break.wav");
+                registerBundledSound(sm, "item/gravity_gun/grab.wav");
+                registerBundledSound(sm, "item/gravity_gun/drop.wav");
+                registerBundledSound(sm, "item/gravity_gun/launch.wav");
+                registerBundledSound(sm, "item/grappling_hook/launch.wav");
+                registerBundledSound(sm, "item/grappling_hook/latch.wav");
+                registerBundledSound(sm, "item/grappling_hook/release.wav");
+                scanDir(
+                        new File(resDir, "music"),
+                        (f, rel) -> {
+                            registerMusic(sm, f, rel);
+                            musicCount++;
+                        });
+                System.out.println(
+                        "[Resources] Registered SFX=" + sfxCount + ", music=" + musicCount);
             }
 
         } catch (Throwable t) {
@@ -157,13 +182,13 @@ public class ResourceDownloadThread extends Thread {
                     }
                 }
             }
-            if (!running || (conn.getContentLengthLong() >= 0 && total != conn.getContentLengthLong())) {
+            if (!running
+                    || (conn.getContentLengthLong() >= 0 && total != conn.getContentLengthLong())) {
                 safeDelete(tmp);
                 return false;
             }
 
-            if (outFile.exists())
-                safeDelete(outFile);
+            if (outFile.exists()) safeDelete(outFile);
             Files.move(tmp.toPath(), outFile.toPath());
             System.out.println("[Resources] Download complete: " + outFile.getAbsolutePath());
             return true;
@@ -197,8 +222,10 @@ public class ResourceDownloadThread extends Thread {
                 while (name.startsWith("./")) name = name.substring(2);
                 if (name.startsWith("resources/")) name = name.substring(10);
                 if (entry.isDirectory()) continue;
-                if (!(name.startsWith("sound/") || name.startsWith("newsound/")
-                        || name.startsWith("sound3/") || name.startsWith("music/"))) continue;
+                if (!(name.startsWith("sound/")
+                        || name.startsWith("newsound/")
+                        || name.startsWith("sound3/")
+                        || name.startsWith("music/"))) continue;
                 File out = new File(staging, name);
                 if (!out.getCanonicalPath().startsWith(prefix)
                         || java.util.Arrays.asList(name.split("/")).contains("..")) {
@@ -222,7 +249,8 @@ public class ResourceDownloadThread extends Thread {
             Files.createDirectories(destDir.toPath());
             for (File root : staging.listFiles()) {
                 File destination = new File(destDir, root.getName());
-                if (destination.isDirectory() && destination.list().length == 0) Files.delete(destination.toPath());
+                if (destination.isDirectory() && destination.list().length == 0)
+                    Files.delete(destination.toPath());
                 Files.move(root.toPath(), destination.toPath());
             }
             System.out.println("[Resources] Extracted files: " + files);
@@ -259,8 +287,7 @@ public class ResourceDownloadThread extends Thread {
     }
 
     private void scanDir(File root, Sink sink) {
-        if (!running || !root.isDirectory())
-            return;
+        if (!running || !root.isDirectory()) return;
         final String base = root.getAbsolutePath().replace('\\', '/') + "/";
         final ArrayDeque<File> q = new ArrayDeque<>();
         q.add(root);
@@ -268,19 +295,16 @@ public class ResourceDownloadThread extends Thread {
         while (!q.isEmpty() && running) {
             File cur = q.removeFirst();
             File[] ls = cur.listFiles();
-            if (ls == null)
-                continue;
+            if (ls == null) continue;
 
             for (File f : ls) {
-                if (!running)
-                    break;
+                if (!running) break;
                 if (f.isDirectory()) {
                     q.add(f);
                     continue;
                 }
                 String lower = f.getName().toLowerCase(Locale.ROOT);
-                if (!(lower.endsWith(".ogg") || lower.endsWith(".wav")))
-                    continue;
+                if (!(lower.endsWith(".ogg") || lower.endsWith(".wav"))) continue;
 
                 // keep full relative path (e.g. "mob/sheep/say1.ogg")
                 String rel = f.getAbsolutePath().replace('\\', '/').substring(base.length());
@@ -297,21 +321,17 @@ public class ResourceDownloadThread extends Thread {
         // rel like "calm1.ogg" or "ambient/calm1.ogg" → pool "calm"
         String name = rel;
         int slash = name.lastIndexOf('/');
-        if (slash >= 0)
-            name = name.substring(slash + 1);
+        if (slash >= 0) name = name.substring(slash + 1);
         int dot = name.lastIndexOf('.');
-        if (dot > 0)
-            name = name.substring(0, dot);
+        if (dot > 0) name = name.substring(0, dot);
         String pool = name.replaceAll("\\d+$", "");
-        if (pool.isEmpty())
-            pool = "calm";
+        if (pool.isEmpty()) pool = "calm";
         sm.registerMusic(pool, file);
     }
 
     private void safeDelete(File f) {
         try {
-            if (f != null && f.exists())
-                f.delete();
+            if (f != null && f.exists()) f.delete();
         } catch (Throwable ignored) {
         }
     }

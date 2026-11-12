@@ -255,6 +255,101 @@ public final class BlockModels {
         }
     }
 
+    public static void logicGate(
+            ShapeRenderer renderer,
+            int x,
+            int y,
+            int z,
+            int facing,
+            int topTexture,
+            boolean comparator,
+            boolean powered,
+            boolean subtract,
+            int delay,
+            float light) {
+        Face stone = tile(6, 0, 14, 16, 16, 0);
+        box(
+                renderer,
+                x,
+                y,
+                z,
+                0,
+                0,
+                0,
+                16,
+                2,
+                16,
+                facing,
+                light,
+                new Face[] {
+                    tile(6, 0, 0, 16, 16, 0),
+                    tile(topTexture, 0, 16, 16, 0, 1),
+                    stone,
+                    tile(6, 0, 14, 16, 16, 1),
+                    stone,
+                    tile(6, 0, 16, 16, 14, 0)
+                });
+        int signalTorch = powered ? 140 : 141;
+        gatePost(
+                renderer,
+                x,
+                y,
+                z,
+                7,
+                2,
+                comparator ? subtract ? 7 : 5 : 7,
+                facing,
+                comparator ? subtract ? 140 : 141 : signalTorch,
+                light);
+        if (comparator) {
+            gatePost(renderer, x, y, z, 4, 11, 7, facing, signalTorch, light);
+            gatePost(renderer, x, y, z, 10, 11, 7, facing, signalTorch, light);
+        } else {
+            gatePost(renderer, x, y, z, 7, repeaterPostZ(delay), 7, facing, signalTorch, light);
+        }
+    }
+
+    static int repeaterPostZ(int delay) {
+        return 4 + 2 * Math.max(1, Math.min(4, delay));
+    }
+
+    private static void gatePost(
+            ShapeRenderer renderer,
+            int x,
+            int y,
+            int z,
+            int px,
+            int pz,
+            int top,
+            int facing,
+            int texture,
+            float light) {
+        int textureBottom = 6 + top - 2;
+        if (texture == 140) light = Math.max(light, .85f);
+        Face side = tile(texture, 7, 6, 9, textureBottom, 0);
+        box(
+                renderer,
+                x,
+                y,
+                z,
+                px,
+                2,
+                pz,
+                px + 2,
+                top,
+                pz + 2,
+                facing,
+                light,
+                new Face[] {
+                    null,
+                    tile(texture, 7, 6, 9, 8, 0),
+                    side,
+                    tile(texture, 7, 6, 9, textureBottom, 1),
+                    side,
+                    tile(texture, 7, textureBottom, 9, 6, 0)
+                });
+    }
+
     public static AABB torchBounds(int x, int y, int z, int facing) {
         if (facing == 1) return bounds(x, y, z, 7, 0, 7, 9, 10, 9, 2);
         return bounds(x, y, z, 7, 3, 11, 9, 14, 16, facing);

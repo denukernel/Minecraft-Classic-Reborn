@@ -11,7 +11,7 @@ public final class CreeperModel extends Model {
 
     public CreeperModel() {
         head.setBounds(-4.0F, -8.0F, -4.0F, 8, 8, 8, 0.0F);
-        this.groundOffset = 21.5F;
+        this.groundOffset = 18.0F;
 
         unused = new ModelPart(32, 0);
         unused.setBounds(-4.0F, -8.0F, -4.0F, 8, 8, 8, 0.5F);
@@ -37,8 +37,13 @@ public final class CreeperModel extends Model {
     }
 
     @Override
-    public final void render(float limbSwing, float limbSwingAmount, float ageInTicks,
-                             float netHeadYaw, float headPitch, float scale) {
+    public final void render(
+            float limbSwing,
+            float limbSwingAmount,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch,
+            float scale) {
         setRotationAngles(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, scale);
         head.render(scale);
         body.render(scale);
@@ -49,14 +54,19 @@ public final class CreeperModel extends Model {
     }
 
     @Override
-    public void setRotationAngles(float limbSwing, float limbSwingAmount, float ageInTicks,
-                                  float netHeadYaw, float headPitch, float scale) {
-        head.yaw   = netHeadYaw / 57.295776F;
-        head.pitch = headPitch  / 57.295776F;
+    public void setRotationAngles(
+            float limbSwing,
+            float limbSwingAmount,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch,
+            float scale) {
+        head.yaw = netHeadYaw / 57.295776F;
+        head.pitch = headPitch / 57.295776F;
 
-        leg1.pitch = MathHelper.cos(limbSwing * 0.6662F)               * 1.4F * limbSwingAmount;
-        leg2.pitch = MathHelper.cos(limbSwing * 0.6662F + 3.1415927F)  * 1.4F * limbSwingAmount;
-        leg3.pitch = MathHelper.cos(limbSwing * 0.6662F + 3.1415927F)  * 1.4F * limbSwingAmount;
-        leg4.pitch = MathHelper.cos(limbSwing * 0.6662F)               * 1.4F * limbSwingAmount;
+        leg1.pitch = MathHelper.cos(limbSwing * 0.6662F) * 1.4F * limbSwingAmount;
+        leg2.pitch = MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * 1.4F * limbSwingAmount;
+        leg3.pitch = MathHelper.cos(limbSwing * 0.6662F + 3.1415927F) * 1.4F * limbSwingAmount;
+        leg4.pitch = MathHelper.cos(limbSwing * 0.6662F) * 1.4F * limbSwingAmount;
     }
 }

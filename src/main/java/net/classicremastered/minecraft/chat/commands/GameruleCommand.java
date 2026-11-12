@@ -9,7 +9,6 @@ import java.util.List;
 public final class GameruleCommand implements Command, AliasedCommand {
     public static final List<String> RULES =
             List.of(
-                    "doDaylightCycle",
                     "doDayNightCycle",
                     "doMobSpawning",
                     "doMobLoot",
@@ -29,7 +28,6 @@ public final class GameruleCommand implements Command, AliasedCommand {
 
     public static boolean value(Level level, String rule, Boolean update) {
         switch (rule.toLowerCase(java.util.Locale.ROOT)) {
-            case "dodaylightcycle":
             case "dodaynightcycle":
                 if (update != null) level.doDayNightCycle = update;
                 return level.doDayNightCycle;

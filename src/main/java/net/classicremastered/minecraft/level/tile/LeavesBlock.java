@@ -16,20 +16,26 @@ public final class LeavesBlock extends LeavesBaseBlock {
     // NOTE: Level processes scheduled ticks every 5 game ticks, so:
     // 5 seconds @ 20 TPS = 100 game ticks = 20 scheduled "passes".
     private static final Map<Level, HashMap<String, Integer>> DECAY = new HashMap<>();
+
     private static HashMap<String, Integer> map(Level lvl) {
         return DECAY.computeIfAbsent(lvl, k -> new HashMap<>());
     }
-    private static String key(int x, int y, int z) { return x + "," + y + "," + z; }
+
+    private static String key(int x, int y, int z) {
+        return x + "," + y + "," + z;
+    }
 
     protected LeavesBlock(int var1, int var2) {
-        super(18, 22, true);
+        super(var1, var2, var1 == 18 ? "Leaves" : "Snowy Leaves");
         // Ensure we also get occasional random updates for stragglers
         Block.physics[this.id] = true;
     }
 
     // One scheduled "pass" happens every 5 game ticks in Level.tick().
     @Override
-    public int getTickDelay() { return 1; } // re-check every pass (~0.25s)
+    public int getTickDelay() {
+        return 1;
+    } // re-check every pass (~0.25s)
 
     @Override
     public void onNeighborChange(Level level, int x, int y, int z, int changedId) {
@@ -72,13 +78,13 @@ public final class LeavesBlock extends LeavesBaseBlock {
         final String k = key(x, y, z);
         HashMap<String, Integer> m = map(level);
         Integer left = m.get(k);
-        if (left == null) left = 20;         // start ~5s timer
-        else left = Math.max(0, left - 1);   // decrement one scheduled pass
+        if (left == null) left = 20; // start ~5s timer
+        else left = Math.max(0, left - 1); // decrement one scheduled pass
 
         if (left == 0) {
             // Final check before decay: if someone placed a log meanwhile, abort.
             if (!isConnectedToLog(level, x, y, z)) {
-                level.setTile(x, y, z, 0);   // decay now
+                level.setTile(x, y, z, 0); // decay now
             }
             m.remove(k);
         } else {
@@ -104,7 +110,7 @@ public final class LeavesBlock extends LeavesBaseBlock {
         boolean[][][] seen = new boolean[size][size][size];
         ArrayDeque<int[]> q = new ArrayDeque<>();
         int cx = r, cy = r, cz = r;
-        q.add(new int[]{cx, cy, cz});
+        q.add(new int[] {cx, cy, cz});
         seen[cx][cy][cz] = true;
 
         while (!q.isEmpty()) {
@@ -117,7 +123,7 @@ public final class LeavesBlock extends LeavesBaseBlock {
             if (id == Block.LOG.id) return true;
 
             // Traverse only through air or leaves; stop at anything else
-            if (!(id == 0 || id == this.id)) continue;
+            if (!(id == 0 || id == Block.LEAVES.id || id == Block.SNOWY_LEAVES.id)) continue;
 
             if (Math.abs(dx) >= r || Math.abs(dy) >= r || Math.abs(dz) >= r) continue;
 
@@ -132,7 +138,15 @@ public final class LeavesBlock extends LeavesBaseBlock {
     }
 
     private static void tryQueue(boolean[][][] seen, ArrayDeque<int[]> q, int i, int j, int k) {
-        if (i < 0 || j < 0 || k < 0 || i >= seen.length || j >= seen[0].length || k >= seen[0][0].length) return;
-        if (!seen[i][j][k]) { seen[i][j][k] = true; q.add(new int[]{i, j, k}); }
+        if (i < 0
+                || j < 0
+                || k < 0
+                || i >= seen.length
+                || j >= seen[0].length
+                || k >= seen[0][0].length) return;
+        if (!seen[i][j][k]) {
+            seen[i][j][k] = true;
+            q.add(new int[] {i, j, k});
+        }
     }
 }

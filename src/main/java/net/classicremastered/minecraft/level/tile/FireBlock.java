@@ -32,7 +32,9 @@ public final class FireBlock extends Block {
         Block block = Block.blocks[id];
         return block == Block.WOOD || block == Block.LOG || block == Block.LEAVES
                 || block == Block.BOOKSHELF || block == Block.TNT || block == Block.DANDELION
-                || block == Block.ROSE || id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id;
+                || block == Block.ROSE || block == Block.SAPLING || block instanceof LadderBlock
+                || block instanceof StairBlock && block.getDrop() == Block.OAK_STAIRS.id
+                || id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id;
     }
 
     static boolean hasFuel(Level level, int x, int y, int z) {

@@ -1,7 +1,10 @@
 package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.entity.HeldBlockEntity;
+import net.classicremastered.minecraft.mob.CrossbowTurret;
+import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
@@ -47,6 +50,9 @@ public class BlockMap implements Serializable {
 
     public void insert(Entity e) {
         synchronized (this.all) {
+            if (this.all.contains(e))
+                return;
+            e.resetInterpolation();
             this.all.add(e);
         }
         if (infiniteMode) {
@@ -63,6 +69,9 @@ public class BlockMap implements Serializable {
     }
 
     public void remove(Entity e) {
+        e.ejectPassengers();
+        if (e.riding != null)
+            e.unmount();
         if (infiniteMode) {
             synchronized (this.entityGrid[0]) {
                 this.entityGrid[0].remove(e);
@@ -197,33 +206,59 @@ public class BlockMap implements Serializable {
         synchronized (this.all) {
             entities = this.all.toArray(new Entity[0]);
         }
-        for (int i = 0; i < entities.length; ++i) {
-            Entity e = entities[i];
-            if (e == null) continue;
-            if (!e.removed && e.level != null && !e.level.isEntityActive(e)) continue;
-            if (!net.classicremastered.minecraft.level.itemstack.GunEntityDrag.tick(e)) e.tick();
-            if (e.removed) {
-                synchronized (this.all) {
-                    this.all.remove(e);
-                }
-                if (infiniteMode) {
-                    synchronized (this.entityGrid[0]) {
-                        this.entityGrid[0].remove(e);
-                    }
-                } else {
-                    this.slot.init(e.xOld, e.yOld, e.zOld).remove(e);
-                }
-            } else if (!infiniteMode) {
-                int sx = (int) (e.xOld / 16.0F);
-                int sy = (int) (e.yOld / 16.0F);
-                int sz = (int) (e.zOld / 16.0F);
-                int sx2 = (int) (e.x / 16.0F);
-                int sy2 = (int) (e.y / 16.0F);
-                int sz2 = (int) (e.z / 16.0F);
-                if (sx != sx2 || sy != sy2 || sz != sz2) {
-                    moved(e);
-                }
+        List<Mob> mountedMobs = null;
+        for (Entity entity : entities) {
+            if (entity instanceof Mob mob
+                    && !(mob instanceof Player)
+                    && mob.riding != null
+                    && !(mob.riding instanceof CrossbowTurret)) {
+                if (mountedMobs == null) mountedMobs = new ArrayList<>();
+                mountedMobs.add(mob);
+                continue;
             }
+            if (entity != null && !(entity instanceof CrossbowTurret)
+                    && !(entity instanceof Arrow arrow && arrow.isTurretProjectile()))
+                tickEntity(entity);
+        }
+        // Aim and fire from the mount's final position, regardless of insertion order.
+        if (mountedMobs != null) for (Mob mob : mountedMobs) tickEntity(mob);
+        for (Entity entity : entities) {
+            if (entity != null && !(entity.riding instanceof CrossbowTurret))
+                syncPassenger(entity);
+        }
+        // Aim and resolve flight against this tick's final mob positions.
+        for (Entity entity : entities)
+            if (entity instanceof CrossbowTurret)
+                tickEntity(entity);
+        for (Entity entity : entities)
+            if (entity != null && entity.riding instanceof CrossbowTurret)
+                syncPassenger(entity);
+        for (Entity entity : entities)
+            if (entity instanceof Arrow arrow && arrow.isTurretProjectile())
+                tickEntity(entity);
+    }
+
+    private void syncPassenger(Entity entity) {
+        if (!entity.removed && entity.riding != null) {
+            entity.syncRidingPosition();
+            moved(entity);
+        }
+    }
+
+    private void tickEntity(Entity entity) {
+        if (!entity.removed && entity.level != null && !entity.level.isEntityActive(entity)) {
+            entity.resetInterpolation();
+            return;
+        }
+        if (!entity.removed
+                && !net.classicremastered.minecraft.level.itemstack.GunEntityDrag.tick(entity))
+            entity.tick();
+        if (entity.removed) {
+            remove(entity);
+        } else if (!infiniteMode && ((int) (entity.xOld / 16f) != (int) (entity.x / 16f)
+                || (int) (entity.yOld / 16f) != (int) (entity.y / 16f)
+                || (int) (entity.zOld / 16f) != (int) (entity.z / 16f))) {
+            moved(entity);
         }
     }
 
@@ -264,31 +299,7 @@ public class BlockMap implements Serializable {
                                 p, grabbed, partial, false);
                     }
                 }
-                if (selId >= 256 && (selId - 256) == 18) {
-                    net.classicremastered.minecraft.model.Vec3D anchor =
-                            net.classicremastered.minecraft.level.itemstack.GrapplingHookItem
-                                    .anchors
-                                    .get(p);
-                    if (anchor != null) {
-                        float px = p.xo + (p.x - p.xo) * partial;
-                        float py = p.yo + (p.y - p.yo) * partial - 0.2f;
-                        float pz = p.zo + (p.z - p.zo) * partial;
-
-                        org.lwjgl.opengl.GL11.glPushMatrix();
-                        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);
-                        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_LIGHTING);
-                        org.lwjgl.opengl.GL11.glColor4f(0.6f, 0.4f, 0.2f, 1.0f); // Brown rope color
-                        org.lwjgl.opengl.GL11.glLineWidth(3.0f);
-                        org.lwjgl.opengl.GL11.glBegin(org.lwjgl.opengl.GL11.GL_LINES);
-                        org.lwjgl.opengl.GL11.glVertex3f(px, py, pz);
-                        org.lwjgl.opengl.GL11.glVertex3f(
-                                (float) anchor.x, (float) anchor.y, (float) anchor.z);
-                        org.lwjgl.opengl.GL11.glEnd();
-                        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);
-                        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_LIGHTING);
-                        org.lwjgl.opengl.GL11.glPopMatrix();
-                    }
-                }
+                net.classicremastered.minecraft.render.GrappleRopeRenderer.render(p, partial);
             }
         }
 

@@ -21,7 +21,6 @@ public final class GameSettings {
                     jumpKey,
                     inventoryKey,
                     chatKey,
-                    toggleFogKey,
                     saveLocationKey,
                     loadLocationKey,
                     runKey,
@@ -29,7 +28,7 @@ public final class GameSettings {
                     descendKey
                 };
 
-        settingCount = 15;
+        settingCount = 18;
 
         this.minecraft = minecraft;
 
@@ -64,8 +63,30 @@ public final class GameSettings {
     public boolean music = true;
     public boolean sound = true;
     public boolean allowMobSounds = true;
+
+    public enum GraphicsMode {
+        FAST("Fast"),
+        FANCY("Fancy"),
+        FABULOUS("Fabulous");
+
+        public final String label;
+
+        GraphicsMode(String label) {
+            this.label = label;
+        }
+    }
+
+    public volatile GraphicsMode graphicsMode = GraphicsMode.FANCY;
+    public boolean fabulousUnavailable;
     public boolean threeDClouds = true;
+
+    public boolean fastGraphics() {
+        return graphicsMode == GraphicsMode.FAST;
+    }
+
     public boolean invertMouse = false;
+    public boolean autoJump = false;
+    public boolean parsecMode = false;
     public boolean showFrameRate = false;
     public int viewDistance = 0;
     public boolean viewBobbing = true;
@@ -83,7 +104,6 @@ public final class GameSettings {
     public KeyBinding jumpKey = new KeyBinding("Jump", 57);
     public KeyBinding inventoryKey = new KeyBinding("Inventory", 18);
     public KeyBinding chatKey = new KeyBinding("Chat", Keyboard.KEY_T);
-    public KeyBinding toggleFogKey = new KeyBinding("Toggle fog", 33);
     public KeyBinding saveLocationKey = new KeyBinding("Save location", 28);
     public KeyBinding loadLocationKey = new KeyBinding("Load location", 19);
     public KeyBinding[] bindings;
@@ -109,6 +129,18 @@ public final class GameSettings {
     }
 
     public void toggleSetting(int setting, int fogValue) {
+        if (setting == 15) {
+            boolean wasFast = fastGraphics();
+            var modes = GraphicsMode.values();
+            graphicsMode = modes[(graphicsMode.ordinal() + 1) % modes.length];
+            fabulousUnavailable = false;
+            if (wasFast != fastGraphics() && minecraft != null) {
+                if (minecraft.textureManager != null) minecraft.textureManager.applyBlockTextures();
+                if (minecraft.levelRenderer != null) minecraft.levelRenderer.refresh();
+            }
+            save();
+            return;
+        }
         if (setting == 0) {
             music = !music;
         }
@@ -219,11 +251,21 @@ public final class GameSettings {
             multithreaded = !multithreaded;
         }
 
+        if (setting == 16) autoJump = !autoJump;
+        if (setting == 17) parsecMode = !parsecMode;
         save();
     }
 
     public String getSetting(int id) {
+        if (id == 16) return "Auto-Jump: " + (autoJump ? "ON" : "OFF");
+        if (id == 17) return "Parsec Mode: " + (parsecMode ? "ON" : "OFF");
         if (id == 14) return "3D clouds: " + (threeDClouds ? "ON" : "OFF");
+        if (id == 15) {
+            return "Graphics: "
+                    + (graphicsMode == GraphicsMode.FABULOUS && (anaglyph || fabulousUnavailable)
+                            ? "Fancy (fallback)"
+                            : graphicsMode.label);
+        }
         return id == 0
                 ? "Music: " + (music ? "ON" : "OFF")
                 : (id == 1
@@ -331,6 +373,11 @@ public final class GameSettings {
                         sound = setting[1].equals("true");
                     }
 
+                    if (setting[0].equals("graphicsMode")) {
+                        for (GraphicsMode mode : GraphicsMode.values()) {
+                            if (mode.name().equals(setting[1])) graphicsMode = mode;
+                        }
+                    }
                     if (setting[0].equals("threeDClouds")) threeDClouds = setting[1].equals("true");
                     if (setting[0].equals("allowMobSounds")) {
                         allowMobSounds = setting[1].equals("true");
@@ -339,13 +386,15 @@ public final class GameSettings {
                     if (setting[0].equals("invertYMouse")) {
                         invertMouse = setting[1].equals("true");
                     }
+                    if (setting[0].equals("autoJump")) autoJump = setting[1].equals("true");
+                    if (setting[0].equals("parsecMode")) parsecMode = setting[1].equals("true");
 
                     if (setting[0].equals("showFrameRate")) {
                         showFrameRate = setting[1].equals("true");
                     }
 
                     if (setting[0].equals("viewDistance")) {
-                        viewDistance = Integer.parseInt(setting[1]);
+                        viewDistance = Math.max(0, Math.min(3, Integer.parseInt(setting[1])));
                     }
 
                     if (setting[0].equals("bobView")) {
@@ -408,7 +457,10 @@ public final class GameSettings {
             writer.println("sound:" + sound);
             writer.println("allowMobSounds:" + allowMobSounds);
             writer.println("threeDClouds:" + threeDClouds);
+            writer.println("graphicsMode:" + graphicsMode.name());
             writer.println("invertYMouse:" + invertMouse);
+            writer.println("autoJump:" + autoJump);
+            writer.println("parsecMode:" + parsecMode);
             writer.println("showFrameRate:" + showFrameRate);
             writer.println("viewDistance:" + viewDistance);
             writer.println("bobView:" + viewBobbing);

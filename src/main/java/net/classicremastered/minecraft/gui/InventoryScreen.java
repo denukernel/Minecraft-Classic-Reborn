@@ -1,10 +1,6 @@
 package net.classicremastered.minecraft.gui;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import net.classicremastered.minecraft.crafting.CraftingManager;
-import net.classicremastered.minecraft.crafting.Recipe;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Inventory;
@@ -13,13 +9,26 @@ import net.classicremastered.minecraft.render.ShapeRenderer;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
-public class InventoryScreen extends GuiScreen {
+public class InventoryScreen extends CraftingContainerScreen {
     // textures
-    protected int texture; // /gui/inventory.png
+    private int texture;
     private int terrainAtlas; // /terrain.png
 
     // carried stack (cursor)
     private int carriedId = -1;
+
+    protected final boolean hasCarriedStack() {
+        return carriedId > 0 && carriedCnt > 0;
+    }
+
+    protected final void discardCarriedStack() {
+        carriedCrate = null;
+        carriedId = -1;
+        carriedCnt = 0;
+        draggingRMB = false;
+    }
+
+    private net.classicremastered.minecraft.level.itemstack.PackedTurret carriedCrate;
     private int carriedCnt = 0;
 
     // drag-paint (RMB) state
@@ -34,72 +43,40 @@ public class InventoryScreen extends GuiScreen {
     private int totalPages = 1; // computed per open
 
     // GUI constants
-    private static final int GUI_W = 176;
-    private static final int GUI_H = 166;
-    private static final int CELL = 18;
-    private static final int BOOK_W = 86;
-    private static final int RECIPE_PAGE = 24;
+    protected static final int CREATIVE_WIDTH = 195;
+    protected static final int CREATIVE_HEIGHT = 136;
+    private static final int CRAFT_X = 98;
+    private static final int CRAFT_Y = 18;
+    private static final int RESULT_X = 154;
+    private static final int RESULT_Y = 28;
+    private static final int BOOK_X = 104;
+    private static final int BOOK_Y = 61;
     private static final String[] ARMOR_SLOTS = {"helmet", "chestplate", "leggings", "boots"};
     private final int[] craftingIds = {-1, -1, -1, -1};
     private final int[] craftingCounts = new int[4];
-    private boolean recipeBook;
-    private boolean craftableOnly;
-    private int recipePage;
 
-    private int panelLeft() {
-        return (width - GUI_W + (recipeBook && width >= GUI_W + BOOK_W + 8 ? BOOK_W + 4 : 0)) / 2;
+    protected boolean creativeInventoryLayout() {
+        return false;
+    }
+
+    protected int panelLeft() {
+        return creativeInventoryLayout() ? (width - CREATIVE_WIDTH) / 2 : craftingPanelLeft();
+    }
+
+    protected final int panelTop() {
+        return (height - (creativeInventoryLayout() ? CREATIVE_HEIGHT : CRAFTING_PANEL_HEIGHT)) / 2;
+    }
+
+    private int gridTop() {
+        return panelTop() + (creativeInventoryLayout() ? 54 : 84);
+    }
+
+    private int hotbarTop() {
+        return gridTop() + 58;
     }
 
     private CraftingManager.ItemStack craftResult() {
         return CraftingManager.getInstance().findMatchingRecipe(craftingIds, 2);
-    }
-
-    private List<Recipe> bookRecipes() {
-        List<Recipe> result = new ArrayList<>();
-        for (Recipe recipe : CraftingManager.getInstance().getRecipes()) {
-            if (recipe.width <= 2
-                    && recipe.height <= 2
-                    && (!craftableOnly || ingredientSlots(recipe) != null)) result.add(recipe);
-        }
-        recipePage = Math.min(recipePage, Math.max(0, (result.size() - 1) / RECIPE_PAGE));
-        return result;
-    }
-
-    private int[] ingredientSlots(Recipe recipe) {
-        Inventory inv = minecraft.player.inventory;
-        int[] used = new int[inv.totalSize()];
-        int[] slots = new int[recipe.ingredients.length];
-        Arrays.fill(slots, -1);
-        for (int i = 0; i < slots.length; i++) {
-            int id = recipe.ingredients[i];
-            if (id <= 0) continue;
-            for (int slot = 0; slot < used.length; slot++) {
-                if (Item.inventoryId(inv.getId(slot)) == id && inv.getCount(slot) > used[slot]) {
-                    slots[i] = slot;
-                    used[slot]++;
-                    break;
-                }
-            }
-            if (slots[i] < 0) return null;
-        }
-        return slots;
-    }
-
-    private void selectRecipe(Recipe recipe) {
-        if (carriedId > 0) return;
-        for (int id : craftingIds) if (id > 0) return;
-        int[] slots = ingredientSlots(recipe);
-        if (slots == null) return;
-        Inventory inv = minecraft.player.inventory;
-        for (int i = 0; i < slots.length; i++) {
-            int slot = slots[i];
-            if (slot < 0) continue;
-            int grid = i % recipe.width + i / recipe.width * 2;
-            int id = inv.getId(slot), remaining = inv.getCount(slot) - 1;
-            craftingIds[grid] = id;
-            craftingCounts[grid] = 1;
-            inv.setIdCount(slot, remaining == 0 ? -1 : id, remaining);
-        }
     }
 
     private void clickCraftSlot(int slot, int button) {
@@ -109,6 +86,8 @@ public class InventoryScreen extends GuiScreen {
             carriedId = id;
             carriedCnt = button == 1 ? (count + 1) / 2 : count;
             craftingCounts[slot] -= carriedCnt;
+        } else if (carriedCrate != null) {
+            return;
         } else if (id <= 0 || id == carriedId) {
             int moved = Math.min(button == 1 ? 1 : carriedCnt, maxStackFor(carriedId) - count);
             if (moved == 0) return;
@@ -116,7 +95,7 @@ public class InventoryScreen extends GuiScreen {
             craftingCounts[slot] += moved;
             carriedCnt -= moved;
             if (carriedCnt == 0) carriedId = -1;
-        } else if (button == 0) {
+        } else if (button == 0 && carriedCnt <= maxStackFor(carriedId)) {
             craftingIds[slot] = carriedId;
             craftingCounts[slot] = carriedCnt;
             carriedId = id;
@@ -129,76 +108,33 @@ public class InventoryScreen extends GuiScreen {
         var result = craftResult();
         if (result == null
                 || carriedId > 0 && carriedId != result.id
+                || carriedCrate != null
                 || carriedCnt + result.count > maxStackFor(result.id)) return;
         carriedId = result.id;
         carriedCnt += result.count;
         CraftingManager.consumeIngredients(craftingIds, craftingCounts);
     }
 
-    private void drawArmorSilhouette(int slot, int x, int y) {
-        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT | GL11.GL_TEXTURE_BIT);
-        try {
-            GL11.glDisable(GL11.GL_LIGHTING);
-            GL11.glColor4f(1, 1, 1, 1);
-            GL11.glBindTexture(
-                    GL11.GL_TEXTURE_2D,
-                    minecraft.textureManager.load("/gui/armor_slot_" + ARMOR_SLOTS[slot] + ".png"));
-            ShapeRenderer shape = ShapeRenderer.instance;
-            shape.begin();
-            shape.vertexUV(x, y + 16, 0, 0, 1);
-            shape.vertexUV(x + 16, y + 16, 0, 1, 1);
-            shape.vertexUV(x + 16, y, 0, 1, 0);
-            shape.vertexUV(x, y, 0, 0, 0);
-            shape.end();
-        } finally {
-            GL11.glPopAttrib();
-        }
-    }
-
-    private void drawCraftSlot(int x, int y, int id, int count) {
-        drawBox(x - 1, y - 1, x + 17, y + 17, 0xFF494949);
-        drawBox(x, y, x + 16, y + 16, 0xFF909090);
+    @Override
+    protected void drawRecipeItem(int id, int count, int x, int y) {
         if (id <= 0) return;
         drawIdIcon(id, x, y);
-        if (count > 1) drawString(fontRenderer, Integer.toString(count), x + 8, y + 9, 0xFFFFFF);
+        drawStackCount(count, x, y);
     }
 
-    private int bookLeft() {
-        return width >= GUI_W + BOOK_W + 8 ? panelLeft() - BOOK_W - 4 : panelLeft();
+    private int armorX(int slot) {
+        return panelLeft() + (creativeInventoryLayout() ? (slot < 2 ? 54 : 108) : 8);
     }
 
-    private void drawRecipeBook(int y) {
-        int x = bookLeft();
-        drawBox(x, y, x + BOOK_W, y + GUI_H, 0xF0303030);
-        drawString(
-                fontRenderer, craftableOnly ? "Craftable" : "All recipes", x + 6, y + 6, 0xFFFFFF);
-        List<Recipe> recipes = bookRecipes();
-        for (int i = 0; i < RECIPE_PAGE && recipePage * RECIPE_PAGE + i < recipes.size(); i++) {
-            Recipe recipe = recipes.get(recipePage * RECIPE_PAGE + i);
-            drawCraftSlot(
-                    x + 6 + i % 4 * CELL,
-                    y + 20 + i / 4 * CELL,
-                    recipe.resultId,
-                    recipe.resultCount);
+    private int armorY(int slot) {
+        return panelTop() + (creativeInventoryLayout() ? 6 + (slot % 2) * 27 : 8 + slot * CELL);
+    }
+
+    private int armorSlotAt(int mx, int my) {
+        for (int slot = 0; slot < ARMOR_SLOTS.length; slot++) {
+            if (inside(mx, my, armorX(slot), armorY(slot), 16, 16)) return slot;
         }
-        drawString(fontRenderer, "<    " + (recipePage + 1) + "    >", x + 8, y + 135, 0xFFFFFF);
-    }
-
-    private boolean clickRecipeBook(int mx, int my, int y) {
-        int x = bookLeft();
-        if (!recipeBook || mx < x || mx >= x + BOOK_W || my < y || my >= y + GUI_H) return false;
-        if (my < y + 18) {
-            craftableOnly = !craftableOnly;
-            recipePage = 0;
-        } else if (my >= y + 130) {
-            recipePage = Math.max(0, recipePage + (mx < x + BOOK_W / 2 ? -1 : 1));
-            bookRecipes();
-        } else if (mx >= x + 6 && mx < x + 78 && my >= y + 20 && my < y + 128) {
-            int index = recipePage * RECIPE_PAGE + (mx - x - 6) / CELL + (my - y - 20) / CELL * 4;
-            List<Recipe> recipes = bookRecipes();
-            if (index < recipes.size()) selectRecipe(recipes.get(index));
-        }
-        return true;
+        return -1;
     }
 
     // drag-paint band lock
@@ -207,7 +143,11 @@ public class InventoryScreen extends GuiScreen {
 
     @Override
     public void onOpen() {
-        this.texture = this.minecraft.textureManager.load("/gui/inventory.png");
+        this.texture =
+                this.minecraft.textureManager.load(
+                        creativeInventoryLayout()
+                                ? "/gui/creative-inventory.png"
+                                : "/gui/inventory.png");
         this.terrainAtlas =
                 this.minecraft.textureManager.load(
                         net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE);
@@ -231,21 +171,20 @@ public class InventoryScreen extends GuiScreen {
 
     // ---------- helpers ----------
     private static int maxStackFor(int id) {
-        if (id >= 256) {
-            int itemId = id - 256;
-            if (itemId >= 0 && itemId < Item.items.length && Item.items[itemId] != null) {
-                return Item.items[itemId].maxStackSize;
-            }
-            return 99;
-        }
-        return 99;
+        return Item.stackLimit(id);
     }
 
     private static boolean sameId(int a, int b) {
         return a > 0 && a == b;
     }
 
-    private void pickUpAll(Inventory inv, int slot) {
+    private void putCarried(Inventory inventory, int slot, int count) {
+        if (carriedCrate != null) inventory.setCrate(slot, carriedCrate);
+        else inventory.setIdCount(slot, carriedId, count);
+    }
+
+    protected final void pickUpAll(Inventory inv, int slot) {
+        carriedCrate = inv.crate(slot);
         int id = inv.getId(slot);
         int cnt = inv.getCount(slot);
         if (id <= 0 || cnt <= 0) return;
@@ -255,6 +194,7 @@ public class InventoryScreen extends GuiScreen {
     }
 
     private void pickUpHalf(Inventory inv, int slot) {
+        carriedCrate = inv.crate(slot);
         int id = inv.getId(slot);
         int cnt = inv.getCount(slot);
         if (id <= 0 || cnt <= 0) return;
@@ -262,6 +202,11 @@ public class InventoryScreen extends GuiScreen {
         carriedId = id;
         carriedCnt = half;
         inv.setIdCount(slot, (cnt - half) > 0 ? id : -1, Math.max(0, cnt - half));
+    }
+
+    protected final void placeCarriedStackInSlot(int slot) {
+        Inventory inventory = minecraft.player.inventory;
+        if (slot >= 0 && slot < inventory.totalSize()) placeAllOrMerge(inventory, slot);
     }
 
     private void placeAllOrMerge(Inventory inv, int slot) {
@@ -272,22 +217,27 @@ public class InventoryScreen extends GuiScreen {
         int cap = maxStackFor(carriedId);
 
         if (dstId <= 0) {
-            inv.setIdCount(slot, carriedId, carriedCnt);
-            carriedId = -1;
-            carriedCnt = 0;
+            int moved = Math.min(cap, carriedCnt);
+            putCarried(inv, slot, moved);
+            carriedCnt -= moved;
+            if (carriedCnt == 0) {
+                carriedCrate = null;
+                carriedId = -1;
+            }
             return;
         }
-        if (dstId == carriedId) {
-            int can = Math.max(0, cap - dstCnt);
-            if (can > 0) {
-                int put = Math.min(can, carriedCnt);
-                inv.setIdCount(slot, dstId, dstCnt + put);
-                carriedCnt -= put;
-                if (carriedCnt <= 0) carriedId = -1;
-                return;
-            }
+        var previousCrate = inv.crate(slot);
+        if (dstId == carriedId && carriedCrate == null && previousCrate == null) {
+            int put = Math.min(Math.max(0, cap - dstCnt), carriedCnt);
+            if (put <= 0) return;
+            inv.setIdCount(slot, dstId, dstCnt + put);
+            carriedCnt -= put;
+            if (carriedCnt == 0) carriedId = -1;
+            return;
         }
-        inv.setIdCount(slot, carriedId, carriedCnt);
+        if (carriedCnt > cap) return;
+        putCarried(inv, slot, carriedCnt);
+        carriedCrate = previousCrate;
         carriedId = dstId;
         carriedCnt = dstCnt;
     }
@@ -298,8 +248,11 @@ public class InventoryScreen extends GuiScreen {
         int dstCnt = inv.getCount(slot);
 
         if (dstId <= 0) {
-            inv.setIdCount(slot, id, 1);
-            if (--carriedCnt <= 0) carriedId = -1;
+            putCarried(inv, slot, 1);
+            if (--carriedCnt <= 0) {
+                carriedId = -1;
+                carriedCrate = null;
+            }
             return;
         }
         if (dstId == id && dstCnt < maxStackFor(id)) {
@@ -312,11 +265,9 @@ public class InventoryScreen extends GuiScreen {
     // slot → screen coords (global index)
     private void slotXY(int slot, int[] out) {
         int x0 = panelLeft();
-        int y0 = (this.height - GUI_H) / 2;
-
         if (slot < HOTBAR_SIZE) { // hotbar
-            out[0] = x0 + 8 + slot * CELL;
-            out[1] = y0 + 142;
+            out[0] = x0 + inventoryGridX() + slot * CELL;
+            out[1] = hotbarTop();
             return;
         }
         // grid (paged 27)
@@ -326,52 +277,38 @@ public class InventoryScreen extends GuiScreen {
         if (vis < 0) vis = 0;
         int col = vis % 9;
         int row = vis / 9; // 0..ROWS_VISIBLE-1
-        out[0] = x0 + 8 + col * CELL;
-        out[1] = y0 + 84 + row * CELL;
+        out[0] = x0 + inventoryGridX() + col * CELL;
+        out[1] = gridTop() + row * CELL;
     }
 
-    // mouse → global slot index, or -1
-    private int slotAt(int mx, int my) {
-        int x0 = panelLeft();
-        int y0 = (this.height - GUI_H) / 2;
+    protected int inventoryGridX() {
+        return creativeInventoryLayout() ? 9 : 8;
+    }
 
-        // hotbar band
-        int hbY = y0 + 142;
-        if (my >= hbY && my < hbY + 16) {
-            int rel = mx - (x0 + 8);
-            if (rel >= 0) {
-                int col = rel / CELL;
-                if (col >= 0 && col < HOTBAR_SIZE) return col; // 0..8
-            }
-        }
-
-        // grid band (ROWS_VISIBLE rows)
-        int perPage = ROWS_VISIBLE * 9;
-        int base = HOTBAR_SIZE + page * perPage;
-
-        int topY = y0 + 84, botY = topY + ROWS_VISIBLE * CELL;
-        if (my >= topY && my < botY) {
-            int relX = mx - (x0 + 8);
-            if (relX >= 0) {
-                int col = relX / CELL;
-                int row = (my - topY) / CELL;
-                if (col >= 0 && col < 9 && row >= 0 && row < ROWS_VISIBLE) {
-                    return base + row * 9 + col;
-                }
-            }
-        }
-        return -1;
+    protected final int inventorySlotAt(int mx, int my) {
+        if (!creativeInventoryLayout() && isRecipeBookArea(mx, my, panelTop(), 2)) return -1;
+        int relX = mx - panelLeft() - inventoryGridX();
+        if (relX < 0 || relX >= HOTBAR_SIZE * CELL || relX % CELL >= 16) return -1;
+        int column = relX / CELL;
+        if (my >= hotbarTop() && my < hotbarTop() + 16) return column;
+        int relY = my - gridTop();
+        if (relY < 0 || relY >= ROWS_VISIBLE * CELL || relY % CELL >= 16) return -1;
+        return HOTBAR_SIZE + (page * ROWS_VISIBLE + relY / CELL) * HOTBAR_SIZE + column;
     }
 
     // page buttons rects (kept for UI; no storage beyond hotbar yet)
     private int[] leftBtnRect() {
-        int x0 = panelLeft(), y0 = (this.height - GUI_H) / 2;
-        return new int[] {x0 + GUI_W - 38, y0 + 6, x0 + GUI_W - 26, y0 + 18};
+        int x0 = panelLeft(), y0 = panelTop();
+        return new int[] {
+            x0 + inventoryGridX() + 130, y0 + 6, x0 + inventoryGridX() + 142, y0 + 18
+        };
     }
 
     private int[] rightBtnRect() {
-        int x0 = panelLeft(), y0 = (this.height - GUI_H) / 2;
-        return new int[] {x0 + GUI_W - 20, y0 + 6, x0 + GUI_W - 8, y0 + 18};
+        int x0 = panelLeft(), y0 = panelTop();
+        return new int[] {
+            x0 + inventoryGridX() + 148, y0 + 6, x0 + inventoryGridX() + 160, y0 + 18
+        };
     }
 
     private boolean inRect(int x, int y, int[] r) {
@@ -382,61 +319,67 @@ public class InventoryScreen extends GuiScreen {
     @Override
     public void render(int mouseX, int mouseY) {
         final int x0 = panelLeft();
-        final int y0 = (this.height - GUI_H) / 2;
+        final int y0 = panelTop();
 
-        // --- background ---
+        boolean creative = creativeInventoryLayout();
+        drawInventoryBackground();
         GL11.glColor4f(1, 1, 1, 1);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
-        drawImage(x0, y0, 0, 0, GUI_W, GUI_H);
+        drawImage(
+                x0,
+                y0,
+                0,
+                0,
+                creative ? CREATIVE_WIDTH : CRAFTING_PANEL_WIDTH,
+                creative ? CREATIVE_HEIGHT : CRAFTING_PANEL_HEIGHT);
 
-        // Draw tabs if in creative mode
-        if (this.minecraft != null && !this.minecraft.gamemode.isSurvival()) {
-            int cx1 = x0 + 10;
-            int cx2 = x0 + 65;
-            int cy1 = y0 - 15;
-            int cy2 = y0;
-
-            int sx1 = x0 + 70;
-            int sx2 = x0 + 125;
-            int sy1 = y0 - 15;
-            int sy2 = y0;
-
-            // Draw Blocks tab (inactive)
-            boolean hoverCreative = mouseX >= cx1 && mouseX < cx2 && mouseY >= cy1 && mouseY < cy2;
-            int cBg = hoverCreative ? 0x60FFFFFF : 0x30FFFFFF;
-            drawBox(cx1, cy1, cx2, cy2, cBg);
-            drawCenteredString(this.fontRenderer, "Blocks", cx1 + 27, cy1 + 4, 14737632);
-
-            // Draw Survival tab (active)
-            drawBox(sx1, sy1, sx2, sy2, -1878719232); // matching GUI background
-            drawCenteredString(this.fontRenderer, "Survival", sx1 + 27, sy1 + 4, 16777120);
+        if (creative) {
+            drawPlayerPreview(x0 + 72, y0 + 5, 34, 45, 20, mouseX, mouseY);
+        } else {
+            drawPlayerPreview(x0 + 25, y0 + 7, 50, 72, 30, mouseX, mouseY);
+            fontRenderer.renderNoShadow("Crafting", x0 + 97, y0 + 6, 0x404040);
+            for (int i = 0; i < craftingIds.length; i++) {
+                drawRecipeItem(
+                        craftingIds[i],
+                        craftingCounts[i],
+                        x0 + CRAFT_X + i % 2 * CELL,
+                        y0 + CRAFT_Y + i / 2 * CELL);
+            }
+            var result = craftResult();
+            if (result != null)
+                drawRecipeItem(result.id, result.count, x0 + RESULT_X, y0 + RESULT_Y);
         }
-
-        drawPlayerPreview(x0 + 31, y0 + 17, 61, 65, mouseX, mouseY);
-        for (int slot = 0; slot < 4; slot++) {
-            int sx = x0 + 8, sy = y0 + 8 + slot * 18;
-            drawBox(sx - 1, sy - 1, sx + 17, sy + 17, 0xFF444444);
-            if (minecraft.player.equipment[slot] > 0)
-                drawIdIcon(minecraft.player.equipment[slot], sx, sy);
-            else drawArmorSilhouette(slot, sx, sy);
+        for (int slot = 0; slot < ARMOR_SLOTS.length; slot++) {
+            int sx = armorX(slot), sy = armorY(slot);
+            int id = minecraft.player.equipment[slot];
+            if (id > 0) drawIdIcon(id, sx, sy);
+            else drawSprite("/gui/armor_slot_" + ARMOR_SLOTS[slot] + ".png", sx, sy, 16, 16);
         }
-        drawString(fontRenderer, "Crafting", x0 + 98, y0 + 8, 0xFFFFFF);
-        for (int i = 0; i < 4; i++)
-            drawCraftSlot(
-                    x0 + 98 + (i % 2) * CELL,
-                    y0 + 19 + (i / 2) * CELL,
-                    craftingIds[i],
-                    craftingCounts[i]);
-        drawString(fontRenderer, ">", x0 + 135, y0 + 34, 0xFFFFFF);
-        var result = craftResult();
-        drawCraftSlot(
-                x0 + 151,
-                y0 + 29,
-                result == null ? -1 : result.id,
-                result == null ? 0 : result.count);
-        drawBox(x0 + 98, y0 + 61, x0 + 167, y0 + 76, 0xFF555555);
-        drawCenteredString(
-                fontRenderer, recipeBook ? "Close book" : "Recipes", x0 + 132, y0 + 65, 0xFFFFFF);
+        int hover = renderPlayerInventory(mouseX, mouseY);
+        Inventory inv = minecraft.player.inventory;
+        int n = inv.totalSize();
+        boolean depthWas = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        int tooltipRaw = hover >= 0 && hover < n ? inv.getId(hover) : -1;
+        int gearSlot = armorSlotAt(mouseX, mouseY);
+        if (gearSlot >= 0) tooltipRaw = minecraft.player.equipment[gearSlot];
+        if (!creative) {
+            drawRecipeBook(y0, 2, craftingIds, craftingCounts);
+            drawRecipeRequirements(
+                    x0 + CRAFT_X, y0 + CRAFT_Y, 2, craftingIds, craftingCounts, mouseX, mouseY);
+            drawRecipeBookButton(mouseX, mouseY, x0 + BOOK_X, y0 + BOOK_Y);
+        }
+        if (carriedId <= 0 && !hasCatalogCursor() && tooltipRaw > 0) {
+            ItemTooltip.draw(
+                    this, tooltipRaw, hover >= 0 ? inv.crate(hover) : null, mouseX, mouseY);
+        }
+        renderInventoryExtras(mouseX, mouseY);
+        renderCarriedStack(mouseX, mouseY);
+        if (depthWas) GL11.glEnable(GL11.GL_DEPTH_TEST);
+        super.render(mouseX, mouseY);
+    }
+
+    protected final int renderPlayerInventory(int mouseX, int mouseY) {
         final Inventory inv = this.minecraft.player.inventory;
         final int n = inv.totalSize();
 
@@ -454,14 +397,13 @@ public class InventoryScreen extends GuiScreen {
         }
 
         // overlays (counts/hover)
-        final boolean depthWas = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT);
         GL11.glDisable(GL11.GL_DEPTH_TEST);
 
         for (int i = base; i < end; i++) drawCount(inv, i);
         for (int i = 0; i < Math.min(HOTBAR_SIZE, n); i++) drawCount(inv, i);
 
-        if (recipeBook) drawRecipeBook(y0);
-        int hover = slotAt(mouseX, mouseY);
+        int hover = inventorySlotAt(mouseX, mouseY);
         if (hover >= 0 && hover < n) {
             int[] xy = new int[2];
             slotXY(hover, xy);
@@ -472,44 +414,25 @@ public class InventoryScreen extends GuiScreen {
             drawBox(sx + 16, sy, sx + 17, sy + 16, 0x80FFFFFF);
         }
 
-        int tooltipRaw = hover >= 0 && hover < n ? inv.getId(hover) : -1;
-        int armorX = panelLeft() + 8, armorY = (height - GUI_H) / 2 + 8;
-        if (mouseX >= armorX && mouseX < armorX + 16 && mouseY >= armorY && mouseY < armorY + 72)
-            tooltipRaw = minecraft.player.equipment[(mouseY - armorY) / 18];
-        if (carriedId <= 0 && tooltipRaw > 0) {
-            String name = BlockSelectScreen.displayName(tooltipRaw),
-                    detail =
-                            net.classicremastered.minecraft.level.itemstack.Equipment.description(
-                                    tooltipRaw);
-            int tw = Math.max(fontRenderer.getWidth(name), fontRenderer.getWidth(detail)),
-                    tx = Math.max(3, Math.min(width - tw - 6, mouseX + 10)),
-                    ty = Math.min(height - 28, mouseY + 10);
-            drawBox(tx - 3, ty - 3, tx + tw + 3, ty + 23, 0xEF111111);
-            drawString(fontRenderer, name, tx, ty, 0xFFFF80);
-            drawString(fontRenderer, detail, tx, ty + 12, 0xFFFFFF);
-        }
-        if (carriedId > 0 && carriedCnt > 0) {
-            int cx = mouseX - 8, cy = mouseY - 8;
-            drawIdIcon(carriedId, cx, cy);
-            if (carriedCnt > 1) {
-                String t = Integer.toString(carriedCnt);
-                this.fontRenderer.render(
-                        t, cx + 16 - this.fontRenderer.getWidth(t), cy + 10, 0xFFFFFF);
-            }
-        }
-
-        if (depthWas) GL11.glEnable(GL11.GL_DEPTH_TEST);
-        super.render(mouseX, mouseY);
+        GL11.glPopAttrib();
+        return hover >= 0 && hover < n ? hover : -1;
     }
 
-    // ensure model part has a GL list
-    private static void ensureList(net.classicremastered.minecraft.model.ModelPart p) {
-        if (p != null && !p.hasList) p.generateList(0.0625F);
+    protected void drawInventoryBackground() {}
+
+    protected void renderInventoryExtras(int mouseX, int mouseY) {}
+
+    protected final void renderCarriedStack(int mouseX, int mouseY) {
+        if (hasCarriedStack()) {
+            int cx = mouseX - 8, cy = mouseY - 8;
+            drawIdIcon(carriedId, cx, cy);
+            drawStackCount(carriedCnt, cx, cy);
+        }
     }
 
     private net.classicremastered.minecraft.model.HumanoidModel preview;
 
-    private void drawPlayerPreview(int x, int y, int w, int h, int mx, int my) {
+    private void drawPlayerPreview(int x, int y, int w, int h, int scale, int mx, int my) {
         if (preview == null) {
             preview = new net.classicremastered.minecraft.model.HumanoidModel();
         }
@@ -532,8 +455,8 @@ public class InventoryScreen extends GuiScreen {
             GL11.glDisable(GL11.GL_BLEND);
             GL11.glDepthFunc(GL11.GL_LEQUAL);
             GL11.glDepthMask(true);
-            GL11.glTranslatef(x + w * .5f, y + 16, 80);
-            GL11.glScalef(27, 27, 27);
+            GL11.glTranslatef(x + w * .5f, y + h - 2 - scale * 1.5f, 50);
+            GL11.glScalef(scale, scale, scale);
             GL11.glRotatef(180 + yaw, 0, 1, 0);
             minecraft.player.bindTexture(minecraft.textureManager);
             preview.attackOffset = 0;
@@ -564,9 +487,7 @@ public class InventoryScreen extends GuiScreen {
         if (c > 1) {
             int[] xy = new int[2];
             slotXY(slot, xy);
-            String t = Integer.toString(c);
-            this.fontRenderer.render(
-                    t, xy[0] + 16 - this.fontRenderer.getWidth(t), xy[1] + 10, 0xFFFFFF);
+            drawStackCount(c, xy[0], xy[1]);
         }
     }
 
@@ -637,7 +558,7 @@ public class InventoryScreen extends GuiScreen {
             int cnt = inv.getCount(i);
             if (id <= 0 || cnt <= 0) {
                 int put = Math.min(cap, carriedCnt);
-                inv.setIdCount(i, carriedId, put);
+                putCarried(inv, i, put);
                 carriedCnt -= put;
             }
         }
@@ -646,12 +567,13 @@ public class InventoryScreen extends GuiScreen {
             if (carriedId >= 256)
                 this.minecraft.level.addEntity(
                         new net.classicremastered.minecraft.entity.DroppedItem(
-                                this.minecraft.level,
-                                minecraft.player.x,
-                                minecraft.player.y,
-                                minecraft.player.z,
-                                carriedId - 256,
-                                carriedCnt));
+                                        this.minecraft.level,
+                                        minecraft.player.x,
+                                        minecraft.player.y,
+                                        minecraft.player.z,
+                                        carriedId - 256,
+                                        carriedCnt)
+                                .withCrate(carriedCrate));
             else
                 for (int i = 0; i < carriedCnt; i++)
                     this.minecraft.level.addEntity(
@@ -663,6 +585,7 @@ public class InventoryScreen extends GuiScreen {
                                     carriedId));
             carriedCnt = 0;
         }
+        carriedCrate = null;
         // Done: clear cursor + drag state
         carriedId = -1;
         draggingRMB = false;
@@ -670,54 +593,95 @@ public class InventoryScreen extends GuiScreen {
     }
 
     // ---------- input ----------
+    protected boolean hasCatalogCursor() {
+        return false;
+    }
+
+    protected final void drawInventoryPageButtons() {
+        if (totalPages <= 1) return;
+        int[] previous = leftBtnRect(), next = rightBtnRect();
+        fontRenderer.renderNoShadow("<", previous[0] + 3, previous[1] + 2, 0x404040);
+        fontRenderer.renderNoShadow(">", next[0] + 3, next[1] + 2, 0x404040);
+    }
+
+    protected final boolean clickInventoryPage(int x, int y) {
+        if (totalPages <= 1) return false;
+        if (inRect(x, y, leftBtnRect())) {
+            page = (page + totalPages - 1) % totalPages;
+            playButtonClickSound();
+            return true;
+        }
+        if (inRect(x, y, rightBtnRect())) {
+            page = (page + 1) % totalPages;
+            playButtonClickSound();
+            return true;
+        }
+        return false;
+    }
+
     @Override
     protected void onMouseClick(int mx, int my, int button) {
-        if (this.minecraft != null && !this.minecraft.gamemode.isSurvival()) {
-            int x0 = panelLeft();
-            int y0 = (this.height - GUI_H) / 2;
-            int cx1 = x0 + 10;
-            int cx2 = x0 + 65;
-            int cy1 = y0 - 15;
-            int cy2 = y0;
-            if (mx >= cx1 && mx < cx2 && my >= cy1 && my < cy2 && button == 0) {
-                flushCarriedBackIntoInventory();
-                this.minecraft.setCurrentScreen(new BlockSelectScreen());
-                return;
-            }
+        if (button == 0 && !creativeInventoryLayout()) {
+            int source = hasCarriedStack() ? -1 : dragSlotAt(mx, my, true);
+            handleInventoryClick(mx, my, button);
+            beginStackDrag(hasCarriedStack() ? source : -1);
+        } else {
+            handleInventoryClick(mx, my, button);
         }
+    }
 
-        int gx = panelLeft(), gy = (height - GUI_H) / 2;
-        if (button == 0 && mx >= gx + 98 && mx < gx + 167 && my >= gy + 61 && my < gy + 76) {
-            recipeBook = !recipeBook;
-            return;
-        }
-        if (button == 0 && clickRecipeBook(mx, my, gy)) return;
-        if (button == 0 || button == 1) {
-            if (mx >= gx + 98 && mx < gx + 134 && my >= gy + 19 && my < gy + 55) {
-                clickCraftSlot((mx - gx - 98) / CELL + (my - gy - 19) / CELL * 2, button);
-                return;
-            }
-            if (mx >= gx + 151 && mx < gx + 168 && my >= gy + 29 && my < gy + 46) {
-                takeCraftResult();
-                return;
-            }
-        }
-        Inventory inv = this.minecraft.player.inventory;
+    @Override
+    protected void onMouseRelease(int x, int y, int button) {
+        int target = dragSlotAt(x, y, false);
+        if (finishStackDrag(target, button) && hasCarriedStack()) handleInventoryClick(x, y, 0);
+    }
 
-        if (totalPages > 1) {
-            if (inRect(mx, my, leftBtnRect())) {
-                page = (page + totalPages - 1) % totalPages;
-                return;
-            }
-            if (inRect(mx, my, rightBtnRect())) {
-                page = (page + 1) % totalPages;
-                return;
+    private int craftSlotAt(int x, int y, int panelX, int panelY) {
+        int startX = panelX + CRAFT_X - 1, startY = panelY + CRAFT_Y - 1;
+        if (!inside(x, y, startX, startY, 2 * CELL, 2 * CELL)) return -1;
+        return (x - startX) / CELL + (y - startY) / CELL * 2;
+    }
+
+    private int dragSlotAt(int x, int y, boolean includeResult) {
+        int size = minecraft.player.inventory.totalSize();
+        if (isRecipeBookArea(x, y, panelTop(), 2)) return -1;
+        int slot = inventorySlotAt(x, y);
+        if (slot >= 0 && slot < size) return slot;
+        int craftSlot = craftSlotAt(x, y, panelLeft(), panelTop());
+        if (craftSlot >= 0) return size + craftSlot;
+        int armorSlot = armorSlotAt(x, y);
+        if (armorSlot >= 0) return size + craftingIds.length + armorSlot;
+        if (includeResult
+                && inside(
+                        x, y, panelLeft() + RESULT_X - 1, panelTop() + RESULT_Y - 1, CELL, CELL)) {
+            return size + craftingIds.length + ARMOR_SLOTS.length;
+        }
+        return -1;
+    }
+
+    private void handleInventoryClick(int mx, int my, int button) {
+        int gx = panelLeft(), gy = panelTop();
+        if (!creativeInventoryLayout()) {
+            if (button == 0 && clickRecipeBookButton(mx, my, gx + BOOK_X, gy + BOOK_Y)) return;
+            if (clickRecipeBook(
+                    mx, my, button, gy, 2, craftingIds, craftingCounts, hasCarriedStack())) return;
+            if (button == 0 || button == 1) {
+                int craftSlot = craftSlotAt(mx, my, gx, gy);
+                if (craftSlot >= 0) {
+                    clearRecipeRequirements();
+                    clickCraftSlot(craftSlot, button);
+                    return;
+                }
+                if (inside(mx, my, gx + RESULT_X - 1, gy + RESULT_Y - 1, CELL, CELL)) {
+                    takeCraftResult();
+                    return;
+                }
             }
         }
+        if (button == 0 && clickInventoryPage(mx, my)) return;
 
-        int ax = panelLeft() + 8, ay = (height - GUI_H) / 2 + 8;
-        if (mx >= ax && mx < ax + 16 && my >= ay && my < ay + 72) {
-            int gearSlot = (my - ay) / 18;
+        int gearSlot = armorSlotAt(mx, my);
+        if (gearSlot >= 0) {
             var gear = net.classicremastered.minecraft.level.itemstack.Equipment.gear(carriedId);
             if (carriedId <= 0 || gear != null && gear.slot == gearSlot) {
                 int old = minecraft.player.equipment[gearSlot];
@@ -727,12 +691,15 @@ public class InventoryScreen extends GuiScreen {
             }
             return;
         }
+        clickPlayerInventorySlot(mx, my, button);
+        super.onMouseClick(mx, my, button);
+    }
+
+    protected final void clickPlayerInventorySlot(int mx, int my, int button) {
+        Inventory inv = minecraft.player.inventory;
         int n = inv.totalSize();
-        int slot = slotAt(mx, my);
-        if (slot < 0 || slot >= n) {
-            super.onMouseClick(mx, my, button);
-            return;
-        }
+        int slot = inventorySlotAt(mx, my);
+        if (slot < 0 || slot >= n) return;
 
         if (button == 0) {
             if (carriedId <= 0) pickUpAll(inv, slot);
@@ -752,7 +719,6 @@ public class InventoryScreen extends GuiScreen {
             for (int i = 0; i < painted.length; i++) painted[i] = false;
             painted[slot] = true;
         }
-        super.onMouseClick(mx, my, button);
     }
 
     @Override
@@ -768,7 +734,7 @@ public class InventoryScreen extends GuiScreen {
             int my = this.height - Mouse.getY() * this.height / this.minecraft.height - 1;
 
             Inventory inv = this.minecraft.player.inventory;
-            int slot = slotAt(mx, my);
+            int slot = inventorySlotAt(mx, my);
             int n = inv.totalSize();
 
             if (slot >= 0 && slot < n) {

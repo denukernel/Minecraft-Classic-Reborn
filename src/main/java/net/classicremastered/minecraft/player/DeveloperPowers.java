@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.BossThrownBlock;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.SwordItem;
 import net.classicremastered.minecraft.mob.Mob;
@@ -159,9 +160,7 @@ public final class DeveloperPowers {
     }
 
     private static Vec3D aimDirection(Player player) {
-        double yaw = Math.toRadians(player.yRot), pitch = Math.toRadians(player.xRot);
-        return new Vec3D((float) (Math.sin(yaw) * Math.cos(pitch)), (float) -Math.sin(pitch),
-                (float) (-Math.cos(yaw) * Math.cos(pitch)));
+        return GravityGunItem.look(player);
     }
 
     public boolean fastPunch(Player player) {

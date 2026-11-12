@@ -21,7 +21,7 @@ public final class IronGolemModel extends Model {
         TexturedQuad.ATLAS_W = 128;
         TexturedQuad.ATLAS_H = 128;
 
-        this.groundOffset = 25; // tall mob
+        this.groundOffset = 24;
 
         // Head
         head = new ModelPart(0, 0);
@@ -70,35 +70,43 @@ public final class IronGolemModel extends Model {
             if (g.attackTime > 0) {
                 float swing = MathHelper.sin(((float) g.attackTime / 5.0F) * (float) Math.PI);
                 rightArm.pitch = -2.0F + 1.5F * swing;
-                leftArm.pitch  = -2.0F + 1.5F * swing;
+                leftArm.pitch = -2.0F + 1.5F * swing;
                 attacking = true;
             }
         }
     }
 
     @Override
-    public void setRotationAngles(float limbSwing, float limbSwingAmount,
-                                  float ageInTicks, float netHeadYaw,
-                                  float headPitch, float scale) {
+    public void setRotationAngles(
+            float limbSwing,
+            float limbSwingAmount,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch,
+            float scale) {
         // Head look
-        head.yaw   = netHeadYaw * (float)Math.PI / 180F;
-        head.pitch = headPitch  * (float)Math.PI / 180F;
+        head.yaw = netHeadYaw * (float) Math.PI / 180F;
+        head.pitch = headPitch * (float) Math.PI / 180F;
 
         // Legs walk
         rightLeg.pitch = -1.5F * MathHelper.cos(limbSwing * 0.6662F) * limbSwingAmount;
-        leftLeg.pitch  =  1.5F * MathHelper.cos(limbSwing * 0.6662F) * limbSwingAmount;
+        leftLeg.pitch = 1.5F * MathHelper.cos(limbSwing * 0.6662F) * limbSwingAmount;
 
         // Only apply idle arm swing if not attacking
         if (!attacking) {
             rightArm.pitch = (-0.2F + 1.5F * MathHelper.cos(limbSwing * 0.6662F)) * limbSwingAmount;
-            leftArm.pitch  = (-0.2F - 1.5F * MathHelper.cos(limbSwing * 0.6662F)) * limbSwingAmount;
+            leftArm.pitch = (-0.2F - 1.5F * MathHelper.cos(limbSwing * 0.6662F)) * limbSwingAmount;
         }
     }
 
     @Override
-    public void render(float limbSwing, float limbSwingAmount,
-                       float ageInTicks, float netHeadYaw,
-                       float headPitch, float scale) {
+    public void render(
+            float limbSwing,
+            float limbSwingAmount,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch,
+            float scale) {
         head.render(scale);
         body.render(scale);
         rightArm.render(scale);

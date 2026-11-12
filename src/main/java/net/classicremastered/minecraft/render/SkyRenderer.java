@@ -68,7 +68,9 @@ public final class SkyRenderer {
     public void renderClouds(float partial, float r, float g, float b) {
         if (level == null || texMgr == null) return;
 
-        if (texMgr.settings.threeDClouds && level.player instanceof Player camera) {
+        if (level.player instanceof Player camera
+                && (!isNightmareZone(camera)
+                        || !texMgr.settings.fastGraphics() && texMgr.settings.threeDClouds)) {
             float cameraX = camera.xo + (camera.x - camera.xo) * partial;
             float cameraZ = camera.zo + (camera.z - camera.zo) * partial;
             float distance =
@@ -83,6 +85,8 @@ public final class SkyRenderer {
                     level.depth + 2,
                     time,
                     (int) Math.ceil(distance / 12),
+                    texMgr.settings.fastGraphics() || !texMgr.settings.threeDClouds,
+                    isNightmareZone(camera) ? "/clouds.png" : "/terrain/modern_clouds.png",
                     r,
                     g,
                     b);
@@ -150,6 +154,74 @@ public final class SkyRenderer {
         sr.end();
 
         if (cullWasEnabled) GL11.glEnable(GL11.GL_CULL_FACE);
+    }
+
+    public void renderGradient(Player camera, float partial, float far) {
+        if (level == null || camera == null || level.hasRainbowSky() || isNightmareZone(camera))
+            return;
+        float radius = Math.max(4, far * .65f);
+        float sunset = level.twilightStrength();
+        double orbit = level.getCelestialAngleSmooth() * Math.PI * 2;
+        float sunHeight = (float) Math.cos(orbit);
+        int horizonSide = orbit > Math.PI ? 1 : -1;
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_CURRENT_BIT);
+        GL11.glPushMatrix();
+        try {
+            GL11.glTranslatef(
+                    camera.xo + (camera.x - camera.xo) * partial,
+                    camera.yo + (camera.y - camera.yo) * partial,
+                    camera.zo + (camera.z - camera.zo) * partial);
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_FOG);
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glDisable(GL11.GL_BLEND);
+            GL11.glDepthMask(false);
+            for (int row = 0; row < 12; row++) {
+                double low = (row / 12.0 - .5) * Math.PI;
+                double high = ((row + 1) / 12.0 - .5) * Math.PI;
+                GL11.glBegin(GL11.GL_QUAD_STRIP);
+                for (int column = 0; column <= 32; column++) {
+                    double azimuth = column * Math.PI / 16;
+                    skyVertex(low, azimuth, radius, sunset, sunHeight, horizonSide);
+                    skyVertex(high, azimuth, radius, sunset, sunHeight, horizonSide);
+                }
+                GL11.glEnd();
+            }
+        } finally {
+            GL11.glPopMatrix();
+            GL11.glPopAttrib();
+        }
+    }
+
+    private void skyVertex(
+            double latitude,
+            double azimuth,
+            float radius,
+            float sunset,
+            float sunHeight,
+            int horizonSide) {
+        float y = (float) Math.sin(latitude);
+        float x = (float) (Math.cos(latitude) * Math.cos(azimuth));
+        float z = (float) (Math.cos(latitude) * Math.sin(azimuth));
+        float elevation = Math.min(1, Math.max(0, y) * 1.4f);
+        float glow =
+                sunset
+                        * Math.max(0, 1 - Math.abs(y - sunHeight * .35f) * 3.3f)
+                        * Math.max(0, x * horizonSide);
+        float r = skyChannel(16, elevation, glow, 1);
+        float g = skyChannel(8, elevation, glow, .47f);
+        float b = skyChannel(0, elevation, glow, .20f);
+        GL11.glColor3f(r, g, b);
+        GL11.glVertex3f(radius * x, radius * y, radius * z);
+    }
+
+    private float skyChannel(int shift, float elevation, float glow, float warm) {
+        float horizon = ((level.fogColor >> shift) & 255) / 255f;
+        float zenith = ((level.skyColor >> shift) & 255) / 255f;
+        float base = horizon + (zenith - horizon) * elevation;
+        return base + (warm - base) * glow;
     }
 
     public void renderSunMoon(Player cam, float partial) {

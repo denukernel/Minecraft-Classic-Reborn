@@ -26,20 +26,22 @@ public class Zombie extends HumanoidMob {
                 || hordeCooldown > 0) return;
         net.classicremastered.minecraft.Difficulty difficulty =
                 net.classicremastered.minecraft.CombatRules.difficulty(level);
-        if (difficulty != net.classicremastered.minecraft.Difficulty.NORMAL
-                && difficulty != net.classicremastered.minecraft.Difficulty.HARD) return;
+        if (difficulty.ordinal() < net.classicremastered.minecraft.Difficulty.NORMAL.ordinal())
+            return;
         net.classicremastered.minecraft.Entity attacker =
                 source instanceof net.classicremastered.minecraft.entity.Arrow arrow
                         ? arrow.getOwner()
                         : source;
-        if (!(attacker instanceof Mob living)
+        if (attacker instanceof CrossbowTurret || !(attacker instanceof Mob living)
                 || living.health <= 0
                 || attacker.removed
                 || attacker instanceof Zombie && !(attacker instanceof Skeleton)
                 || net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(
                         attacker)) return;
         hordeCooldown = 40;
-        float radius = difficulty == net.classicremastered.minecraft.Difficulty.HARD ? 32 : 24;
+        float radius = difficulty.ordinal() >= net.classicremastered.minecraft.Difficulty.HARD.ordinal()
+                ? 32
+                : 24;
         for (Object nearby : level.findEntities(this, bb.grow(radius, 12, radius))) {
             if (nearby instanceof Zombie zombie
                     && !(zombie instanceof Skeleton)
@@ -76,6 +78,17 @@ public class Zombie extends HumanoidMob {
         return !isSunImmune();
     }
 
+    public final boolean canBurnInSunlight() {
+        var headgear =
+                equipment == null
+                        ? null
+                        : net.classicremastered.minecraft.level.itemstack.Equipment.gear(
+                                equipment[0]);
+        return isSunlightVulnerable()
+                && (headgear == null || headgear.slot != 0)
+                && !((!equipmentRolled || legacyArmor) && helmet);
+    }
+
     protected boolean isSunImmune() {
         return false;
     }
@@ -84,7 +97,16 @@ public class Zombie extends HumanoidMob {
     @Override
     public void tick() {
         if (hordeCooldown > 0) hordeCooldown--;
+        if (riding != null
+                && !(riding instanceof net.classicremastered.minecraft.entity.BoatEntity)
+                && canBurnInSunlight()
+                && !isInWaterOrOnWater()
+                && net.classicremastered.minecraft.CombatRules.difficulty(level)
+                        == net.classicremastered.minecraft.Difficulty.EXTREME
+                && level.shouldUndeadBurnAt(this)) unmount();
         super.tick();
+        if (remainingFireTicks > 0 && isInWaterOrOnWater())
+            remainingFireTicks = 0;
         if (traits == null)
             traits =
                     new net.classicremastered.minecraft.mob.ai.goal.GoalSelector(
@@ -94,20 +116,11 @@ public class Zombie extends HumanoidMob {
 
     // --- Water check helper ---
     public boolean isInWaterOrOnWater() {
-        // Submerged or standing in a water block
-        int bx = MathHelper.floor(x);
-        int by = MathHelper.floor(y);
-        int bz = MathHelper.floor(z);
-
-        int id = level.getTile(bx, by, bz);
-        if (id == net.classicremastered.minecraft.level.tile.Block.WATER.id
-                || id == net.classicremastered.minecraft.level.tile.Block.STATIONARY_WATER.id) {
+        if (isInWater())
             return true;
-        }
-
-        // Check just below feet for shallow water
-        int idBelow = level.getTile(bx, by - 1, bz);
-        return idBelow == net.classicremastered.minecraft.level.tile.Block.WATER.id
-                || idBelow == net.classicremastered.minecraft.level.tile.Block.STATIONARY_WATER.id;
+        int bx = MathHelper.floor(x);
+        int bz = MathHelper.floor(z);
+        return level.isWater(bx, MathHelper.floor(bb.y0), bz)
+                || level.isWater(bx, MathHelper.floor(bb.y0 - .08f), bz);
     }
 }

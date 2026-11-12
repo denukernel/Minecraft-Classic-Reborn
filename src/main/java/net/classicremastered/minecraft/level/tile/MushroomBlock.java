@@ -1,9 +1,5 @@
 package net.classicremastered.minecraft.level.tile;
 
-import java.util.Random;
-
-import net.classicremastered.minecraft.level.Level;
-
 public final class MushroomBlock extends FlowerBlock {
 
    protected MushroomBlock(int var1, int var2) {
@@ -12,11 +8,8 @@ public final class MushroomBlock extends FlowerBlock {
       this.setBounds(0.5F - var3, 0.0F, 0.5F - var3, var3 + 0.5F, var3 * 2.0F, var3 + 0.5F);
    }
 
-   public final void update(Level level, int x, int y, int z, Random rand) {
-      int var6 = level.getTile(x, y - 1, z);
-      if(level.isLit(x, y, z) || var6 != STONE.id && var6 != GRAVEL.id && var6 != COBBLESTONE.id) {
-         level.setTile(x, y, z, 0);
-      }
-
+    @Override
+    protected boolean supports(int blockId) {
+        return blockId == STONE.id || blockId == COBBLESTONE.id;
    }
 }

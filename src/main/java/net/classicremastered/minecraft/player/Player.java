@@ -1,12 +1,17 @@
 package net.classicremastered.minecraft.player;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.GrapplingHookItem;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.LadderBlock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.HumanoidModel;
+import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
@@ -21,6 +26,9 @@ public class Player extends Mob {
     public transient java.util.Map<Integer, java.util.List<Mob>> mobWandSelections;
 
     private transient boolean deathMessageSent;
+    private transient int frostbiteSlowTicks;
+    private transient net.classicremastered.minecraft.mob.Zombie environmentalDeathAttacker;
+    private transient int environmentalDeathCreditTicks;
     public transient net.classicremastered.minecraft.mob.StickFigure bossComboOwner;
 
     public Player(Level var1) {
@@ -38,7 +46,6 @@ public class Player extends Mob {
         this.heightOffset = 1.62F;
         this.health = 20;
         this.modelName = "humanoid";
-        this.rotOffs = 180.0F;
         this.ai = new PlayerInputAI(this);
     }
 
@@ -50,8 +57,135 @@ public class Player extends Mob {
     // --- Void damage tracking ---
     private int voidDamageCounter = 0; // counts ticks under y = -30
 
+    private transient boolean spectator;
+    private transient boolean autoJumpQueued;
+
     public boolean canFly = false; // set by GameMode.apply(...)
     public boolean isFlying = false; // toggled by key in Creative
+
+    public float aimYaw(float partial) {
+        return yRotO + (yRot - yRotO) * partial + 180f;
+    }
+
+    public Vec3D aimDirection(float partial) {
+        float pitch = -(xRotO + (xRot - xRotO) * partial) * 0.017453292F;
+        float yaw = -aimYaw(partial) * 0.017453292F - 3.1415927F;
+        float cosPitch = MathHelper.cos(pitch);
+        return new Vec3D(
+                MathHelper.sin(yaw) * cosPitch,
+                MathHelper.sin(pitch),
+                MathHelper.cos(yaw) * cosPitch);
+    }
+
+    public float movementStrafe() {
+        return -input.xxa;
+    }
+
+    private boolean canAutoJump() {
+        return minecraft != null
+                && minecraft.settings != null
+                && minecraft.settings.autoJump
+                && minecraft.currentScreen == null
+                && onGround
+                && health > 0
+                && !spectator
+                && !noPhysics
+                && !sneaking
+                && !isFlying
+                && riding == null
+                && frozenTicks == 0
+                && mcTicks == 0
+                && (input.yya != 0 || input.xxa != 0)
+                && !isInWater()
+                && !isInLava()
+                && !LadderBlock.isLadder(
+                        level.getTile(
+                                (int) Math.floor(x),
+                                (int) Math.floor(bb.y0 + 0.05F),
+                                (int) Math.floor(z)));
+    }
+
+    boolean consumeAutoJump() {
+        boolean jump = autoJumpQueued && canAutoJump();
+        autoJumpQueued = false;
+        return jump;
+    }
+
+    @Override
+    public void travel(float strafe, float forward) {
+        float previousX = x;
+        float previousZ = z;
+        super.travel(strafe, forward);
+        autoJumpQueued =
+                canAutoJump()
+                        && !input.jumping
+                        && findAutoJumpObstacle(x - previousX, z - previousZ, strafe, forward);
+    }
+
+    private boolean findAutoJumpObstacle(float dx, float dz, float strafe, float forward) {
+        float yaw = yRot * ((float) Math.PI / 180);
+        float sin = MathHelper.sin(yaw);
+        float cos = MathHelper.cos(yaw);
+        float inputX = strafe * cos - forward * sin;
+        float inputZ = forward * cos + strafe * sin;
+        float speed = MathHelper.sqrt(dx * dx + dz * dz);
+        // A clipped movement vector can point along a ledge the player is walking into.
+        if (horizontalCollision || speed * speed <= 0.001F) {
+            dx = inputX * 0.10F;
+            dz = inputZ * 0.10F;
+            speed = MathHelper.sqrt(dx * dx + dz * dz);
+        }
+        if (speed == 0 || forward < -0.15F || (-sin * dx + cos * dz) / speed < -0.15F) {
+            return false;
+        }
+
+        float lookAhead = speed + (input.running ? 0.98F : 0.70F);
+        float sweepX = dx / speed * lookAhead;
+        float sweepZ = dz / speed * lookAhead;
+        float halfWidth = (bb.x1 - bb.x0) * 0.5F - 0.001F;
+        float feet = bb.y0;
+        float jumpHeight = 1.20F;
+        float probeY = feet + 0.51F;
+        Vec3D start = new Vec3D(x, probeY, z);
+        Vec3D end = new Vec3D(x + sweepX, probeY, z + sweepZ);
+        List<?> collisions = level.getCubes(bb.expand(0, jumpHeight, 0).expand(sweepX, 0, sweepZ));
+
+        AABB obstacle = null;
+        float nearest = Float.POSITIVE_INFINITY;
+        for (Object collision : collisions) {
+            AABB box = (AABB) collision;
+            float distance = autoJumpContact(box, halfWidth, start, end);
+            if (distance < nearest) {
+                nearest = distance;
+                obstacle = box;
+            }
+        }
+        if (obstacle == null || obstacle.y1 - feet > jumpHeight) return false;
+
+        // A ceiling can clip the jump apex while still leaving room to clear the ledge.
+        float requiredHeadroom = bb.y1 + (obstacle.y1 - feet) + 0.01F;
+        float contact = Math.min(lookAhead, MathHelper.sqrt(nearest) + 0.05F);
+        Vec3D clearanceEnd = new Vec3D(x + dx / speed * contact, probeY, z + dz / speed * contact);
+        for (Object collision : collisions) {
+            AABB box = (AABB) collision;
+            if (box.y1 <= obstacle.y1 || box.y0 >= requiredHeadroom) continue;
+            AABB ceiling = new AABB(box.x0, probeY - 1, box.z0, box.x1, probeY + 1, box.z1);
+            if (autoJumpContact(ceiling, halfWidth, start, clearanceEnd)
+                    < Float.POSITIVE_INFINITY) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static float autoJumpContact(AABB box, float halfWidth, Vec3D start, Vec3D end) {
+        if (start.y <= box.y0 || start.y >= box.y1) return Float.POSITIVE_INFINITY;
+        AABB expanded = box.grow(halfWidth, 0, halfWidth);
+        if (expanded.contains(start)) return 0;
+        MovingObjectPosition contact = expanded.clip(start, end);
+        return contact == null ? Float.POSITIVE_INFINITY : start.distanceSquared(contact.vec);
+    }
+
     public float flySpeed = 1.12F; // vertical step per tick while flying
 
     // --- Mind control state (used by MobControl) ---
@@ -66,7 +200,7 @@ public class Player extends Mob {
     public int deltaCurseCounter = 0;
 
     public int healthDrinkTimer = 0;
-    private int lastSelectedSlot = -1;
+    public transient GrapplingHookItem.Tether grapple;
 
     // poison deals damage every poisonEvery ticks, for poisonTicks total ticks
     public int poisonTicks = 0;
@@ -78,6 +212,12 @@ public class Player extends Mob {
 
     // --- Sneak (crouch) ---
     public boolean sneaking = false;
+    private transient boolean ladderGripHeld;
+
+    public boolean isHoldingLadder() {
+        return !isFlying && (sneaking || ladderGripHeld);
+    }
+
     private transient float sneakProgress;
     private transient float previousSneakProgress;
     private transient float previousHeightOffset;
@@ -92,12 +232,24 @@ public class Player extends Mob {
 
     @Override
     public void tick() {
+        if (packedTurretHealth > 0) {
+            net.classicremastered.minecraft.level.itemstack.TurretItems.migrateLegacyCrate(this);
+        }
+        if (environmentalDeathCreditTicks > 0 && --environmentalDeathCreditTicks == 0) {
+            environmentalDeathAttacker = null;
+        }
         if (!developerPowers().aimingBlock(this)) developerPowers().cancelBlockAim();
         previousHeightOffset = heightOffset;
         previousSneakProgress = sneakProgress;
+        GrapplingHookItem.updateTether(this);
         super.tick();
+        if (frostbiteSlowTicks > 0) frostbiteSlowTicks--;
         sneakProgress =
                 sneaking ? Math.min(1, sneakProgress + .5f) : Math.max(0, sneakProgress - .5f);
+    }
+
+    public float frostbiteMovementMultiplier() {
+        return frostbiteSlowTicks > 0 ? .65f : 1f;
     }
 
     public float getSneakProgress(float partial) {
@@ -115,17 +267,14 @@ public class Player extends Mob {
     }
 
     public void dropSelectedItem(boolean wholeStack) {
-        if (level == null || inventory == null) return;
+        if (spectator || level == null || inventory == null)
+            return;
 
         int id = inventory.getSelected();
         int available = inventory.getCount(inventory.selected);
         if (id <= 0 || available <= 0) return;
 
-        float yaw = -yRot * (float) Math.PI / 180 - (float) Math.PI;
-        float pitch = -xRot * (float) Math.PI / 180;
-        float dirX = MathHelper.sin(yaw) * MathHelper.cos(pitch);
-        float dirY = MathHelper.sin(pitch);
-        float dirZ = MathHelper.cos(yaw) * MathHelper.cos(pitch);
+        Vec3D direction = aimDirection(1);
 
         // Player.y already includes eye height. Spawn inside the player's
         // footprint so the drop cannot start on the other side of a wall.
@@ -137,7 +286,8 @@ public class Player extends Mob {
             if (itemId >= Item.items.length || Item.items[itemId] == null) return;
             dropped =
                     new net.classicremastered.minecraft.entity.DroppedItem(
-                            level, x, spawnY, z, itemId, count);
+                                    level, x, spawnY, z, itemId, count)
+                            .withCrate(inventory.crate(inventory.selected));
         } else {
             if (Block.blocks[id] == null) return;
             dropped =
@@ -145,9 +295,9 @@ public class Player extends Mob {
                             level, x, spawnY, z, id, count);
         }
 
-        dropped.xd = dirX * .3f;
-        dropped.yd = dirY * .3f + .1f;
-        dropped.zd = dirZ * .3f;
+        dropped.xd = direction.x * .3f;
+        dropped.yd = direction.y * .3f + .1f;
+        dropped.zd = direction.z * .3f;
         if (inventory.removeSelected(count)) level.addEntity(dropped);
     }
 
@@ -155,58 +305,23 @@ public class Player extends Mob {
      * Switch hitbox + eye height while keeping FEET glued and preventing stand-up in tight spaces.
      */
     public void setSneaking(boolean s) {
-        if (this.sneaking == s) return;
-
-        // Keep current feet Y (true bottom of the AABB)
-        final float feetY =
-                (this.bb != null) ? this.bb.y0 : (this.y - this.heightOffset + this.ySlideOffset);
-
-        if (!s) {
-            // Attempt to UNSNEAK: make sure there's room for a standing AABB at current
-            // feet
-            final float hw = 0.6F * 0.5F;
-            final float targetHeight = STAND_HEIGHT;
-
-            net.classicremastered.minecraft.phys.AABB test =
-                    new net.classicremastered.minecraft.phys.AABB(
-                            this.x - hw,
-                            feetY,
-                            this.z - hw,
-                            this.x + hw,
-                            feetY + targetHeight,
-                            this.z + hw);
-
-            // If any solid cubes intersect, refuse to stand up
-            if (this.level != null && !this.level.getCubes(test).isEmpty()) {
-                // stay sneaking
-                s = true;
-            }
+        if (sneaking == s) return;
+        if (!s && level != null) {
+            float inset = .001f;
+            AABB headroom =
+                    new AABB(
+                            bb.x0 + inset,
+                            bb.y1 + inset,
+                            bb.z0 + inset,
+                            bb.x1 - inset,
+                            bb.y0 + STAND_HEIGHT - inset,
+                            bb.z1 - inset);
+            if (!level.getCubes(headroom).isEmpty()) return;
         }
-
-        // Apply state
-        this.sneaking = s;
-
-        // Set new eye height + bb size
-        this.heightOffset = s ? SNEAK_HOFFSET : STAND_HOFFSET;
-        this.setSize(0.6F, s ? SNEAK_HEIGHT : STAND_HEIGHT);
-
-        // Reposition so FEET stay where they were (prevents tiny “falls” and damage)
-        // y = feet + eyeHeight - ySlideOffset (matches Entity.move write-back)
-        this.y = feetY + this.heightOffset - this.ySlideOffset;
-
-        // Rebuild AABB around new dimensions without changing x/z
-        if (this.bb == null) {
-            this.setPos(this.x, this.y, this.z);
-        } else {
-            float hw = this.bbWidth * 0.5F;
-            float hh = this.bbHeight * 0.5F;
-            this.bb.x0 = this.x - hw;
-            this.bb.x1 = this.x + hw;
-            this.bb.y0 = feetY;
-            this.bb.y1 = feetY + this.bbHeight;
-            this.bb.z0 = this.z - hw;
-            this.bb.z1 = this.z + hw;
-        }
+        sneaking = s;
+        heightOffset = s ? SNEAK_HOFFSET : STAND_HOFFSET;
+        setSize(.6f, s ? SNEAK_HEIGHT : STAND_HEIGHT);
+        y = bb.y0 + heightOffset - ySlideOffset;
     }
 
     private void moveRelativeFlying(float strafe, float forward, float accel) {
@@ -236,8 +351,48 @@ public class Player extends Mob {
         return a + (b - a) * t;
     }
 
+    public boolean isSpectator() {
+        return spectator;
+    }
+
+    public void setSpectator(boolean spectator) {
+        if (this.spectator == spectator)
+            return;
+        this.spectator = spectator;
+        this.noPhysics = spectator;
+        this.xd = this.yd = this.zd = 0;
+        this.fallDistance = 0;
+        this.onGround = false;
+        if (spectator) {
+            unmount();
+            setSneaking(false);
+            developerPowers().cancelBlockAim();
+        } else if (level != null
+                && level.getCubes(bb).stream().anyMatch(box -> bb.intersects((AABB) box))) {
+            setPos(level.xSpawn + 0.5F, level.ySpawn, level.zSpawn + 0.5F);
+        }
+    }
+
+    @Override
+    public boolean isPickable() {
+        return !spectator && super.isPickable();
+    }
+
+    @Override
+    public boolean isPushable() {
+        return !spectator && super.isPushable();
+    }
+
     @Override
     public void aiStep() {
+        if (spectator) {
+            autoJumpQueued = false;
+            this.input.updateMovement();
+            boolean controlsActive = minecraft != null && minecraft.currentScreen == null;
+            fly(controlsActive && this.input.jumping, controlsActive && controlHeld(),
+                    controlsActive && shiftHeld());
+            return;
+        }
         this.inventory.tick();
 
         // Handle Health Drink healing timer
@@ -251,18 +406,14 @@ public class Player extends Mob {
             }
         }
 
-        // Grappling Hook slot switch check
-        if (this.inventory.selected != lastSelectedSlot) {
-            net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.remove(this);
-            lastSelectedSlot = this.inventory.selected;
-        }
-
         this.oBob = this.bob;
         this.input.updateMovement();
         SimpleChunkManager.checkFarLandsWarning(minecraft, this);
 
         // ===== difficulty debuffs =====
-        if (frozenTicks > 0) {
+        boolean movementFrozen = frozenTicks > 0;
+        if (movementFrozen) {
+            autoJumpQueued = false;
             frozenTicks--;
 
             // Suppress input this tick
@@ -344,68 +495,13 @@ public class Player extends Mob {
 
         // ===== Movement / physics =====
 
-        // ===== Modern Creative Flight Controls =====
-        boolean jumpHeld = this.input.jumping; // Space
-        boolean ctrlHeld =
-                Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
-                        || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL); // Ctrl
-        // =
-        // down
-        boolean shiftHeld =
-                Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)
-                        || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT); // Shift
-        // =
-        // boost
-
+        this.ladderGripHeld = (minecraft == null || minecraft.currentScreen == null) && shiftHeld();
         if (this.isFlying && this.canFly) {
-            this.fallDistance = 0.0F;
-            this.onGround = false;
-
-            // --- Speeds ---
-            float boost = developerPowers().movementMultiplier(this);
-            float base = Math.max(0.05F, this.flySpeed) * boost;
-            float accel = shiftHeld ? base * 3.0F : base * 2.0F; // Shift = faster
-
-            float strafe = this.input.xxa;
-            float forward = this.input.yya;
-            boolean up = jumpHeld;
-            boolean down = ctrlHeld;
-
-            // --- Directional flight (yaw/pitch aware) ---
-            this.moveRelativeFlying(strafe, forward, accel * 0.35F);
-
-            // --- Vertical control (fixed) ---
-            float vertSpeed = accel * 0.55F;
-            if (up && !down) this.yd = lerp(this.yd, vertSpeed, 0.3F);
-            if (down && !up) this.yd = lerp(this.yd, -vertSpeed, 0.3F);
-            if (!up && !down) this.yd *= 0.6F; // hover
-
-            // --- Move ---
-            this.move(this.xd, this.yd, this.zd);
-
-            // --- Stop instantly if no input ---
-            if (strafe == 0.0F && forward == 0.0F && !up && !down) {
-                this.xd = 0.0F;
-                this.yd = 0.0F;
-                this.zd = 0.0F;
-            } else {
-                // otherwise apply normal damping
-                this.xd *= 0.90F;
-                this.yd *= 0.90F;
-                this.zd *= 0.90F;
-            }
-
-            // --- Clamp speed ---
-            float max = (shiftHeld ? 1.4F : 0.9F) * boost;
-            float mag = MathHelper.sqrt(this.xd * this.xd + this.yd * this.yd + this.zd * this.zd);
-            if (mag > max) {
-                float s = max / mag;
-                this.xd *= s;
-                this.yd *= s;
-                this.zd *= s;
-            }
+            autoJumpQueued = false;
+            fly(this.input.jumping, controlHeld(), shiftHeld());
         } else {
             super.aiStep();
+            if (movementFrozen) autoJumpQueued = false;
         }
 
         // ===== Structure Delta curse effect =====
@@ -457,7 +553,10 @@ public class Player extends Mob {
         }
 
         // ===== Classic bob/tilt & entity touches =====
-        float var1 = MathHelper.sqrt(this.xd * this.xd + this.zd * this.zd);
+        float var1 =
+                sneaking
+                        ? (float) Math.hypot(this.x - this.xo, this.z - this.zo)
+                        : MathHelper.sqrt(this.xd * this.xd + this.zd * this.zd);
         float var2 = (float) Math.atan((double) (-this.yd * 0.2F)) * 15.0F;
         if (var1 > 0.1F) var1 = 0.1F;
         if (!this.onGround || this.health <= 0) var1 = 0.0F;
@@ -494,6 +593,67 @@ public class Player extends Mob {
         }
     }
 
+    private boolean controlHeld() {
+        return Keyboard.isKeyDown(Keyboard.KEY_LCONTROL)
+                || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+    }
+
+    private boolean shiftHeld() {
+        return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+    }
+
+    private void fly(boolean jumpHeld, boolean ctrlHeld, boolean shiftHeld) {
+        this.fallDistance = 0.0F;
+        this.onGround = false;
+
+        // --- Speeds ---
+        float boost = spectator ? 1.0F : developerPowers().movementMultiplier(this);
+        float base = Math.max(0.05F, this.flySpeed) * boost;
+        float accel = shiftHeld ? base * 3.0F : base * 2.0F; // Shift = faster
+
+        float strafe = movementStrafe();
+        float forward = this.input.yya;
+        boolean up = jumpHeld;
+        boolean down = ctrlHeld;
+
+        // --- Directional flight (yaw/pitch aware) ---
+        this.moveRelativeFlying(strafe, forward, accel * 0.35F);
+
+        // --- Vertical control (fixed) ---
+        float vertSpeed = accel * 0.55F;
+        if (up && !down)
+            this.yd = lerp(this.yd, vertSpeed, 0.3F);
+        if (down && !up)
+            this.yd = lerp(this.yd, -vertSpeed, 0.3F);
+        if (!up && !down)
+            this.yd *= 0.6F; // hover
+
+        // --- Move ---
+        this.move(this.xd, this.yd, this.zd);
+
+        // --- Stop instantly if no input ---
+        if (strafe == 0.0F && forward == 0.0F && !up && !down) {
+            this.xd = 0.0F;
+            this.yd = 0.0F;
+            this.zd = 0.0F;
+        } else {
+            // otherwise apply normal damping
+            this.xd *= 0.90F;
+            this.yd *= 0.90F;
+            this.zd *= 0.90F;
+        }
+
+        // --- Clamp speed ---
+        float max = (shiftHeld ? 1.4F : 0.9F) * boost;
+        float mag = MathHelper.sqrt(this.xd * this.xd + this.yd * this.yd + this.zd * this.zd);
+        if (mag > max) {
+            float s = max / mag;
+            this.xd *= s;
+            this.yd *= s;
+            this.zd *= s;
+        }
+    }
+
     public void freezeFor(int ticks) {
         if (ticks > frozenTicks) frozenTicks = ticks;
     }
@@ -523,6 +683,8 @@ public class Player extends Mob {
 
     @Override
     public void render(TextureManager var1, float var2) {
+        if (spectator)
+            return;
         if (minecraft != null
                 && minecraft.player == this
                 && minecraft.renderer != null
@@ -578,6 +740,8 @@ public class Player extends Mob {
         this.health = 20;
         this.deathTime = 0;
         this.deathMessageSent = false;
+        this.environmentalDeathAttacker = null;
+        this.environmentalDeathCreditTicks = 0;
     }
 
     @Override
@@ -586,11 +750,15 @@ public class Player extends Mob {
             deathMessageSent = true;
             if (minecraft != null && minecraft.hud != null) {
                 minecraft.hud.addChat(
-                        DeathMessages.message(this, killer, y < -30 ? "void" : damageCause));
+                        DeathMessages.message(
+                                this,
+                                killer,
+                                y < -30 ? "void" : damageCause,
+                                environmentalDeathAttacker));
             }
         }
         // Clear grappling hook anchor on death
-        net.classicremastered.minecraft.level.itemstack.GrapplingHookItem.anchors.remove(this);
+        GrapplingHookItem.detach(this);
         // existing physics
         this.setSize(0.2F, 0.2F);
         this.setPos(this.x, this.y, this.z);
@@ -618,10 +786,12 @@ public class Player extends Mob {
         // --- drop all inventory items/blocks ---
         if (this.inventory != null && this.level != null && !level.keepInventory) {
             java.util.Random rnd = this.level.random;
-            for (int i = 0; i < this.inventory.slots.length; i++) {
-                int id = this.inventory.slots[i];
-                int count = this.inventory.count[i];
-                if (id > 0 && count > 0) {
+            for (int i = 0; i < this.inventory.totalSize(); i++) {
+                int id = this.inventory.getId(i);
+                int count = this.inventory.getCount(i);
+                if (id > 0
+                        && count > 0
+                        && (inventory.isHotbarIndex(i) || inventory.crate(i) != null)) {
                     // Random scatter offset around the player's feet
                     float rx = (rnd.nextFloat() - 0.5F) * 0.4F;
                     float ry = rnd.nextFloat() * 0.3F + 0.1F;
@@ -631,12 +801,13 @@ public class Player extends Mob {
                     if (id >= 256) {
                         dropped =
                                 new net.classicremastered.minecraft.entity.DroppedItem(
-                                        this.level,
-                                        this.x + rx,
-                                        this.y + ry,
-                                        this.z + rz,
-                                        id - 256,
-                                        count);
+                                                this.level,
+                                                this.x + rx,
+                                                this.y + ry,
+                                                this.z + rz,
+                                                id - 256,
+                                                count)
+                                        .withCrate(inventory.crate(i));
                     } else {
                         dropped =
                                 new net.classicremastered.minecraft.entity.DroppedBlock(
@@ -656,34 +827,46 @@ public class Player extends Mob {
                     this.level.addEntity(dropped);
 
                     // Clear slot
-                    this.inventory.slots[i] = -1;
-                    this.inventory.count[i] = 0;
+                    this.inventory.setIdCount(i, -1, 0);
                 }
             }
         }
 
-        // --- new death sound ---
+        // Use the modern player damage sound on death as well.
         if (this.level != null) {
-            this.level.playSound("random/classic_hurt", this, 1.0F, 1.0F);
+            this.level.playSound("damage/hit", this, 1.0F, 1.0F);
         }
     }
 
     public int coins = 0;
+    public int packedTurretHealth;
+    public int packedTurretAmmo;
+    public boolean packedTurretEnabled;
 
     @Override
     public void hurt(Entity attacker, int damage) {
+        if (spectator) return;
         if (attacker != null && developerPowers().dodging(this)) return;
         damage = developerPowers().incomingDamage(this, attacker, damage);
-        if (net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers.protects(this)) {
-            damage = Math.min(damage, Math.max(0, health - 1));
-            if (damage <= 0) return;
-        }
         if (!this.level.creativeMode) {
+            int previousHealth = this.health;
             super.hurt(attacker, damage);
+            if (attacker instanceof net.classicremastered.minecraft.mob.Frostbite
+                    && health > 0
+                    && health < previousHealth) {
+                frostbiteSlowTicks = 60;
+            }
+            Entity owner = DeathMessages.resolveAttacker(attacker);
+            if (owner != null && this.health > 0 && this.health < previousHealth) {
+                environmentalDeathAttacker =
+                        owner instanceof net.classicremastered.minecraft.mob.Zombie zombie
+                                ? zombie
+                                : null;
+                environmentalDeathCreditTicks = environmentalDeathAttacker == null ? 0 : 100;
+            }
 
-            // --- new hurt sound ---
             if (this.level != null && this.health > 0) { // only if still alive
-                this.level.playSound("random/classic_hurt", this, 1.0F, 1.0F);
+                this.level.playSound("damage/hit", this, 1.0F, 1.0F);
             }
         }
     }
@@ -695,13 +878,7 @@ public class Player extends Mob {
 
     @Override
     public void awardKillScore(Entity e, int value) {
-        super.awardKillScore(e, value);
-        int add = 0;
-        if (e instanceof net.classicremastered.minecraft.mob.Zombie) add = 1;
-        if (e instanceof net.classicremastered.minecraft.mob.Skeleton) add = 2;
-        if (e instanceof net.classicremastered.minecraft.mob.Spider) add = 2;
-        if (e instanceof net.classicremastered.minecraft.mob.Enderman) add = 4;
-        this.coins += add;
+        this.score += value;
     }
 
     @Override
