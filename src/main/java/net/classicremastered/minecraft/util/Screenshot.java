@@ -13,11 +13,34 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
+
+import net.classicremastered.minecraft.GameSettings.GraphicsMode;
+import net.classicremastered.minecraft.player.Player;
 
 public final class Screenshot {
     private Screenshot() {}
 
     public static File take(File gameDir) {
+        return take(gameDir, null);
+    }
+
+    public static File takeBugReport(File gameDir, Player player, GraphicsMode graphicsMode) {
+        String details = "Graphics: " + graphicsMode.label;
+        if (player != null) {
+            details =
+                    String.format(
+                            Locale.ROOT,
+                            "XYZ: %.2f / %.2f / %.2f   |   %s",
+                            player.x,
+                            player.y,
+                            player.z,
+                            details);
+        }
+        return take(gameDir, details);
+    }
+
+    private static File take(File gameDir, String bugReportDetails) {
         int w = Display.getWidth();
         int h = Display.getHeight();
         if (w <= 0 || h <= 0) return null;
@@ -32,7 +55,10 @@ public final class Screenshot {
         }
 
         String folderName = fromCrash ? "crash_screenshots" : "screenshots";
-        String prefix = fromCrash ? "crash-report-" : "screenshot-";
+        String prefix =
+                fromCrash
+                        ? "crash-report-"
+                        : bugReportDetails != null ? "bug-report-" : "screenshot-";
         File outDir = new File(gameDir, folderName);
         if (!outDir.exists() && !outDir.mkdirs()) {
             System.err.println("[Screenshot] Cannot create: " + outDir.getAbsolutePath());
@@ -112,8 +138,9 @@ public final class Screenshot {
             }
 
             g.dispose();
+        } else if (bugReportDetails != null) {
+            drawBugReportOverlay(img, bugReportDetails);
         }
-
 
         try {
             ImageIO.write(img, "png", out);
@@ -122,6 +149,29 @@ public final class Screenshot {
         } catch (IOException e) {
             e.printStackTrace();
             return null;
+        }
+    }
+
+    private static void drawBugReportOverlay(BufferedImage image, String details) {
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setRenderingHint(
+                    RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+            int width =
+                    Math.min(
+                            image.getWidth(),
+                            Math.max(
+                                            g.getFontMetrics().stringWidth(details),
+                                            g.getFontMetrics().stringWidth("Bug Report"))
+                                    + 16);
+            g.setColor(new Color(0, 0, 0, 200));
+            g.fillRect(0, 0, width, 38);
+            g.setColor(Color.WHITE);
+            g.drawString("Bug Report", 8, 15);
+            g.drawString(details, 8, 31);
+        } finally {
+            g.dispose();
         }
     }
 

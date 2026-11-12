@@ -834,7 +834,9 @@ public abstract class Mob extends Entity {
         }
         if (ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic)
             basic.bind(level, this);
-        this.ai.hurt(src, dmg);
+        if (this.ai != null) {
+            this.ai.hurt(src, dmg);
+        }
 
         if (!freshHit) {
             if (this.lastHealth - dmg >= this.health) return;
@@ -846,17 +848,7 @@ public abstract class Mob extends Entity {
             this.hurtTime = this.hurtDuration = 10;
         }
 
-        String hurtSound = soundHurt;
-        if (hurtSound == null && !(this instanceof net.classicremastered.minecraft.player.Player))
-            hurtSound = "damage/hit";
-        if (this.health > 0 && hurtSound != null && this.level != null) {
-            if (this.level.minecraft == null
-                    || this.level.minecraft.settings == null
-                    || this.level.minecraft.settings.allowMobSounds) {
-                float pitch = randPitch(hurtPitchMin, hurtPitchMax);
-                this.level.playSound(hurtSound, this, 1.0F, pitch);
-            }
-        }
+        playHurtSound();
 
         this.hurtDir = 0.0F;
         if (src != null) {
@@ -945,6 +937,16 @@ public abstract class Mob extends Entity {
                                 net.classicremastered.minecraft.level.itemstack.Item.ENDER_PEARL
                                         .id));
             }
+            if (this instanceof Pig || this instanceof Cow) {
+                net.classicremastered.minecraft.level.itemstack.ItemRegistry.bootstrap();
+                var meat =
+                        this instanceof Pig
+                                ? net.classicremastered.minecraft.level.itemstack.Item.RAW_PORKCHOP
+                                : net.classicremastered.minecraft.level.itemstack.Item.RAW_BEEF;
+                level.addEntity(
+                        new net.classicremastered.minecraft.entity.DroppedItem(
+                                level, x, y, z, meat.id, 1 + level.random.nextInt(3)));
+            }
             if (this instanceof Pig || this instanceof Spider) {
                 var item =
                         this instanceof Pig
@@ -1005,9 +1007,11 @@ public abstract class Mob extends Entity {
         this.xd /= 2.0F;
         this.yd /= 2.0F;
         this.zd /= 2.0F;
-        this.xd -= dx / mag * power;
+        if (mag > 0.0F && Float.isFinite(mag)) {
+            this.xd -= dx / mag * power;
+            this.zd -= dz / mag * power;
+        }
         this.yd += 0.4F;
-        this.zd -= dz / mag * power;
         if (this.yd > 0.4F) this.yd = 0.4F;
     }
 
@@ -1015,6 +1019,20 @@ public abstract class Mob extends Entity {
         if (health <= 0 || removed) return;
         hurtTime = hurtDuration = 10;
         hurtDir = (float) Math.toDegrees(Math.atan2(dz, dx)) - yRot;
+    }
+
+    public void playHurtSound() {
+        if (health <= 0 || dead || removed || level == null) return;
+        if (level.minecraft != null
+                && level.minecraft.settings != null
+                && !level.minecraft.settings.allowMobSounds) return;
+
+        String hurtSound = soundHurt;
+        if (hurtSound == null && !(this instanceof net.classicremastered.minecraft.player.Player))
+            hurtSound = "damage/hit";
+        if (hurtSound != null) {
+            level.playSound(hurtSound, this, 1.0F, randPitch(hurtPitchMin, hurtPitchMax));
+        }
     }
 
     /** Fall damage applies in all modes for consistency. */

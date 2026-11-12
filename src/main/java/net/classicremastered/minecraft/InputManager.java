@@ -254,7 +254,9 @@ public class InputManager {
                     && mc.selected.entity instanceof Mob target) {
                 if (!mc.level.isNetworkMode()
                         && mc.entityWithinReach(target)
-                        && target.ignite(100)) {
+                        && (target instanceof net.classicremastered.minecraft.mob.Creeper creeper
+                                ? creeper.igniteFuse()
+                                : target.ignite(100))) {
                     mc.level.playSound("random/click", target, .8f, 1f);
                 }
                 return;
@@ -337,6 +339,12 @@ public class InputManager {
                                 mc.level, ox, oy, oz, mc.player);
                         return;
                     }
+                    if (targetedId == Block.SNOW_LAYER.id) {
+                        if (mc.level.setTile(ox, oy, oz, 0)) {
+                            FireBlock.playExtinguishSound(mc.level, ox + .5f, oy + .5f, oz + .5f);
+                        }
+                        return;
+                    }
 
                     if (mc.level != null) {
                         float base = 0.595F;
@@ -389,7 +397,7 @@ public class InputManager {
 
             // 3) LMB break / RMB place block
             int x = ox, y = oy, z = oz;
-            if (button == 1) {
+            if (button == 1 && mc.level.getTile(ox, oy, oz) != Block.SNOW_LAYER.id) {
                 switch (face) {
                     case 0:
                         --y;
@@ -589,18 +597,7 @@ public class InputManager {
                 }
 
                 if (Keyboard.getEventKey() == Keyboard.KEY_F2) {
-                    java.io.File file =
-                            net.classicremastered.minecraft.util.Screenshot.take(Minecraft.mcDir);
-                    if (file != null) {
-                        if (mc.hud != null) {
-                            mc.hud.addChat(
-                                    "&aScreenshot saved! &7(Type &e/screenshots&7 to open folder)");
-                        }
-                    } else {
-                        if (mc.hud != null) {
-                            mc.hud.addChat("&cFailed to save screenshot.");
-                        }
-                    }
+                    mc.pendingScreenshot = true;
                 }
 
                 // Inventory

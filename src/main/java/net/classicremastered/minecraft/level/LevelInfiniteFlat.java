@@ -266,7 +266,7 @@ public final class LevelInfiniteFlat extends Level {
                         int id = getTile(x, y, z);
                         if (id > 0) {
                             Block b = Block.blocks[id];
-                            if (b != null && b.canExplode()) {
+                            if (b != null && canBlastDestroy(b, src)) {
                                 if (id == Block.TNT.id) {
                                     net.classicremastered.minecraft.level.tile.TNTBlock.ignite(
                                             this, x, y, z);

@@ -124,10 +124,12 @@ public class GameMode {
                 || face < 0
                 || face > 5
                 || !Block.blocks[blockId].canPlaceOnFace(level, x, y, z, face)) return false;
+        int existingId = level.getTile(x, y, z);
         if (Block.blocks[blockId]
                         instanceof net.classicremastered.minecraft.level.tile.CircuitBlock circuit
                 && circuit.needsSupport()
-                && level.getTile(x, y, z) != 0) return false;
+                && existingId != 0
+                && existingId != Block.SNOW_LAYER.id) return false;
         if (Block.blocks[blockId] instanceof net.classicremastered.minecraft.level.tile.LadderBlock)
             blockId = net.classicremastered.minecraft.level.tile.LadderBlock.forFace(face).id;
         if (Block.blocks[blockId] instanceof net.classicremastered.minecraft.level.tile.StairBlock stair) {

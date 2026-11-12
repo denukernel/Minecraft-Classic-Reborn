@@ -249,12 +249,9 @@ public class ImpactPrimedTnt extends Entity {
         if (this.removed) return;
         this.remove();
 
-        try {
-            // Adapt if your Level uses a different signature.
-            this.level.explode(this.ownerRef, this.x, this.y, this.z, explosionPower);
-        } catch (Throwable ignore) {
-            // If your fork lacks explode API, wire it as needed or leave particles only.
-        }
+        level.playExplosionEffects(x, y, z, explosionPower);
+        level.explode(ownerRef, x, y, z, explosionPower);
+        if (level.particleEngine == null) return;
 
         // debris particles (terrain-colored)
         Random random = new Random();

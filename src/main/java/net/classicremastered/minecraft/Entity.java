@@ -75,6 +75,8 @@ public abstract class Entity implements Serializable {
     private transient int suffocationCooldown;
     private int cactusStackHits;
     private int fireDamageCooldown;
+    private transient boolean waterContactKnown;
+    private transient boolean wasInWater;
 
     public boolean ignite(int ticks) {
         if (ticks <= 0 || level == null || !isAliveEntity(this) || isInWater() || isUnderWater()
@@ -82,6 +84,25 @@ public abstract class Entity implements Serializable {
             return false;
         remainingFireTicks = Math.max(remainingFireTicks, ticks);
         return true;
+    }
+
+    public void extinguishFire() {
+        if (remainingFireTicks <= 0) return;
+        remainingFireTicks = 0;
+        fireDamageCooldown = 0;
+        if (level != null) {
+            net.classicremastered.minecraft.level.tile.FireBlock.playExtinguishSound(
+                    level, x, y, z);
+        }
+    }
+
+    private void updateWaterContact(boolean inWater) {
+        if (inWater && waterContactKnown && !wasInWater) {
+            float speed = MathHelper.sqrt(xd * xd + yd * yd + zd * zd);
+            level.playSound("liquid/splash", this, MathHelper.clamp(speed * .7f, .2f, 1f), 1f);
+        }
+        waterContactKnown = true;
+        wasInWater = inWater;
     }
 
     // --- sound throttling (per tick) ---
@@ -385,10 +406,14 @@ public abstract class Entity implements Serializable {
                 hurt(null, 1, "cactus");
                 cactusDamageCooldown = 10;
             }
-            if (isInWater() || isUnderWater()
-                    || this instanceof net.classicremastered.minecraft.mob.Zombie undead
-                            && undead.isInWaterOrOnWater()) {
-                remainingFireTicks = 0;
+            boolean inWater =
+                    isInWater()
+                            || isUnderWater()
+                            || this instanceof net.classicremastered.minecraft.mob.Zombie undead
+                                    && undead.isInWaterOrOnWater();
+            updateWaterContact(inWater);
+            if (inWater) {
+                extinguishFire();
                 fireDamageCooldown = 0;
             } else {
                 boolean lava = isInLava();
@@ -722,10 +747,8 @@ public abstract class Entity implements Serializable {
     }
 
     public boolean isUnderWater() {
-        int var1;
-        return (var1 = this.level.getTile((int) this.x, (int) (this.y + 0.12F), (int) this.z)) != 0
-                ? Block.blocks[var1].getLiquidType().equals(LiquidType.WATER)
-                : false;
+        float sampleY = this instanceof Player ? y : y + 0.12F;
+        return level != null && level.getLiquidAt(x, sampleY, z) == LiquidType.WATER;
     }
 
     public boolean isInLava() {

@@ -1,8 +1,10 @@
 package net.classicremastered.minecraft.level.tile;
 
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.particle.SmokeParticle;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 
@@ -30,9 +32,16 @@ public final class FireBlock extends Block {
     public static boolean isFlammable(int id) {
         if (id <= 0 || id >= Block.blocks.length) return false;
         Block block = Block.blocks[id];
-        return block == Block.WOOD || block == Block.LOG || block == Block.LEAVES
-                || block == Block.BOOKSHELF || block == Block.TNT || block == Block.DANDELION
-                || block == Block.ROSE || block == Block.SAPLING || block instanceof LadderBlock
+        return block == Block.WOOD
+                || block == Block.LOG
+                || block == Block.LEAVES
+                || block == Block.BOOKSHELF
+                || block == Block.TNT
+                || block == Block.DANDELION
+                || block == Block.ROSE
+                || block == Block.SAPLING
+                || block == Block.SHORT_GRASS
+                || block instanceof LadderBlock
                 || block instanceof StairBlock && block.getDrop() == Block.OAK_STAIRS.id
                 || id >= Block.RED_WOOL.id && id <= Block.WHITE_WOOL.id;
     }
@@ -53,25 +62,69 @@ public final class FireBlock extends Block {
         if (level != null && level.getTile(x, y, z) == Block.FIRE.id) level.setTile(x, y, z, 0);
     }
 
-    @Override public void onAdded(Level level, int x, int y, int z) {
+    public static void playExtinguishSound(Level level, float x, float y, float z) {
+        level.playSound("random/fizz", x, y, z, .7f, 1.6f);
+    }
+
+    private static boolean touchesWater(Level level, int x, int y, int z) {
+        for (int[] side : NEIGHBORS) {
+            if (level.getLiquid(x + side[0], y + side[1], z + side[2])
+                    == net.classicremastered.minecraft.level.liquid.LiquidType.WATER) return true;
+        }
+        return false;
+    }
+
+    private static void emitAmbientEffects(Level level, int x, int y, int z, boolean justLit) {
+        float cx = x + .5f, cz = z + .5f;
+        if (level.player == null || level.player.distanceTo(cx, y + .5f, cz) > 16f) return;
+
+        Random effects = ThreadLocalRandom.current();
+        if (justLit || effects.nextInt(3) == 0) {
+            level.playSound("fire/fire", cx, y + .5f, cz, .45f, .85f + effects.nextFloat() * .25f);
+        }
+        if (level.particleEngine != null) {
+            for (int i = 0; i < 2; i++) {
+                float px = x + .2f + effects.nextFloat() * .6f;
+                float pz = z + .2f + effects.nextFloat() * .6f;
+                level.particleEngine.spawnParticle(
+                        new SmokeParticle(level, px, y + .9f, pz, .045f).scale(1.8f));
+            }
+        }
+    }
+
+    @Override
+    public void onRemoved(Level level, int x, int y, int z) {
+        if (level.getLiquid(x, y, z)
+                        == net.classicremastered.minecraft.level.liquid.LiquidType.WATER
+                || touchesWater(level, x, y, z)) {
+            playExtinguishSound(level, x + .5f, y + .5f, z + .5f);
+        }
+    }
+
+    @Override
+    public void onAdded(Level level, int x, int y, int z) {
         if (level.isNetworkMode()) {
             return;
         }
-        if (!canStay(level, x, y, z)) extinguish(level, x, y, z);
-        else level.addToTickNextTick(x, y, z, id);
+        if (touchesWater(level, x, y, z) || !canStay(level, x, y, z)) extinguish(level, x, y, z);
+        else {
+            emitAmbientEffects(level, x, y, z, true);
+            level.addToTickNextTick(x, y, z, id);
+        }
     }
 
-    @Override public void onNeighborChange(Level level, int x, int y, int z, int changedBlock) {
+    @Override
+    public void onNeighborChange(Level level, int x, int y, int z, int changedBlock) {
         if (level.isNetworkMode()) {
             return;
         }
-        if (!canStay(level, x, y, z)) extinguish(level, x, y, z);
+        if (touchesWater(level, x, y, z) || !canStay(level, x, y, z)) extinguish(level, x, y, z);
     }
 
-    @Override public void update(Level level, int x, int y, int z, Random random) {
-        if (level.isNetworkMode() || level.getTile(x, y, z) != id)
-            return;
-        if (!canStay(level, x, y, z)) {
+    @Override
+    public void update(Level level, int x, int y, int z, Random random) {
+        if (level.isNetworkMode() || level.getTile(x, y, z) != id) return;
+        if (touchesWater(level, x, y, z) || !canStay(level, x, y, z)) {
             extinguish(level, x, y, z);
             return;
         }
@@ -102,9 +155,12 @@ public final class FireBlock extends Block {
                         level.setTile(tx, ty, tz, id);
                     }
                 }
-            }
+                }
         }
-        if (level.getTile(x, y, z) == id) level.addToTickNextTick(x, y, z, id);
+        if (level.getTile(x, y, z) == id) {
+            emitAmbientEffects(level, x, y, z, false);
+            level.addToTickNextTick(x, y, z, id);
+        }
     }
 
     @Override public boolean render(Level level, int x, int y, int z, ShapeRenderer renderer) {

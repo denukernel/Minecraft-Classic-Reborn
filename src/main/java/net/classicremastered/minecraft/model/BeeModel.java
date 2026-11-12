@@ -13,6 +13,8 @@ public final class BeeModel extends Model {
     public ModelPart rightAntenna;
 
     public BeeModel() {
+        // Anchor the seven-pixel body above its feet, including half a pixel of bob.
+        groundOffset = 3.5F;
         int prevW = TexturedQuad.ATLAS_W, prevH = TexturedQuad.ATLAS_H;
         TexturedQuad.ATLAS_W = 64;
         TexturedQuad.ATLAS_H = 64;
@@ -57,9 +59,15 @@ public final class BeeModel extends Model {
     }
 
     @Override
-    public void render(float limbSwing, float limbSwingAmount, float age, float yaw, float pitch, float scale) {
+    public void render(
+            float limbSwing,
+            float limbSwingAmount,
+            float age,
+            float yaw,
+            float pitch,
+            float scale) {
         // Wing flap
-        float flap = MathHelper.cos(age * 20F) * (float)Math.PI * 0.15F;
+        float flap = MathHelper.cos(age * 20F) * (float) Math.PI * 0.15F;
         this.rightWing.roll = flap;
         this.leftWing.roll = -flap;
 

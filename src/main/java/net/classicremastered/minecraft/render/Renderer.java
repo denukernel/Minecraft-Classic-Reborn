@@ -59,17 +59,23 @@ public final class Renderer {
     }
 
     public void setupCamera(float partial, long frameNanos) {
+        if (minecraft.player == null) return;
+        setupCamera(prepareCamera(partial, frameNanos));
+    }
+
+    public CameraView prepareCamera(float partial, long frameNanos) {
         Player player = minecraft.player;
-        if (player == null) return;
         int mode = minecraft.cameraMode;
         CameraView view = CameraView.resolve(player, mode, partial);
-        if (mode != 0 && previousCameraMode == mode && cameraPlayer == player
-                && cameraLevel == player.level && view.distance() > thirdPersonDistance) {
+        if (mode != 0
+                && previousCameraMode == mode
+                && cameraPlayer == player
+                && cameraLevel == player.level
+                && view.distance() > thirdPersonDistance) {
             double seconds = Math.max(0, Math.min(.05, (frameNanos - previousCameraFrame) * 1e-9));
             float gap = view.distance() - thirdPersonDistance;
             float remaining = gap * (float) Math.exp(-12.0 * seconds);
-            if (remaining > .015f)
-                view = view.withDistance(view.distance() - remaining);
+            if (remaining > .015f) view = view.withDistance(view.distance() - remaining);
         }
         cameraPlayer = player;
         cameraLevel = player.level;
@@ -77,8 +83,11 @@ public final class Renderer {
         previousCameraFrame = frameNanos;
         thirdPersonDistance = view.distance();
         localPlayerVisible = mode != 0 && view.outsidePlayer(player);
-        if (mode != 0)
-            GL11.glTranslatef(0, 0, -view.distance());
+        return view;
+    }
+
+    public void setupCamera(CameraView view) {
+        if (view.distance() != 0) GL11.glTranslatef(0, 0, -view.distance());
         GL11.glRotatef(view.pitch(), 1, 0, 0);
         GL11.glRotatef(view.yaw(), 0, 1, 0);
         GL11.glTranslatef(-view.focus().x, -view.focus().y, -view.focus().z);
@@ -133,15 +142,7 @@ public final class Renderer {
         GL11.glRotatef(tilt, 1.0F, 0.0F, 0.0F);
     }
 
-    public void renderUnderwaterOverlay(float partial) {
-        Player pl = this.minecraft.player;
-        Level lvl = this.minecraft.level;
-        if (pl == null || lvl == null) return;
-
-        Block b = Block.blocks[lvl.getTile((int) pl.x, (int) (pl.y + 0.12F), (int) pl.z)];
-        if (b == null) return;
-
-        LiquidType l = b.getLiquidType();
+    public void renderUnderwaterOverlay(LiquidType l) {
         if (l == LiquidType.NOT_LIQUID) return;
 
         // === Setup ortho projection ===
@@ -238,36 +239,28 @@ public final class Renderer {
         GL11.glTranslatef(0.0F, 0.0F, -200.0F);
     }
 
-    public void updateFog() {
-        Level lvl = this.minecraft.level;
-        Player pl = this.minecraft.player;
+    public void updateFog(LiquidType l) {
         GL11.glFog(2918, this.createBuffer(this.fogRed, this.fogGreen, this.fogBlue, 1.0F));
         GL11.glNormal3f(0.0F, -1.0F, 0.0F);
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 
-        if (lvl != null && pl != null) {
-            Block b = Block.blocks[lvl.getTile((int) pl.x, (int) (pl.y + 0.12F), (int) pl.z)];
-            if (b != null && b.getLiquidType() != LiquidType.NOT_LIQUID) {
-                LiquidType l = b.getLiquidType();
-                GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_EXP2);
+        if (l != LiquidType.NOT_LIQUID) {
+            GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_EXP2);
 
-                if (l == LiquidType.WATER) {
-                    // Vision capped at ~8 blocks
-                    GL11.glFogf(GL11.GL_FOG_DENSITY, 0.35F);
-                    GL11.glLightModel(
-                            GL11.GL_LIGHT_MODEL_AMBIENT,
-                            this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
-                } else if (l == LiquidType.LAVA) {
-                    // Vision capped at ~3 blocks
-                    GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
-                    GL11.glLightModel(
-                            GL11.GL_LIGHT_MODEL_AMBIENT,
-                            this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
-                }
-                GL11.glEnable(GL11.GL_COLOR_MATERIAL);
-                GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);
-                return;
+            if (l == LiquidType.WATER) {
+                // Vision capped at ~8 blocks
+                GL11.glFogf(GL11.GL_FOG_DENSITY, 0.35F);
+                GL11.glLightModel(
+                        GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
+            } else if (l == LiquidType.LAVA) {
+                // Vision capped at ~3 blocks
+                GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
+                GL11.glLightModel(
+                        GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
             }
+            GL11.glEnable(GL11.GL_COLOR_MATERIAL);
+            GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);
+            return;
         }
 
         // Normal air fog

@@ -1,11 +1,14 @@
 package net.classicremastered.minecraft.level.tile;
 
+import net.classicremastered.minecraft.entity.DroppedItem;
+import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
+
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-
-import net.classicremastered.minecraft.level.Level;
 
 public final class LeavesBlock extends LeavesBaseBlock {
 
@@ -83,14 +86,29 @@ public final class LeavesBlock extends LeavesBaseBlock {
 
         if (left == 0) {
             // Final check before decay: if someone placed a log meanwhile, abort.
-            if (!isConnectedToLog(level, x, y, z)) {
-                level.setTile(x, y, z, 0); // decay now
+            if (!isConnectedToLog(level, x, y, z) && level.setTile(x, y, z, 0)) {
+                dropApple(level, x, y, z, 1.0F);
             }
             m.remove(k);
         } else {
             m.put(k, left);
             level.addToTickNextTick(x, y, z, this.id); // continue the countdown
         }
+    }
+
+    @Override
+    public void dropItems(Level level, int x, int y, int z, float chance) {
+        super.dropItems(level, x, y, z, chance);
+        dropApple(level, x, y, z, chance);
+    }
+
+    private void dropApple(Level level, int x, int y, int z, float chance) {
+        if (level.creativeMode
+                || level.isNetworkMode()
+                || level.random.nextFloat() >= 0.005F * chance) return;
+
+        ItemRegistry.bootstrap();
+        level.addEntity(new DroppedItem(level, x + 0.5F, y + 0.5F, z + 0.5F, Item.APPLE.id));
     }
 
     @Override

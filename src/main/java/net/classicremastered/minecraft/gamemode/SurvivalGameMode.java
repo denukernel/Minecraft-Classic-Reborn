@@ -123,7 +123,7 @@ public final class SurvivalGameMode extends GameMode {
     public void breakBlock(int x, int y, int z) {
         int block = minecraft.level.getTile(x, y, z);
         if (block == 0) return;
-        if ((block != Block.SNOW_LAYER.id && block != Block.SNOW_BLOCK.id) || holdingShovel()) {
+        if (block != Block.SNOW_BLOCK.id || holdingShovel()) {
             Block.blocks[block].onBreak(minecraft.level, x, y, z);
         }
         super.breakBlock(x, y, z);

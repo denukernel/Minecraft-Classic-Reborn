@@ -105,8 +105,7 @@ public class Zombie extends HumanoidMob {
                         == net.classicremastered.minecraft.Difficulty.EXTREME
                 && level.shouldUndeadBurnAt(this)) unmount();
         super.tick();
-        if (remainingFireTicks > 0 && isInWaterOrOnWater())
-            remainingFireTicks = 0;
+        if (remainingFireTicks > 0 && isInWaterOrOnWater()) extinguishFire();
         if (traits == null)
             traits =
                     new net.classicremastered.minecraft.mob.ai.goal.GoalSelector(

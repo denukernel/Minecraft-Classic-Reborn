@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
+import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.util.MathHelper;
@@ -18,25 +19,25 @@ public final class LightEngine {
     private record FireCell(int x, int y, int z) {
     }
 
-    private Set<FireCell> burningMobs = Set.of();
+    private Set<FireCell> burningEntities = Set.of();
 
-    void refreshBurningMobs() {
+    void refreshBurningEntities() {
         Set<FireCell> next = new HashSet<>();
         synchronized (level.blockMap.all) {
             for (var entity : level.blockMap.all)
-                if (entity instanceof Mob mob && !mob.removed && mob.remainingFireTicks > 0)
-                    next.add(new FireCell(MathHelper.floor(mob.x),
-                            MathHelper.floor((mob.bb.y0 + mob.bb.y1) * .5f), MathHelper.floor(mob.z)));
+                if ((entity instanceof Mob || entity instanceof Arrow)
+                        && !entity.removed
+                        && entity.remainingFireTicks > 0)
+                    next.add(
+                            new FireCell(
+                                    MathHelper.floor(entity.x),
+                                    MathHelper.floor((entity.bb.y0 + entity.bb.y1) * .5f),
+                                    MathHelper.floor(entity.z)));
         }
-        if (next.equals(burningMobs))
-            return;
-        for (FireCell source : burningMobs)
-            if (!next.contains(source))
-                queueGlow(source);
-        for (FireCell source : next)
-            if (!burningMobs.contains(source))
-                queueGlow(source);
-        burningMobs = next;
+        if (next.equals(burningEntities)) return;
+        for (FireCell source : burningEntities) if (!next.contains(source)) queueGlow(source);
+        for (FireCell source : next) if (!burningEntities.contains(source)) queueGlow(source);
+        burningEntities = next;
         querySources.cx = querySources.cz = Integer.MIN_VALUE;
     }
 
@@ -165,7 +166,7 @@ public final class LightEngine {
                     }
                 }
         }
-        for (FireCell source : burningMobs) {
+        for (FireCell source : burningEntities) {
             int sx = source.x >> 4, sz = source.z >> 4;
             if (sx >= minCx && sx <= maxCx && sz >= minCz && sz <= maxCz)
                 sources.add(source.x, source.y, source.z, Block.FIRE.getLightValue(), minY, maxY);

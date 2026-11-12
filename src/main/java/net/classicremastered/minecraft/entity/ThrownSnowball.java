@@ -33,6 +33,7 @@ public final class ThrownSnowball extends ThrownEnderPearl {
                 dz = impact.z - victim.z;
             }
             victim.animateHurt(dx, dz);
+            victim.playHurtSound();
             if (dx * dx + dz * dz >= 1e-8f) victim.knockback(this, 0, dx, dz);
         }
         if (level.particleEngine == null) return;

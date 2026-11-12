@@ -28,7 +28,10 @@ public class FlowerBlock extends Block {
     }
 
     public final boolean canBeWashedAway() {
-        return isFlower(id) || this instanceof MushroomBlock;
+        return isFlower(id)
+                || this instanceof MushroomBlock
+                || this instanceof SaplingBlock
+                || this instanceof ShortGrassBlock;
     }
 
     protected boolean supports(int blockId) {
@@ -49,7 +52,9 @@ public class FlowerBlock extends Block {
     }
 
     public final void dropFromWater(Level level, int x, int y, int z) {
-        level.addEntity(new DroppedBlock(level, x + 0.5F, y + 0.5F, z + 0.5F, id));
+        if (getDropCount() > 0) {
+            level.addEntity(new DroppedBlock(level, x + 0.5F, y + 0.5F, z + 0.5F, id));
+        }
     }
 
     @Override

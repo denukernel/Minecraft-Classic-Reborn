@@ -137,11 +137,7 @@ public class PrimedTnt extends Entity {
         if (this.removed) return;
         this.remove();
 
-        // --- play explosion sound ---
-        if (this.level != null) {
-            this.level.playSound("random/explode", this, 1.0F, 1.0F);
-        }
-
+        level.playExplosionEffects(x, y, z, explosionPower);
         Entity owner = ownerRef != null ? ownerRef : playerIgniter ? level.player : null;
         TntExplosion.detonate(level, this, owner, x, y, z, explosionPower);
         if (level.particleEngine == null) return;

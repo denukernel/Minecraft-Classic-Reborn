@@ -14,6 +14,7 @@ public class Creeper extends Mob {
     public static final int FUSE_LENGTH = 30;
     public int fuseTicks, previousFuseTicks;
     public boolean ignited;
+    private boolean forcedIgnition;
 
     public Creeper(Level level, float x, float y, float z) {
         super(level);
@@ -64,8 +65,8 @@ public class Creeper extends Mob {
                                                 target.z),
                                         true)
                                 == null;
-        ignited = clear && distance < (ignited ? 6f : 2.5f);
-        if (!valid) {
+        ignited = forcedIgnition || clear && distance < (ignited ? 6f : 2.5f);
+        if (!valid && !forcedIgnition) {
             fuseTicks = previousFuseTicks = 0;
             ignited = false;
             return;
@@ -76,10 +77,17 @@ public class Creeper extends Mob {
             xd = zd = 0;
             if (fuseTicks >= FUSE_LENGTH) {
                 remove();
-                level.playSound("random/explode", this, 1, 1);
+                level.playExplosionEffects(x, bb.y0, z, 3f);
                 level.explode(this, x, bb.y0, z, 3f);
             }
         } else fuseTicks = Math.max(0, fuseTicks - 1);
+    }
+
+    public boolean igniteFuse() {
+        if (health <= 0 || removed || level == null || level.isNetworkMode()) return false;
+        forcedIgnition = true;
+        ignited = true;
+        return true;
     }
 
     public float fuseProgress(float partial) {

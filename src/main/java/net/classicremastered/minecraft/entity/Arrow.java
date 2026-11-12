@@ -2,6 +2,10 @@ package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.level.tile.FireBlock;
+import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.particle.SmokeParticle;
@@ -110,6 +114,22 @@ public class Arrow extends Entity {
         yo = y;
         zo = z;
 
+        if (stuckPlayer != null) {
+            if (stuckPlayer.health <= 0 || stuckPlayer.removed || stuckPlayer.level != level) {
+                remove();
+                return;
+            }
+            Vec3D position = attachmentPosition(1);
+            setPos(position.x, position.y, position.z);
+            yRot = stuckPlayer.yBodyRot + attachmentYaw;
+            if (blockMap != null) blockMap.moved(this);
+            if (remainingFireTicks > 0) remainingFireTicks--;
+            updateFire(bb);
+            return;
+        }
+        if (remainingFireTicks > 0) remainingFireTicks--;
+        updateFire(bb);
+
         if (!hasHit && level != null && bb != null) {
             for (Object object : new ArrayList(
                     level.findEntities(this, bb.expand(xd * 6, yd * 6, zd * 6).grow(1, 1, 1))))
@@ -149,6 +169,7 @@ public class Arrow extends Entity {
 
             for (int unknown4 = 0; unknown4 < unknown0 && !collision; unknown4++) {
                 AABB unknown5 = bb.expand(x0, y0, z0);
+                updateFire(unknown5);
 
                 if (level.getCubes(unknown5).size() > 0) {
                     collision = true;
@@ -165,8 +186,10 @@ public class Arrow extends Entity {
                             && mob.health <= 0) {
                         continue;
                     }
-                    if (!entity.removed && entity.isShootable() && (entity != owner || time > 5
-                            && !isTurretProjectile())) {
+                    if (!entity.removed
+                            && entity.isShootable()
+                            && (entity != owner || time > 5 && !isTurretProjectile())) {
+                        int previousHealth = entity instanceof Mob mob ? mob.health : 0;
                         if (owner
                                 instanceof
                                 net.classicremastered.minecraft.mob.CrossbowTurret turret) {
@@ -176,6 +199,15 @@ public class Arrow extends Entity {
                         }
                         playImpact();
                         collision = true;
+                        if (!isBullet()
+                                && entity instanceof Mob mob
+                                && mob.health < previousHealth) {
+                            if (remainingFireTicks > 0) mob.ignite(100);
+                            if (mob instanceof Player player && player.health > 0) {
+                                attachTo(player);
+                                return;
+                            }
+                        }
                         remove();
                         return;
                     }
@@ -217,6 +249,59 @@ public class Arrow extends Entity {
                 while (yRot - yRotO >= 180.0F)
                     yRotO += 360.0F;
             }
+        }
+    }
+
+    private void updateFire(AABB bounds) {
+        if (isBullet()) return;
+        if (level.containsLiquid(bounds, LiquidType.WATER)) {
+            extinguishFire();
+        } else if (level.containsLiquid(bounds, LiquidType.LAVA) || overlapsFire(bounds)) {
+            remainingFireTicks = 300;
+        }
+    }
+
+    private void attachTo(Player player) {
+        stuckPlayer = player;
+        float yaw = player.yBodyRot * (float) Math.PI / 180;
+        float dx = x - player.x, dz = z - player.z;
+        attachmentX = dx * MathHelper.cos(yaw) + dz * MathHelper.sin(yaw);
+        attachmentZ = -dx * MathHelper.sin(yaw) + dz * MathHelper.cos(yaw);
+        attachmentHeight = MathHelper.clamp(y - player.y + player.heightOffset, .1f, 1.75f);
+        attachmentYaw = yRot - player.yBodyRot;
+        hasHit = true;
+        time = 0;
+        xd = yd = zd = 0;
+        Vec3D position = attachmentPosition(1);
+        setPos(position.x, position.y, position.z);
+        if (blockMap != null) blockMap.moved(this);
+        xo = x;
+        yo = y;
+        zo = z;
+    }
+
+    private Vec3D attachmentPosition(float partial) {
+        float yaw = stuckPlayer.renderBodyYaw(partial) * (float) Math.PI / 180;
+        return new Vec3D(
+                stuckPlayer.xo
+                        + (stuckPlayer.x - stuckPlayer.xo) * partial
+                        + attachmentX * MathHelper.cos(yaw)
+                        - attachmentZ * MathHelper.sin(yaw),
+                stuckPlayer.yo
+                        + (stuckPlayer.y - stuckPlayer.yo) * partial
+                        - stuckPlayer.getRenderHeightOffset(partial)
+                        + stuckPlayer.renderOffset
+                        + attachmentHeight,
+                stuckPlayer.zo
+                        + (stuckPlayer.z - stuckPlayer.zo) * partial
+                        + attachmentX * MathHelper.sin(yaw)
+                        + attachmentZ * MathHelper.cos(yaw));
+    }
+
+    public static void removeStuckArrows(Player player) {
+        if (player.level == null || player.level.blockMap == null) return;
+        for (Entity entity : player.level.blockMap.all) {
+            if (entity instanceof Arrow arrow && arrow.stuckPlayer == player) arrow.remove();
         }
     }
 
@@ -379,7 +464,12 @@ public class Arrow extends Entity {
 
     @Override
     public void render(TextureManager textureManager, float unknown0) {
-        if (isBullet())
+        if (isBullet()) return;
+        if (stuckPlayer != null
+                && (removed
+                        || stuckPlayer.health <= 0
+                        || stuckPlayer.minecraft != null
+                                && !stuckPlayer.minecraft.renderer.shouldRenderLocalPlayer()))
             return;
         textureId = textureManager.load("/item/arrows.png");
 
@@ -387,11 +477,21 @@ public class Arrow extends Entity {
 
         float brightness = level.getRenderBrightness((int) x, (int) y, (int) z);
 
+        Vec3D position =
+                stuckPlayer == null
+                        ? new Vec3D(
+                                xo + (x - xo) * unknown0,
+                                yo + (y - yo) * unknown0,
+                                zo + (z - zo) * unknown0)
+                        : attachmentPosition(unknown0);
+        float yaw =
+                stuckPlayer == null
+                        ? yRotO + (yRot - yRotO) * unknown0
+                        : stuckPlayer.renderBodyYaw(unknown0) + attachmentYaw;
         GL11.glPushMatrix();
         GL11.glColor4f(brightness, brightness, brightness, 1.0F);
-        GL11.glTranslatef(xo + (x - xo) * unknown0, this.yo + (this.y - this.yo) * unknown0 - this.heightOffset / 2.0F,
-                this.zo + (this.z - this.zo) * unknown0);
-        GL11.glRotatef(yRotO + (yRot - yRotO) * unknown0 - 90.0F, 0.0F, 1.0F, 0.0F);
+        GL11.glTranslatef(position.x, position.y - this.heightOffset / 2.0F, position.z);
+        GL11.glRotatef(yaw - 90.0F, 0.0F, 1.0F, 0.0F);
         GL11.glRotatef(xRotO + (xRot - xRotO) * unknown0, 0.0F, 0.0F, 1.0F);
         GL11.glRotatef(45.0F, 1.0F, 0.0F, 0.0F);
 
@@ -442,12 +542,34 @@ public class Arrow extends Entity {
 
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
         GL11.glPopMatrix();
+        if (remainingFireTicks > 0) {
+            GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_TEXTURE_BIT | GL11.GL_CURRENT_BIT);
+            try {
+                GL11.glDisable(GL11.GL_CULL_FACE);
+                GL11.glEnable(GL11.GL_ALPHA_TEST);
+                GL11.glBindTexture(
+                        GL11.GL_TEXTURE_2D,
+                        textureManager.load(
+                                net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE));
+                shapeRenderer.begin();
+                shapeRenderer.color(1, 1, 1);
+                FireBlock.renderFlames(
+                        shapeRenderer,
+                        position.x - .15f,
+                        position.y - .15f,
+                        position.z - .15f,
+                        .3f,
+                        .45f);
+                shapeRenderer.end();
+            } finally {
+                GL11.glPopAttrib();
+            }
+        }
     }
 
     @Override
     public void playerTouch(Entity entity) {
-        if (isBullet() || !(entity instanceof Player))
-            return;
+        if (isBullet() || stuckPlayer != null || !(entity instanceof Player)) return;
         Player player = (Player) entity;
 
         // Disable pickup in Creative
@@ -485,6 +607,7 @@ public class Arrow extends Entity {
     }
 
     public void releaseFromBlock() {
+        stuckPlayer = null;
         hasHit = false;
         collision = false;
         onGround = false;
@@ -503,6 +626,8 @@ public class Arrow extends Entity {
     private int damage;
     private boolean bullet;
     private boolean stolen;
+    private Player stuckPlayer;
+    private float attachmentX, attachmentZ, attachmentHeight, attachmentYaw;
 
     public Entity getOwner() {
         return owner;

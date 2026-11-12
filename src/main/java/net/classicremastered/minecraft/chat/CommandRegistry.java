@@ -10,6 +10,7 @@ import net.classicremastered.minecraft.chat.commands.GameModeCommand;
 import net.classicremastered.minecraft.chat.commands.GiveCommand;
 import net.classicremastered.minecraft.chat.commands.HelpCommand;
 import net.classicremastered.minecraft.chat.commands.ItemCommand;
+import net.classicremastered.minecraft.chat.commands.KillCommand;
 import net.classicremastered.minecraft.chat.commands.LocateStructureCommand;
 import net.classicremastered.minecraft.chat.commands.MobsCommand;
 import net.classicremastered.minecraft.chat.commands.MoreCommand;
@@ -28,6 +29,7 @@ public final class CommandRegistry {
         CommandManager.register(new GiveCommand());
         CommandManager.register(new LocateStructureCommand());
         CommandManager.register(new GameModeCommand());
+        CommandManager.register(new KillCommand());
         CommandManager.register(new SpawnMobCommand());
         CommandManager.register(new MoreCommand());
         CommandManager.register(

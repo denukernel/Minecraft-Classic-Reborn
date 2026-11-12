@@ -4,11 +4,14 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.Creeper;
 import net.classicremastered.minecraft.mob.IronGolem;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.particle.ParticleManager;
+import net.classicremastered.minecraft.particle.SmokeParticle;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.LevelRenderer;
@@ -20,6 +23,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class Level implements Serializable {
 
@@ -685,7 +689,7 @@ public class Level implements Serializable {
 
     public void tickEntities() {
         this.blockMap.tickAll();
-        lightEngine.refreshBurningMobs();
+        lightEngine.refreshBurningEntities();
     }
 
     void queueLightRegion(int x, int y, int z, int radius) {
@@ -1701,6 +1705,20 @@ public class Level implements Serializable {
                 : Block.blocks[var4].getLiquidType();
     }
 
+    public LiquidType getLiquidAt(float x, float y, float z) {
+        int blockX = MathHelper.floor(x);
+        int blockY = MathHelper.floor(y);
+        int blockZ = MathHelper.floor(z);
+        LiquidType liquid = getLiquid(blockX, blockY, blockZ);
+        if (liquid == LiquidType.WATER
+                && y
+                        >= LiquidBlock.waterSurfaceAt(
+                                this, blockX, blockY, blockZ, x - blockX, z - blockZ)) {
+            return LiquidType.NOT_LIQUID;
+        }
+        return liquid;
+    }
+
     public boolean isWater(int var1, int var2, int var3) {
         int var4;
         return (var4 = this.getTile(var1, var2, var3)) > 0
@@ -2145,6 +2163,26 @@ public class Level implements Serializable {
         this.blockMap.remove(var1);
     }
 
+    public void playExplosionEffects(float x, float y, float z, float power) {
+        playSound("random/explode", x, y, z, 1.0F, 1.0F);
+        if (particleEngine == null) return;
+
+        Random smokeRandom = ThreadLocalRandom.current();
+        for (int i = 0; i < 32; i++) {
+            float dx = (smokeRandom.nextFloat() - .5f) * power * .8f;
+            float dy = .2f + smokeRandom.nextFloat() * power * .45f;
+            float dz = (smokeRandom.nextFloat() - .5f) * power * .8f;
+            particleEngine.spawnParticle(
+                    new SmokeParticle(this, x + dx, y + dy, z + dz, .06f).scale(3f));
+        }
+    }
+
+    protected static boolean canBlastDestroy(Block block, Entity source) {
+        return block.canExplode()
+                || (source instanceof Creeper
+                        && (block == Block.STONE || block == Block.COBBLESTONE));
+    }
+
     public void explode(Entity var1, float var2, float var3, float var4, float var5) {
         explode(var1, var2, var3, var4, var5, true);
     }
@@ -2176,7 +2214,7 @@ public class Level implements Serializable {
                             && var14 < this.height
                             && var15 * var15 + var16 * var16 + var17 * var17 < var5 * var5
                             && (var19 = this.getTile(var12, var13, var14)) > 0
-                            && Block.blocks[var19].canExplode()) {
+                            && canBlastDestroy(Block.blocks[var19], var1)) {
                         if (dropBlocks)
                             Block.blocks[var19].dropItems(this, var12, var13, var14, 0.3F);
                         this.setTile(var12, var13, var14, 0);

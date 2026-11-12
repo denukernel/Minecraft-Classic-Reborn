@@ -410,6 +410,20 @@ public class LiquidBlock extends Block {
                         * .25f;
     }
 
+    /** Surface at the local horizontal coordinates of a water block. */
+    public static float waterSurfaceAt(
+            Level level, int x, int y, int z, float localX, float localZ) {
+        float nw = cornerWaterHeight(level, x, y, z);
+        float se = cornerWaterHeight(level, x + 1, y, z + 1);
+        // The top face runs from southeast to northwest across its diagonal.
+        if (localX >= localZ) {
+            float ne = cornerWaterHeight(level, x + 1, y, z);
+            return y + nw + (ne - nw) * localX + (se - ne) * localZ;
+        }
+        float sw = cornerWaterHeight(level, x, y, z + 1);
+        return y + nw + (sw - nw) * localZ + (se - sw) * localX;
+    }
+
     private static float cornerWaterHeight(Level level, int x, int y, int z) {
         float total = 0;
         int samples = 0;

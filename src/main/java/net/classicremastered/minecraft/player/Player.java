@@ -720,6 +720,7 @@ public class Player extends Mob {
 
     @Override
     public void resetPos() {
+        unmount();
         this.heightOffset = 1.62F;
         this.setSize(0.6F, 1.8F);
 
@@ -737,11 +738,33 @@ public class Player extends Mob {
             this.level.player = this;
         }
 
-        this.health = 20;
+        clearStatusEffects();
+        this.health = this.lastHealth = MAX_HEALTH;
+        this.dead = false;
         this.deathTime = 0;
+        this.hurtTime = this.hurtDuration = this.invulnerableTime = this.attackTime = 0;
+        this.hurtDir = 0;
+        this.airSupply = TOTAL_AIR_SUPPLY;
+        this.fallDistance = this.ySlideOffset = 0;
+        this.xd = this.yd = this.zd = 0;
+        this.onGround = this.horizontalCollision = this.collision = false;
+        this.damageCause = null;
+        resetInterpolation();
+        if (this.blockMap != null) this.blockMap.moved(this);
         this.deathMessageSent = false;
         this.environmentalDeathAttacker = null;
         this.environmentalDeathCreditTicks = 0;
+    }
+
+    private void clearStatusEffects() {
+        net.classicremastered.minecraft.entity.Arrow.removeStuckArrows(this);
+        remainingFireTicks = 0;
+        poisonTicks = poisonCounter = poisonEvery = 0;
+        deltaCurseTicks = deltaCurseCounter = 0;
+        frozenTicks = frostbiteSlowTicks = 0;
+        healthDrinkTimer = 0;
+        voidDamageCounter = 0;
+        endMindControl();
     }
 
     @Override
@@ -757,6 +780,9 @@ public class Player extends Mob {
                                 environmentalDeathAttacker));
             }
         }
+        clearStatusEffects();
+        unmount();
+        ejectPassengers();
         // Clear grappling hook anchor on death
         GrapplingHookItem.detach(this);
         // existing physics
@@ -843,7 +869,7 @@ public class Player extends Mob {
 
     @Override
     public void hurt(Entity attacker, int damage) {
-        if (spectator) return;
+        if (spectator || health <= 0 || dead || removed) return;
         if (attacker != null && developerPowers().dodging(this)) return;
         damage = developerPowers().incomingDamage(this, attacker, damage);
         if (!this.level.creativeMode) {
@@ -863,7 +889,7 @@ public class Player extends Mob {
                 environmentalDeathCreditTicks = environmentalDeathAttacker == null ? 0 : 100;
             }
 
-            if (this.level != null && this.health > 0) { // only if still alive
+            if (this.level != null && this.health > 0 && this.health < previousHealth) {
                 this.level.playSound("damage/hit", this, 1.0F, 1.0F);
             }
         }

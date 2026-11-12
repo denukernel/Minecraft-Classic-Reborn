@@ -19,6 +19,7 @@ public class Item {
     // Handy handles (filled by ItemRegistry.bootstrap())
     public static Item EMPTY, APPLE, SWORD, MINING_AXE, SHOVEL;
     public static Item BEETROOT;
+    public static Item RAW_PORKCHOP, RAW_BEEF;
     public static Item BOW;
     public static Item FLINT_AND_STEEL;
     public static final int REDSTONE_DUST_ID = 44;

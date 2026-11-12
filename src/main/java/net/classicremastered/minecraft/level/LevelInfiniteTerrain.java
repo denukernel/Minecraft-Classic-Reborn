@@ -92,7 +92,7 @@ public final class LevelInfiniteTerrain extends Level {
                         int id = getTile(x, y, z); // fixed: chunk-aware
                         if (id > 0) {
                             Block b = Block.blocks[id];
-                            if (b != null && b.canExplode()) {
+                            if (b != null && canBlastDestroy(b, src)) {
                                 if (b == Block.TNT) {
                                     // --- TNT chain reaction fix --- // added
                                     setTile(x, y, z, 0); // clear TNT block

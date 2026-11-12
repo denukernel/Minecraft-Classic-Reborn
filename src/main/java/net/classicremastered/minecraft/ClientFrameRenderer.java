@@ -22,6 +22,7 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.glu.GLU;
 
 import java.awt.*;
+import java.io.File;
 import java.nio.FloatBuffer;
 
 /** Renders one client frame, including picking, world passes, held items, and GUI. */
@@ -95,9 +96,9 @@ final class ClientFrameRenderer {
                     float renderPartial = partial;
                     Renderer r2 = r;
                     ClientTargetPicker.pick(r, partial);
-                    Player player;
-
-                    long cameraFrameNanos = System.nanoTime();
+                    CameraView camera = r.prepareCamera(renderPartial, System.nanoTime());
+                    Vec3D eye = camera.position();
+                    LiquidType cameraLiquid = mc.level.getLiquidAt(eye.x, eye.y, eye.z);
                     int stereoEye = 0;
                     while (true) {
                         if (stereoEye >= 2) {
@@ -115,7 +116,6 @@ final class ClientFrameRenderer {
                         ParticleManager pm = r2.minecraft.particleManager;
                         GL11.glViewport(0, 0, r2.minecraft.width, r2.minecraft.height);
                         Level levelRef = r2.minecraft.level;
-                        player = r2.minecraft.player;
                         float invViewDist = 1.0F / (float) (4 - r2.minecraft.settings.viewDistance);
                         invViewDist = 1.0F - (float) Math.pow((double) invViewDist, 0.25D);
                         float skyR = (float) (levelRef.skyColor >> 16 & 255) / 255.0F;
@@ -131,25 +131,14 @@ final class ClientFrameRenderer {
                         r2.fogGreen *= r2.fogColorMultiplier;
                         r2.fogBlue *= r2.fogColorMultiplier;
 
-                        Block feetBlock;
-                        if ((feetBlock =
-                                                Block.blocks[
-                                                        levelRef.getTile(
-                                                                (int) player.x,
-                                                                (int) (player.y + 0.12F),
-                                                                (int) player.z)])
-                                        != null
-                                && feetBlock.getLiquidType() != LiquidType.NOT_LIQUID) {
-                            LiquidType lt;
-                            if ((lt = feetBlock.getLiquidType()) == LiquidType.WATER) {
-                                r2.fogRed = 0.02F;
-                                r2.fogGreen = 0.02F;
-                                r2.fogBlue = 0.2F;
-                            } else if (lt == LiquidType.LAVA) {
-                                r2.fogRed = 0.6F;
-                                r2.fogGreen = 0.1F;
-                                r2.fogBlue = 0.0F;
-                            }
+                        if (cameraLiquid == LiquidType.WATER) {
+                            r2.fogRed = 0.02F;
+                            r2.fogGreen = 0.02F;
+                            r2.fogBlue = 0.2F;
+                        } else if (cameraLiquid == LiquidType.LAVA) {
+                            r2.fogRed = 0.6F;
+                            r2.fogGreen = 0.1F;
+                            r2.fogBlue = 0.0F;
                         }
 
                         if (r2.minecraft.settings.anaglyph) {
@@ -210,14 +199,13 @@ final class ClientFrameRenderer {
                         camPlayer = r2.minecraft.player;
                         if (mc.cameraMode == 0) GL11.glTranslatef(0.0F, 0.0F, -0.1F);
                         // Replace vanilla camera placement with mode-aware setup
-                        mc.renderer.setupCamera(renderPartial, cameraFrameNanos);
+                        mc.renderer.setupCamera(camera);
 
                         Frustrum fr = FrustrumImpl.update();
                         // sky: stars + sun/moon background pass (rendered before terrain chunks so
                         // blocks occlude them)
                         if (mc.skyRenderer != null) {
-                            if (feetBlock == null
-                                    || feetBlock.getLiquidType() == LiquidType.NOT_LIQUID)
+                            if (cameraLiquid == LiquidType.NOT_LIQUID)
                                 mc.skyRenderer.renderGradient(camPlayer, renderPartial, r2.fogEnd);
                             mc.skyRenderer.renderStars(mc.player, renderPartial);
                             mc.skyRenderer.renderSunMoon(mc.player, renderPartial);
@@ -229,7 +217,7 @@ final class ClientFrameRenderer {
                         lr.sortChunks(camPlayer, 0, renderPartial);
                         if (!fabulous) lr.renderOpaqueGlass(camPlayer, renderPartial);
 
-                        r2.updateFog();
+                        r2.updateFog(cameraLiquid);
                         GL11.glEnable(2912);
                         ShapeRenderer shape;
                         int f;
@@ -285,10 +273,10 @@ final class ClientFrameRenderer {
                         Vec3D camVec = r2.getPlayerVector(renderPartial);
                         lr.level.blockMap.render(camVec, fr, lr.textureManager, renderPartial);
                         r2.setLighting(false);
-                        r2.updateFog();
+                        r2.updateFog(cameraLiquid);
                         if (!fabulous) renderParticles(pm, renderPartial);
                         GL11.glDisable(3553);
-                        r2.updateFog();
+                        r2.updateFog(cameraLiquid);
                         GL11.glDisable(3553);
                         GL11.glDepthMask(false);
                         GL11.glDepthMask(true);
@@ -304,7 +292,7 @@ final class ClientFrameRenderer {
                         }
 
                         GL11.glEnable(3553);
-                        r2.updateFog();
+                        r2.updateFog(cameraLiquid);
 
                         if (mc.selected != null && (!mc.hudHidden || lr.cracks > 0.0F)) {
                             GL11.glDisable(3008);
@@ -403,7 +391,7 @@ final class ClientFrameRenderer {
                             GL11.glEnable(3008);
                         }
 
-                        r2.updateFog();
+                        r2.updateFog(cameraLiquid);
                         GL11.glEnable(GL11.GL_TEXTURE_2D);
                         if (fabulous && mc.transparency.begin(mc.settings)) {
                             try {
@@ -451,7 +439,7 @@ final class ClientFrameRenderer {
                         if (!r2.minecraft.settings.anaglyph) break;
                         ++stereoEye;
                     }
-                    mc.renderer.renderUnderwaterOverlay(partial);
+                    mc.renderer.renderUnderwaterOverlay(cameraLiquid);
                     if (!mc.hudHidden) {
                         boolean hideHotbar =
                                 mc.currentScreen instanceof InventoryScreen
@@ -478,8 +466,23 @@ final class ClientFrameRenderer {
 
                 // Take pending screenshot AFTER rendering, BEFORE the swap
                 if (mc.pendingScreenshot) {
-                    Screenshot.take(Minecraft.mcDir);
                     mc.pendingScreenshot = false;
+                    boolean bugReport =
+                            mc.settings.screenshotType == GameSettings.ScreenshotType.BUG_REPORT;
+                    File screenshot =
+                            bugReport
+                                    ? Screenshot.takeBugReport(
+                                            Minecraft.mcDir, mc.player, mc.settings.graphicsMode)
+                                    : Screenshot.take(Minecraft.mcDir);
+                    if (mc.hud != null) {
+                        String label = bugReport ? "Bug report screenshot" : "Screenshot";
+                        mc.hud.addChat(
+                                screenshot != null
+                                        ? "&a"
+                                                + label
+                                                + " saved! &7(Type &e/screenshots&7 to open folder)"
+                                        : "&cFailed to save screenshot.");
+                    }
                 }
 
                 Thread.yield();

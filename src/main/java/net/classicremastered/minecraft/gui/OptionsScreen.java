@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.gui;
 import net.classicremastered.minecraft.GameSettings;
 
 public final class OptionsScreen extends GuiScreen {
+    private static final int SCREENSHOT_TYPE = 7;
     private final GuiScreen parent;
     private final GameSettings settings;
 
@@ -23,6 +24,7 @@ public final class OptionsScreen extends GuiScreen {
                 && minecraft.player.developerPowers().active(minecraft.player)) {
             addPage(5, "Developer Options...");
         }
+        buttons.add(new Button(SCREENSHOT_TYPE, width / 2 - 100, 117, screenshotTypeLabel()));
         buttons.add(new Button(6, width / 2 - 100, height - 32, "Done"));
     }
 
@@ -36,6 +38,11 @@ public final class OptionsScreen extends GuiScreen {
 
     @Override
     protected void onButtonClick(Button button) {
+        if (button.id == SCREENSHOT_TYPE) {
+            settings.toggleScreenshotType();
+            button.text = screenshotTypeLabel();
+            return;
+        }
         minecraft.setCurrentScreen(
                 switch (button.id) {
                     case 0 ->
@@ -52,6 +59,10 @@ public final class OptionsScreen extends GuiScreen {
                     case 5 -> new DeveloperOptionsScreen(this);
                     default -> parent;
                 });
+    }
+
+    private String screenshotTypeLabel() {
+        return "Screenshot Type: " + settings.screenshotType.label;
     }
 
     @Override

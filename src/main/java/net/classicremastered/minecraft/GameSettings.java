@@ -80,6 +80,27 @@ public final class GameSettings {
     public boolean fabulousUnavailable;
     public boolean threeDClouds = true;
 
+    public enum ScreenshotType {
+        NORMAL("Normal"),
+        BUG_REPORT("Bug Report");
+
+        public final String label;
+
+        ScreenshotType(String label) {
+            this.label = label;
+        }
+    }
+
+    public volatile ScreenshotType screenshotType = ScreenshotType.NORMAL;
+
+    public void toggleScreenshotType() {
+        screenshotType =
+                screenshotType == ScreenshotType.NORMAL
+                        ? ScreenshotType.BUG_REPORT
+                        : ScreenshotType.NORMAL;
+        save();
+    }
+
     public boolean fastGraphics() {
         return graphicsMode == GraphicsMode.FAST;
     }
@@ -378,6 +399,12 @@ public final class GameSettings {
                             if (mode.name().equals(setting[1])) graphicsMode = mode;
                         }
                     }
+                    if (setting[0].equals("screenshotType") && setting.length > 1) {
+                        screenshotType =
+                                ScreenshotType.BUG_REPORT.name().equals(setting[1])
+                                        ? ScreenshotType.BUG_REPORT
+                                        : ScreenshotType.NORMAL;
+                    }
                     if (setting[0].equals("threeDClouds")) threeDClouds = setting[1].equals("true");
                     if (setting[0].equals("allowMobSounds")) {
                         allowMobSounds = setting[1].equals("true");
@@ -458,6 +485,7 @@ public final class GameSettings {
             writer.println("allowMobSounds:" + allowMobSounds);
             writer.println("threeDClouds:" + threeDClouds);
             writer.println("graphicsMode:" + graphicsMode.name());
+            writer.println("screenshotType:" + screenshotType.name());
             writer.println("invertYMouse:" + invertMouse);
             writer.println("autoJump:" + autoJump);
             writer.println("parsecMode:" + parsecMode);
