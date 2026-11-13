@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.path;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.RedstoneEngine.Pos;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.LadderBlock;
@@ -11,6 +12,7 @@ import net.classicremastered.minecraft.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /** Collision and support checks shared by route search and live route following. */
 final class GroundClearance {
@@ -20,6 +22,7 @@ final class GroundClearance {
     private final List<AABB> turrets;
     final boolean climbing;
     final float maxDrop;
+    private final Predicate<Pos> removableFire;
 
     GroundClearance(Level level, float width, float height) {
         this(level, width, height, false);
@@ -30,6 +33,10 @@ final class GroundClearance {
     }
 
     GroundClearance(Level level, Mob mob) {
+        this(level, mob, null);
+    }
+
+    GroundClearance(Level level, Mob mob, Predicate<Pos> removableFire) {
         this(
                 level,
                 mob.movementClearanceWidth(),
@@ -37,11 +44,12 @@ final class GroundClearance {
                 Pathfinder.supportsSwimming(mob),
                 Pathfinder.dropLimit(mob),
                 nearbyTurrets(level, mob),
-                Pathfinder.supportsLadders(mob));
+                Pathfinder.supportsLadders(mob),
+                removableFire);
     }
 
     GroundClearance(Level level, float width, float height, boolean swimming, float maxDrop) {
-        this(level, width, height, swimming, maxDrop, List.of(), false);
+        this(level, width, height, swimming, maxDrop, List.of(), false, null);
     }
 
     private GroundClearance(
@@ -51,7 +59,8 @@ final class GroundClearance {
             boolean swimming,
             float maxDrop,
             List<AABB> turrets,
-            boolean climbing) {
+            boolean climbing,
+            Predicate<Pos> removableFire) {
         this.level = level;
         this.width = Math.max(0.1f, width);
         this.height = Math.max(0.1f, height);
@@ -59,6 +68,7 @@ final class GroundClearance {
         this.maxDrop = maxDrop;
         this.turrets = turrets;
         this.climbing = climbing;
+        this.removableFire = removableFire;
         offset = Pathfinder.offset(width);
     }
 
@@ -91,6 +101,13 @@ final class GroundClearance {
                 || !swimming && block.getLiquidType() == LiquidType.WATER;
     }
 
+    private boolean hazardous(int id, int x, int y, int z) {
+        return hazardous(id)
+                && (id != Block.FIRE.id
+                        || removableFire == null
+                        || !removableFire.test(new Pos(x, y, z)));
+    }
+
     boolean bodyClear(float x, float feet, float z) {
         float half = width * 0.5f - 0.002f;
         AABB body =
@@ -109,7 +126,7 @@ final class GroundClearance {
                 for (int by = (int) Math.floor(body.y0); by <= (int) Math.floor(body.y1); by++) {
                     if (!level.isInBounds(bx, by, bz)) return false;
                     int id = level.getTile(bx, by, bz);
-                    if (hazardous(id)) return false;
+                    if (hazardous(id, bx, by, bz)) return false;
                     if (id > 0) {
                         if (Block.blocks[id] instanceof StairBlock stairs) {
                             List<AABB> boxes = new ArrayList<>(2);
@@ -189,7 +206,7 @@ final class GroundClearance {
             for (int bz = (int) Math.floor(cz - half); bz <= (int) Math.floor(cz + half); bz++) {
                 if (!level.isInBounds(bx, below, bz)) return false;
                 int id = level.getTile(bx, below, bz);
-                if (hazardous(id)) return false;
+                if (hazardous(id, bx, below, bz)) return false;
                 if (id <= 0) continue;
                 if (swimming
                         && level.isWater(bx, below, bz)
@@ -269,7 +286,7 @@ final class GroundClearance {
                         continue;
                     }
                     AABB box =
-                            hazardous(id)
+                            hazardous(id, bx, by, bz)
                                     ? new AABB(bx, by, bz, bx + 1, by + 1, bz + 1)
                                     : Block.blocks[id].getCollisionBox(bx, by, bz);
                     if (box != null && intersectsSweep(box, x, feet, z, nx, nz, half)) return false;
@@ -316,7 +333,7 @@ final class GroundClearance {
             int id = level.getTile(x, y, z);
             if (id == 0) continue;
             if (level.isWater(x, y, z)) return waterLanding(x, y + 1, z) ? y + 1 : Float.NaN;
-            if (hazardous(id) || Block.blocks[id].getCollisionBox(x, y, z) != null)
+            if (hazardous(id, x, y, z) || Block.blocks[id].getCollisionBox(x, y, z) != null)
                 return Float.NaN;
         }
         return Float.NaN;

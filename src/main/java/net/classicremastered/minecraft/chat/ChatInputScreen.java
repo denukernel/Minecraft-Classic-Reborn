@@ -113,6 +113,11 @@ public class ChatInputScreen extends GuiScreen {
     }
 
     @Override
+    protected void onResize() {
+        // Text and history state belong to the current chat session.
+    }
+
+    @Override
     public void onClose() {
         Keyboard.enableRepeatEvents(false);
         dragging = false;
@@ -467,6 +472,7 @@ public class ChatInputScreen extends GuiScreen {
 
     @Override
     protected void onMouseClick(int x, int y, int button) {
+        if (minecraft.hud != null && minecraft.hud.onChatClick(x, y, button)) return;
         refreshSuggestions();
         if (button == 0
                 && suggestionPanel()

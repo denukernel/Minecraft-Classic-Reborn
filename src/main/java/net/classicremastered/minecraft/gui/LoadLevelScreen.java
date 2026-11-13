@@ -20,8 +20,14 @@ public class LoadLevelScreen extends GuiScreen implements Runnable {
     /** Kept for callers of the old screen API; no remote map lookup is needed. */
     @Override public void run() {}
 
-    @Override public void onOpen() {
+    @Override
+    public void onOpen() {
         cancelDialog();
+        onResize();
+    }
+
+    @Override
+    protected void onResize() {
         buttons.clear();
         int y = height / 2 - 10;
         if (!saving) buttons.add(new Button(7, width / 2 - 100, y - 24, "Saved levels..."));

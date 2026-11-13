@@ -25,6 +25,7 @@ import org.lwjgl.opengl.Display;
 public class InputManager {
     private static final int USE_INTERVAL = 4;
     private final Minecraft mc;
+    private final PlayerCombat combat;
     private Item activeUse;
     private boolean attackHeld;
     private boolean useHeld;
@@ -33,6 +34,11 @@ public class InputManager {
 
     public InputManager(Minecraft mc) {
         this.mc = mc;
+        this.combat = new PlayerCombat(mc);
+    }
+
+    public float attackCharge(float partial) {
+        return combat.enabled() ? combat.charge(partial) : 1.0f;
     }
 
     void pressAttack() {
@@ -43,6 +49,7 @@ public class InputManager {
     }
 
     void tickAttack(boolean down) {
+        combat.updateHeldItem();
         if (!down || !canUse()) {
             attackHeld = false;
             return;
@@ -53,6 +60,11 @@ public class InputManager {
                                 && mc.player.developerPowers().fastPunch(mc.player)
                         ? 3
                         : mc.timer.tps / 4f;
+        if (combat.enabled()
+                && !mc.player.developerPowers().fastPunch(mc.player)
+                && (mc.selected == null || mc.selected.entityPos == 1)) {
+            return;
+        }
         if (attackHeld && mc.ticks - lastAttackTick >= interval) pressAttack();
     }
 
@@ -153,6 +165,14 @@ public class InputManager {
         DeveloperPowers powers = mc.player.developerPowers();
         if (powers.aimingBlock(mc.player)) return;
         if (button == 0) powers.swingPunch(mc.player);
+        if (button == 0
+                && mc.selected != null
+                && mc.selected.entity
+                        instanceof net.classicremastered.minecraft.mob.SkeletonTrap trap
+                && trap.isScattered()) {
+            if (mc.entityWithinReach(trap)) trap.breakBone(mc.player, mc.selected.bone);
+            return;
+        }
         if (button == 1 && powers.active(mc.player) && DeveloperPowers.isSword(selId)) {
             powers.swordAttack(
                     mc.player,
@@ -288,10 +308,13 @@ public class InputManager {
                 }
                 int dmg = net.classicremastered.minecraft.level.itemstack.Equipment.damage(selId);
                 if (powers.fastPunch(mc.player)) powers.punch(mc.player, mc.selected.entity, dmg);
+                else if (combat.enabled()) combat.attack(mc.selected.entity);
                 else mc.selected.entity.hurt(mc.player, dmg);
             }
             return;
         }
+
+        if (button == 0 && mc.selected == null && combat.enabled()) combat.miss();
 
         if (button == 1
                 && FlowerBlock.isFlower(selId)

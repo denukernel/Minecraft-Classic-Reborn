@@ -2,6 +2,7 @@ package net.classicremastered.minecraft;
 
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.mob.SkeletonTrap;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.Renderer;
@@ -59,27 +60,35 @@ final class ClientTargetPicker {
         rayStart = r.getPlayerVector(partial);
         rayEnd = rayStart.add(lookX * reach, sinPitch * reach, lookZ * reach);
         r.entity = null;
-        List entitiesInPath = r.minecraft.level.blockMap.getEntities(player,
-                player.bb.expand(lookX * reach, sinPitch * reach, lookZ * reach));
+        List entitiesInPath =
+                r.minecraft.level.blockMap.getEntities(
+                        player, player.bb.expand(lookX * reach, sinPitch * reach, lookZ * reach));
         float closestHitDist = 0.0F;
+        MovingObjectPosition closestEntityHit = null;
 
         for (int entityIndex = 0; entityIndex < entitiesInPath.size(); ++entityIndex) {
             Entity e;
             if ((e = (Entity) entitiesInPath.get(entityIndex)).isPickable()) {
                 cosPitch = 0.1F;
                 MovingObjectPosition hit;
-                if ((hit = e.bb.grow(cosPitch, cosPitch, cosPitch).clip(rayStart,
-                        rayEnd)) != null
+                SkeletonTrap trap = e instanceof SkeletonTrap t && t.isScattered() ? t : null;
+                if ((hit =
+                                        trap != null
+                                                ? trap.pickBone(rayStart, rayEnd, partial)
+                                                : e.bb.grow(cosPitch, cosPitch, cosPitch)
+                                                        .clip(rayStart, rayEnd))
+                                != null
                         && ((cosPitch = rayStart.distance(hit.vec)) < closestHitDist
                                 || closestHitDist == 0.0F)) {
                     rPick.entity = e;
+                    closestEntityHit = trap == null ? new MovingObjectPosition(e) : hit;
                     closestHitDist = cosPitch;
                 }
             }
         }
 
         if (rPick.entity != null) {
-            rPick.minecraft.selected = new MovingObjectPosition(rPick.entity);
+            rPick.minecraft.selected = closestEntityHit;
         }
     }
 }

@@ -59,16 +59,19 @@ public class TeleportCommand implements Command {
                 // === Infinite worlds (Flat/Terrain) ===
                 if (mc.level.creativeMode &&
                     (Math.abs(x) >= 1_000_000 || Math.abs(z) >= 1_000_000)) {
-                    mc.hud.addChat("&c⚠ Warning: Teleporting beyond 1,000,000 may cause instability!");
+                    mc.hud.addChat(
+                            "&c⚠ Warning: Teleporting beyond 1,000,000 may cause instability!");
                 }
             }
 
             // --- Execute teleport ---
             sender.setPos((float) x + 0.5f, (float) y, (float) z + 0.5f);
             sender.xd = sender.yd = sender.zd = 0;
+            sender.fallDistance = 0;
+            sender.resetInterpolation();
 
             if (mc.hud != null) {
-                mc.hud.addChat("&aTeleported to &7" + (int)x + " " + (int)y + " " + (int)z);
+                mc.hud.addChat("&aTeleported to &7" + (int) x + " " + (int) y + " " + (int) z);
             }
         } catch (NumberFormatException e) {
             if (mc.hud != null) mc.hud.addChat("&cInvalid coordinates. Usage: &e" + getUsage());

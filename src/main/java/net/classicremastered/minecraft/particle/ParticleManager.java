@@ -11,7 +11,8 @@ import net.classicremastered.minecraft.render.TextureManager;
 
 public final class ParticleManager {
 
-    public List[] particles = new List[2];
+    public static final int COMBAT_PASS = 2;
+    public List[] particles = new List[3];
     public TextureManager textureManager;
 
     public ParticleManager(Level var1, TextureManager var2) {
@@ -19,8 +20,7 @@ public final class ParticleManager {
             var1.particleEngine = this;
         }
         this.textureManager = var2;
-        for (int i = 0; i < 2; ++i)
-            this.particles[i] = new ArrayList();
+        for (int i = 0; i < particles.length; ++i) this.particles[i] = new ArrayList();
     }
 
     /** NEW: rebind this manager to a (new) level when worlds change */
@@ -32,8 +32,7 @@ public final class ParticleManager {
 
     /** OPTIONAL: clear particles when switching levels */
     public void clear() {
-        for (int i = 0; i < 2; ++i)
-            this.particles[i].clear();
+        for (int i = 0; i < particles.length; ++i) this.particles[i].clear();
     }
 
     public final void spawnParticle(Entity e) {
@@ -43,7 +42,7 @@ public final class ParticleManager {
     }
 
     public final void tick() {
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < particles.length; ++i) {
             for (int j = 0; j < this.particles[i].size(); ++j) {
                 Particle p = (Particle) this.particles[i].get(j);
                 p.tick();

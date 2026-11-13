@@ -6,6 +6,7 @@ public final class ModelManager {
     private HumanoidModel armoredHuman = new HumanoidModel(1.0F);
     private CreeperModel creeper = new CreeperModel();
     private SkeletonModel skeleton = new SkeletonModel();
+    private final SkeletonTrapModel skeletonTrap = new SkeletonTrapModel();
     private BabySkeletonModel babySkeleton = new BabySkeletonModel();
     private ZombieModel zombie = new ZombieModel();
     private final FrostbiteModel frostbite = new FrostbiteModel();
@@ -72,6 +73,8 @@ public final class ModelManager {
                 return armoredHumanBaby;
             case "skeleton":
                 return this.skeleton;
+            case "skeleton_trap":
+                return skeletonTrap;
             case "frostbite_baby":
                 return babyFrostbite;
             case "husk_baby":

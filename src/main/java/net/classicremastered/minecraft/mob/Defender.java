@@ -115,13 +115,16 @@ public final class Defender extends HumanoidMob {
         if (gear == null || count <= 0) return false;
         int slot = gear.slot >= 0 ? gear.slot : 4;
         int previous = equipment[slot];
+        int previousWear = Equipment.wear(this, slot);
+        int wear = player.inventory.armorWear(inventorySlot);
         if (count == 1) {
             player.inventory.setIdCount(inventorySlot, previous, previous > 0 ? 1 : 0);
+            player.inventory.setArmorWear(inventorySlot, previousWear);
         } else {
-            if (previous > 0 && !player.inventory.addResource(previous)) return false;
+            if (previous > 0 && !player.inventory.addResource(previous, previousWear)) return false;
             player.inventory.setIdCount(inventorySlot, raw, count - 1);
         }
-        equipment[slot] = raw;
+        Equipment.equip(this, slot, raw, wear);
         return true;
     }
 
@@ -130,8 +133,9 @@ public final class Defender extends HumanoidMob {
                 || slot < 0
                 || slot >= equipment.length
                 || equipment[slot] <= 0
-                || !player.inventory.addResource(equipment[slot])) return false;
-        equipment[slot] = 0;
+                || !player.inventory.addResource(equipment[slot], Equipment.wear(this, slot)))
+            return false;
+        Equipment.equip(this, slot, 0, 0);
         return true;
     }
 
@@ -165,8 +169,10 @@ public final class Defender extends HumanoidMob {
         if (dead || removed) return;
         for (int slot = 0; slot < equipment.length; slot++) {
             if (level != null && !level.isNetworkMode() && level.doMobLoot && equipment[slot] > 0)
-                level.addEntity(new DroppedItem(level, x, y, z, equipment[slot] - 256));
-            equipment[slot] = 0;
+                level.addEntity(
+                        new DroppedItem(level, x, y, z, equipment[slot] - 256)
+                                .withArmorWear(Equipment.wear(this, slot)));
+            Equipment.equip(this, slot, 0, 0);
         }
         super.die(killer);
     }

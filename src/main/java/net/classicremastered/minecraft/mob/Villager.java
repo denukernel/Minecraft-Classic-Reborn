@@ -27,10 +27,12 @@ public class Villager extends Mob {
     @Override
     public void loadPersistence(net.classicremastered.nbt.CompoundTag tag) {
         super.loadPersistence(tag);
+        super.persistent = true;
         savedOffers = net.classicremastered.minecraft.level.itemstack.VillagerTrades.load(tag);
     }
 
-    public boolean persistent = true;
+    // Retain the field for older villager bytecode and serialized worlds.
+    @Deprecated public boolean persistent = true;
     private int deathTicks = 0;
 
     // --- Home anchor ---
@@ -62,6 +64,7 @@ public class Villager extends Mob {
 
     public Villager(Level level, float x, float y, float z) {
         super(level);
+        super.persistent = true;
         this.setSize(0.6F, 1.8F);
         this.heightOffset = 1.62F;
         this.health = 20;
@@ -86,6 +89,7 @@ public class Villager extends Mob {
     private void readObject(java.io.ObjectInputStream input)
             throws java.io.IOException, ClassNotFoundException {
         input.defaultReadObject();
+        super.persistent = true;
         initSounds();
     }
 

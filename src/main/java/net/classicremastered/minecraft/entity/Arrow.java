@@ -6,6 +6,8 @@ import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.FireBlock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.model.HumanoidModel;
+import net.classicremastered.minecraft.model.ModelPart;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.particle.SmokeParticle;
@@ -119,9 +121,7 @@ public class Arrow extends Entity {
                 remove();
                 return;
             }
-            Vec3D position = attachmentPosition(1);
-            setPos(position.x, position.y, position.z);
-            yRot = stuckPlayer.yBodyRot + attachmentYaw;
+            syncAttachmentPosition();
             if (blockMap != null) blockMap.moved(this);
             if (remainingFireTicks > 0) remainingFireTicks--;
             updateFire(bb);
@@ -262,40 +262,98 @@ public class Arrow extends Entity {
     }
 
     private void attachTo(Player player) {
+        attachTo(player, level.random.nextLong());
+    }
+
+    private void attachTo(Player player, long seed) {
         stuckPlayer = player;
-        float yaw = player.yBodyRot * (float) Math.PI / 180;
-        float dx = x - player.x, dz = z - player.z;
-        attachmentX = dx * MathHelper.cos(yaw) + dz * MathHelper.sin(yaw);
-        attachmentZ = -dx * MathHelper.sin(yaw) + dz * MathHelper.cos(yaw);
-        attachmentHeight = MathHelper.clamp(y - player.y + player.heightOffset, .1f, 1.75f);
-        attachmentYaw = yRot - player.yBodyRot;
+        attachmentSeed = seed;
         hasHit = true;
         time = 0;
         xd = yd = zd = 0;
-        Vec3D position = attachmentPosition(1);
-        setPos(position.x, position.y, position.z);
+        syncAttachmentPosition();
         if (blockMap != null) blockMap.moved(this);
         xo = x;
         yo = y;
         zo = z;
     }
 
-    private Vec3D attachmentPosition(float partial) {
-        float yaw = stuckPlayer.renderBodyYaw(partial) * (float) Math.PI / 180;
-        return new Vec3D(
-                stuckPlayer.xo
-                        + (stuckPlayer.x - stuckPlayer.xo) * partial
-                        + attachmentX * MathHelper.cos(yaw)
-                        - attachmentZ * MathHelper.sin(yaw),
-                stuckPlayer.yo
-                        + (stuckPlayer.y - stuckPlayer.yo) * partial
-                        - stuckPlayer.getRenderHeightOffset(partial)
-                        + stuckPlayer.renderOffset
-                        + attachmentHeight,
-                stuckPlayer.zo
-                        + (stuckPlayer.z - stuckPlayer.zo) * partial
-                        + attachmentX * MathHelper.sin(yaw)
-                        + attachmentZ * MathHelper.cos(yaw));
+    public boolean isStuckTo(Player player) {
+        return !removed && stuckPlayer == player;
+    }
+
+    public long getAttachmentSeed() {
+        return attachmentSeed;
+    }
+
+    public static void restoreStuckArrow(Player player, long seed) {
+        Level level = player.level;
+        Arrow arrow = new Arrow(level, null, player.x, player.y, player.z, 0, 0, 0);
+        arrow.attachTo(player, seed);
+        level.addEntity(arrow);
+    }
+
+    private void syncAttachmentPosition() {
+        setPos(stuckPlayer.x, (stuckPlayer.bb.y0 + stuckPlayer.bb.y1) * .5f, stuckPlayer.z);
+    }
+
+    public static void renderStuckArrows(
+            Player player, HumanoidModel model, TextureManager textures, float scale) {
+        if (player.level == null || player.level.blockMap == null || player.health <= 0) return;
+        boolean bound = false;
+        try {
+            for (Entity entity : player.level.blockMap.all) {
+                if (!(entity instanceof Arrow arrow)
+                        || arrow.stuckPlayer != player
+                        || arrow.removed) continue;
+                if (!bound) {
+                    GL11.glPushAttrib(
+                            GL11.GL_TEXTURE_BIT | GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT);
+                    bound = true;
+                    GL11.glEnable(GL11.GL_TEXTURE_2D);
+                    GL11.glEnable(GL11.GL_ALPHA_TEST);
+                    GL11.glDisable(GL11.GL_CULL_FACE);
+                    GL11.glBindTexture(GL11.GL_TEXTURE_2D, textures.load("/item/arrows.png"));
+                }
+                arrow.renderAttached(model, scale);
+            }
+        } finally {
+            if (bound) GL11.glPopAttrib();
+        }
+    }
+
+    private void renderAttached(HumanoidModel model, float scale) {
+        // Keep a fixed part, position and direction across all poses and frames.
+        var random = new java.util.Random(attachmentSeed);
+        ModelPart part =
+                switch (random.nextInt(6)) {
+                    case 0 -> model.head;
+                    case 1 -> model.body;
+                    case 2 -> model.rightArm;
+                    case 3 -> model.leftArm;
+                    case 4 -> model.rightLeg;
+                    default -> model.leftLeg;
+                };
+        if (!part.render) return;
+        Vec3D a = part.vertices[0].vector;
+        Vec3D b = part.vertices[6].vector;
+        float u = random.nextFloat(), v = random.nextFloat(), w = random.nextFloat();
+        float dx = 1 - 2 * u, dy = 1 - 2 * v, dz = 1 - 2 * w;
+        GL11.glPushMatrix();
+        try {
+            part.applyTransform(scale);
+            GL11.glTranslatef(
+                    (Math.min(a.x, b.x) + Math.abs(b.x - a.x) * u) * scale,
+                    (a.y + (b.y - a.y) * v) * scale,
+                    (a.z + (b.z - a.z) * w) * scale);
+            GL11.glRotatef((float) Math.toDegrees(Math.atan2(dx, dz)) - 90, 0, 1, 0);
+            GL11.glRotatef((float) Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz))), 0, 0, 1);
+            GL11.glScalef(.8f, .8f, .8f);
+            GL11.glTranslatef(-.37f, 0, 0);
+            renderArrowMesh();
+        } finally {
+            GL11.glPopMatrix();
+        }
     }
 
     public static void removeStuckArrows(Player player) {
@@ -464,13 +522,7 @@ public class Arrow extends Entity {
 
     @Override
     public void render(TextureManager textureManager, float unknown0) {
-        if (isBullet()) return;
-        if (stuckPlayer != null
-                && (removed
-                        || stuckPlayer.health <= 0
-                        || stuckPlayer.minecraft != null
-                                && !stuckPlayer.minecraft.renderer.shouldRenderLocalPlayer()))
-            return;
+        if (isBullet() || stuckPlayer != null) return;
         textureId = textureManager.load("/item/arrows.png");
 
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureId);
@@ -478,25 +530,25 @@ public class Arrow extends Entity {
         float brightness = level.getRenderBrightness((int) x, (int) y, (int) z);
 
         Vec3D position =
-                stuckPlayer == null
-                        ? new Vec3D(
-                                xo + (x - xo) * unknown0,
-                                yo + (y - yo) * unknown0,
-                                zo + (z - zo) * unknown0)
-                        : attachmentPosition(unknown0);
-        float yaw =
-                stuckPlayer == null
-                        ? yRotO + (yRot - yRotO) * unknown0
-                        : stuckPlayer.renderBodyYaw(unknown0) + attachmentYaw;
+                new Vec3D(
+                        xo + (x - xo) * unknown0,
+                        yo + (y - yo) * unknown0,
+                        zo + (z - zo) * unknown0);
+        float yaw = yRotO + (yRot - yRotO) * unknown0;
         GL11.glPushMatrix();
         GL11.glColor4f(brightness, brightness, brightness, 1.0F);
         GL11.glTranslatef(position.x, position.y - this.heightOffset / 2.0F, position.z);
         GL11.glRotatef(yaw - 90.0F, 0.0F, 1.0F, 0.0F);
         GL11.glRotatef(xRotO + (xRot - xRotO) * unknown0, 0.0F, 0.0F, 1.0F);
+        renderArrowMesh();
+        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+        GL11.glPopMatrix();
+        renderFire(textureManager, position);
+    }
+
+    private static void renderArrowMesh() {
         GL11.glRotatef(45.0F, 1.0F, 0.0F, 0.0F);
-
         ShapeRenderer shapeRenderer = ShapeRenderer.instance;
-
         float shaftU = 24.0F / 32.0F;
 
         float unknown1 = 0;
@@ -539,9 +591,9 @@ public class Arrow extends Entity {
             shapeRenderer.vertexUV(-8.0F, 2.0F, 0.0F, 0.0F, unknown2);
             shapeRenderer.end();
         }
+    }
 
-        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-        GL11.glPopMatrix();
+    private void renderFire(TextureManager textureManager, Vec3D position) {
         if (remainingFireTicks > 0) {
             GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_TEXTURE_BIT | GL11.GL_CURRENT_BIT);
             try {
@@ -551,6 +603,7 @@ public class Arrow extends Entity {
                         GL11.GL_TEXTURE_2D,
                         textureManager.load(
                                 net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE));
+                ShapeRenderer shapeRenderer = ShapeRenderer.instance;
                 shapeRenderer.begin();
                 shapeRenderer.color(1, 1, 1);
                 FireBlock.renderFlames(
@@ -573,11 +626,12 @@ public class Arrow extends Entity {
         Player player = (Player) entity;
 
         // Disable pickup in Creative
-        if (player.level != null && player.level.creativeMode)
-            return;
+        if (player.level != null && player.level.creativeMode) return;
 
-        if (!removed && hasHit && player.inventory
-                .addResource(net.classicremastered.minecraft.level.itemstack.Equipment.ARROW.id + 256)) {
+        if (!removed
+                && hasHit
+                && player.inventory.addResource(
+                        net.classicremastered.minecraft.level.itemstack.Equipment.ARROW.id + 256)) {
             TakeEntityAnim takeEntityAnim = new TakeEntityAnim(level, this, player);
             level.addEntity(takeEntityAnim);
             remove();
@@ -586,8 +640,7 @@ public class Arrow extends Entity {
 
     @Override
     public void awardKillScore(Entity entity, int score) {
-        if (owner != null)
-            owner.awardKillScore(entity, score);
+        if (owner != null) owner.awardKillScore(entity, score);
     }
 
     public static final long serialVersionUID = 0L;
@@ -627,7 +680,7 @@ public class Arrow extends Entity {
     private boolean bullet;
     private boolean stolen;
     private Player stuckPlayer;
-    private float attachmentX, attachmentZ, attachmentHeight, attachmentYaw;
+    private long attachmentSeed;
 
     public Entity getOwner() {
         return owner;

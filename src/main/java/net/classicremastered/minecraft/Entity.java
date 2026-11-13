@@ -403,9 +403,14 @@ public abstract class Entity implements Serializable {
             this.yo = this.y;
             this.zo = this.z;
         }
-        if (this.level != null && this instanceof net.classicremastered.minecraft.mob.Mob && isAliveEntity(this)) {
+        if (this.level != null
+                && this instanceof net.classicremastered.minecraft.mob.Mob
+                && isAliveEntity(this)) {
             if (suffocationCooldown > 0) suffocationCooldown--;
-            if (!level.isNetworkMode() && !noPhysics && suffocationCooldown == 0 && eyesInWall()) {
+            if (!level.isNetworkMode()
+                    && !noPhysics
+                    && suffocationCooldown == 0
+                    && getBlockAtEyes() != null) {
                 hurt(null, 1, "in_wall");
                 suffocationCooldown = 10;
             }
@@ -677,7 +682,7 @@ public abstract class Entity implements Serializable {
 
     protected void causeFallDamage(float var1) {}
 
-    private boolean eyesInWall() {
+    final Block getBlockAtEyes() {
         float eye =
                 this instanceof net.classicremastered.minecraft.player.Player
                         ? bb.y0 + heightOffset
@@ -693,10 +698,10 @@ public abstract class Entity implements Serializable {
                 if (block == null || !block.isSolid() || !block.isOpaque() || !block.isCube())
                     continue;
                 AABB collisionBox = block.getCollisionBox(bx, y, bz);
-                if (collisionBox != null && eyes.intersectsInner(collisionBox)) return true;
+                if (collisionBox != null && eyes.intersectsInner(collisionBox)) return block;
             }
         }
-        return false;
+        return null;
     }
 
     protected final boolean fireDestroysStack(boolean fireResistant) {

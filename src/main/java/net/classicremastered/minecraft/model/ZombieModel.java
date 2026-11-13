@@ -59,7 +59,9 @@ public class ZombieModel extends HumanoidModel {
         syncBuilderPose(entity);
 
         // Force-disable the hat/overlay for Husks (opaque texture → no alpha in hat slot).
-        boolean isHusk = (entity instanceof net.classicremastered.minecraft.mob.Husk);
+        boolean isHusk =
+                entity instanceof net.classicremastered.minecraft.mob.Husk
+                        || entity instanceof net.classicremastered.minecraft.mob.HuskIgniter;
         this.hasHeadOverlay = !isHusk;
 
         // Hard toggle the underlying part so ANY render path obeys it.

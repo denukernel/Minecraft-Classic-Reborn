@@ -230,8 +230,8 @@ public final class Renderer {
     }
 
     public final void enableGuiMode() {
-        int w = this.minecraft.width * 240 / this.minecraft.height;
-        int h = this.minecraft.height * 240 / this.minecraft.height;
+        int w = this.minecraft.guiWidth();
+        int h = this.minecraft.guiHeight();
         GL11.glClear(256);
         GL11.glMatrixMode(5889);
         GL11.glLoadIdentity();

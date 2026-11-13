@@ -9,6 +9,7 @@ import java.util.*;
 
 /** Stable equipment definitions. Armor slots: head, chest, legs, feet. */
 public final class Equipment {
+    private static final int[] ARMOR_SLOT_DURABILITY = {11, 16, 15, 13};
     public static final Map<Integer, Gear> GEAR = new LinkedHashMap<>();
     public static Item STICK, LEATHER, STRING, ARROW;
     public static final int[] SWORDS = {21, 22, 2, 38, 39}, AXES = {23, 24, 25, 40, 41};
@@ -29,6 +30,7 @@ public final class Equipment {
     public static final class Gear extends ToolItem {
         public final int damage, slot, protection, price;
         public final String armorMaterial;
+        public final int maxDurability;
 
         Gear(
                 int id,
@@ -45,6 +47,21 @@ public final class Equipment {
             this.protection = protection;
             this.price = price;
             this.armorMaterial = armorMaterial;
+            this.maxDurability =
+                    slot < 0
+                            ? 0
+                            : ARMOR_SLOT_DURABILITY[slot]
+                                    * switch (armorMaterial) {
+                                        case "wood" -> 3;
+                                        case "leather" -> 5;
+                                        case "gold" -> 7;
+                                        case "stone" -> 9;
+                                        case "iron" -> 15;
+                                        case "diamond" -> 33;
+                                        default ->
+                                                throw new IllegalArgumentException(
+                                                        "Unknown armor material: " + armorMaterial);
+                                    };
             GEAR.put(id, this);
         }
 
@@ -54,9 +71,19 @@ public final class Equipment {
             int selected = p.inventory.selected;
             if (p.inventory.getSelected() != id + 256) return;
             int previous = p.equipment[slot];
-            p.equipment[slot] = id + 256;
-            if (!level.creativeMode)
-                p.inventory.setIdCount(selected, previous, previous > 0 ? 1 : 0);
+            int previousWear = wear(p, slot);
+            int wear = p.inventory.armorWear(selected);
+            if (!level.creativeMode) {
+                int count = p.inventory.getCount(selected);
+                if (count > 1) {
+                    if (previous > 0 && !p.inventory.addResource(previous, previousWear)) return;
+                    p.inventory.removeSelected(1);
+                } else {
+                    p.inventory.setIdCount(selected, previous, previous > 0 ? 1 : 0);
+                    p.inventory.setArmorWear(selected, previousWear);
+                }
+            }
+            equip(p, slot, id + 256, wear);
         }
     }
 
@@ -169,8 +196,70 @@ public final class Equipment {
     }
 
     public static int damage(int raw) {
+        float tool = miningToolDamage(raw);
+        if (tool > 0) return Math.round(tool);
         Gear g = gear(raw);
         return g != null && g.damage > 0 ? g.damage : 3;
+    }
+
+    public static ToolItem miningTool(int raw) {
+        int id = raw - 256;
+        if (id >= 0
+                && id < Item.items.length
+                && Item.items[id] instanceof ToolItem tool
+                && (tool.kind() == ToolItem.Kind.PICKAXE || tool.kind() == ToolItem.Kind.SHOVEL)) {
+            return tool;
+        }
+        return null;
+    }
+
+    public static float miningToolDamage(int raw) {
+        ToolItem tool = miningTool(raw);
+        return tool == null ? 0 : tool.attackDamage();
+    }
+
+    public static int armorWear(int raw, int wear) {
+        Gear gear = gear(raw);
+        return gear == null || gear.maxDurability == 0
+                ? 0
+                : Math.max(0, Math.min(wear, gear.maxDurability - 1));
+    }
+
+    public static int wear(Mob mob, int slot) {
+        return mob.armorWear == null || slot >= mob.armorWear.length
+                ? 0
+                : armorWear(mob.equipment[slot], mob.armorWear[slot]);
+    }
+
+    public static void equip(Mob mob, int slot, int raw, int wear) {
+        mob.equipment[slot] = raw;
+        if (slot >= 4) return;
+        if (mob.armorWear == null) mob.armorWear = new int[4];
+        mob.armorWear[slot] = armorWear(raw, wear);
+    }
+
+    public static void damageArmor(Mob mob, int damage) {
+        if (damage <= 0
+                || mob.equipment == null
+                || mob.level == null
+                || mob.level.isNetworkMode()) {
+            return;
+        }
+        int wear = Math.max(1, damage / 4);
+        boolean broke = false;
+        for (int slot = 0; slot < 4; slot++) {
+            int raw = mob.equipment[slot];
+            Gear gear = gear(raw);
+            if (gear == null || gear.slot != slot) continue;
+            int next = wear(mob, slot) + wear;
+            if (next >= gear.maxDurability) {
+                equip(mob, slot, 0, 0);
+                broke = true;
+            } else {
+                equip(mob, slot, raw, next);
+            }
+        }
+        if (broke) mob.level.playSound("random/break", mob, 0.8f, 1.0f);
     }
 
     public static int points(Mob m) {
@@ -184,6 +273,11 @@ public final class Equipment {
     }
 
     public static String description(int raw) {
+        float tool = miningToolDamage(raw);
+        if (tool > 0) {
+            String damage = tool == (int) tool ? Integer.toString((int) tool) : Float.toString(tool);
+            return damage + " attack damage";
+        }
         Gear g = gear(raw);
         return g == null
                 ? ""
@@ -198,7 +292,11 @@ public final class Equipment {
 
     public static void save(Mob m, CompoundTag tag) {
         CompoundTag e = new CompoundTag("Equipment");
-        for (int s = 0; s < 5; s++) e.putInt("Slot" + s, m.equipment[s]);
+        for (int s = 0; s < 5; s++) {
+            e.putInt("Slot" + s, m.equipment[s]);
+            int wear = wear(m, s);
+            if (wear > 0) e.putInt("Wear" + s, wear);
+        }
         e.putInt("Legacy", m.legacyArmor ? 1 : 0);
         if (m instanceof net.classicremastered.minecraft.mob.HumanoidMob h) {
             e.putInt("Helmet", h.helmet ? 1 : 0);
@@ -226,7 +324,8 @@ public final class Equipment {
         for (int s = 0; s < 5; s++) {
             int raw = e.getInt("Slot" + s);
             Gear g = gear(raw);
-            m.equipment[s] = g != null && (s == 4 ? g.slot < 0 : g.slot == s) ? raw : 0;
+            int equipped = g != null && (s == 4 ? g.slot < 0 : g.slot == s) ? raw : 0;
+            equip(m, s, equipped, e.getInt("Wear" + s));
         }
         m.equipmentRolled = true;
         m.armorRemainder = Math.max(0, Math.min(99, e.getInt("Remainder")));

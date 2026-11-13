@@ -158,6 +158,10 @@ public final class HeldBlockEntity extends Entity {
             return;
         }
 
+        Mob target = impact.mob();
+        boolean dodged =
+                target instanceof net.classicremastered.minecraft.mob.Enderman enderman
+                        && enderman.tryEvadeProjectile();
         if (blockId == Block.TNT.id) {
             PrimedTnt.detonate(this, owner, 4f);
             return;
@@ -175,15 +179,16 @@ public final class HeldBlockEntity extends Entity {
         if (block.stepsound != null) {
             level.playSound(block.stepsound.pool, x, y, z, .8f, 1f);
         }
-        Mob target = impact.mob();
         if (target == null) {
             tryPlaceBlockSimple();
         } else {
-            target.hurt(this, 8);
-            target.xd += xd * .35f;
-            target.yd += .08f;
-            target.zd += zd * .35f;
-            if (target.health > 0) target.markForcedFall(owner);
+            if (!dodged) {
+                target.hurt(this, 8);
+                target.xd += xd * .35f;
+                target.yd += .08f;
+                target.zd += zd * .35f;
+                if (target.health > 0) target.markForcedFall(owner);
+            }
             dropPickup();
         }
         remove();

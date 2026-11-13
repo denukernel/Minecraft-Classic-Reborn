@@ -47,40 +47,8 @@ final class InfiniteLevelNbtCodec {
         root.putInt("TimeOfDay", level.timeOfDay);
         root.putByte("DoDayNightCycle", (byte) (level.doDayNightCycle ? 1 : 0));
 
-        CompoundTag player = new CompoundTag("Player");
-        player.putString("id", "Player");
-        Entity savePlayer = level.player;
-        if (savePlayer == null && level.minecraft != null) {
-            savePlayer = level.minecraft.player;
-        }
-        if (savePlayer != null) {
-            ListTag pos = new ListTag("Pos", (byte) 5);
-            pos.add(new FloatTag(null, savePlayer.x));
-            pos.add(new FloatTag(null, savePlayer.y));
-            pos.add(new FloatTag(null, savePlayer.z));
-            player.put(pos);
-
-            ListTag rot = new ListTag("Rotation", (byte) 5);
-            rot.add(new FloatTag(null, savePlayer.yRot));
-            rot.add(new FloatTag(null, savePlayer.xRot));
-            player.put(rot);
-        } else {
-            ListTag pos = new ListTag("Pos", (byte) 5);
-            pos.add(new FloatTag(null, 0f));
-            pos.add(new FloatTag(null, 0f));
-            pos.add(new FloatTag(null, 0f));
-            player.put(pos);
-
-            ListTag rot = new ListTag("Rotation", (byte) 5);
-            rot.add(new FloatTag(null, 0f));
-            rot.add(new FloatTag(null, 0f));
-            rot.add(new FloatTag(null, 0f));
-            player.put(rot);
-        }
+        root.put(PlayerNbtCodec.save(level));
         var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
-        PlayerNbtCodec.save(player, savePlayer);
-        RidingLinks.savePassenger(all, savePlayer, player);
-        root.put(player);
 
         ListTag chunks = new ListTag("Chunks", (byte) 10);
         if (map != null) {
@@ -162,7 +130,8 @@ final class InfiniteLevelNbtCodec {
         }
 
         level.setTime(root.getInt("TimeOfDay"));
-        level.doDayNightCycle = !root.hasKey("DoDayNightCycle") || root.getBoolean("DoDayNightCycle");
+        level.doDayNightCycle =
+                !root.hasKey("DoDayNightCycle") || root.getBoolean("DoDayNightCycle");
         if (root.hasKey("Name")) level.name = root.getString("Name");
         if (root.hasKey("Creator")) level.creator = root.getString("Creator");
         if (root.hasKey("CreateTime")) level.createTime = root.getLong("CreateTime");
@@ -202,34 +171,6 @@ final class InfiniteLevelNbtCodec {
         }
 
         CompoundTag player = root.getCompound("Player");
-        if (player.hasKey("Pos")) {
-            ListTag pos = player.getList("Pos");
-            ListTag rot = player.getList("Rotation");
-            float px = 0f, py = 0f, pz = 0f;
-            if (pos.size() >= 3) {
-                px = ((FloatTag) pos.get(0)).value;
-                py = ((FloatTag) pos.get(1)).value;
-                pz = ((FloatTag) pos.get(2)).value;
-            }
-            float yaw = 0f, pitch = 0f;
-            if (rot.size() >= 2) {
-                yaw = ((FloatTag) rot.get(0)).value;
-                pitch = ((FloatTag) rot.get(1)).value;
-            }
-
-            if (level.player == null) {
-                net.classicremastered.minecraft.player.Player loadedPlayer =
-                        new net.classicremastered.minecraft.player.Player(null);
-                loadedPlayer.level = level;
-                level.player = loadedPlayer;
-                loadedPlayer.moveTo(px, py, pz, yaw, pitch);
-                level.addEntity(loadedPlayer);
-            } else {
-                level.player.moveTo(px, py, pz, yaw, pitch);
-            }
-        }
-
-        PlayerNbtCodec.load(player, level.player);
         ListTag entities = root.getList("Entities");
         level.villagerDoors().load(root);
         net.classicremastered.minecraft.mob.MobRegistry.bootstrapDefaults();
@@ -261,19 +202,19 @@ final class InfiniteLevelNbtCodec {
             }
 
             var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, level, mx, my, mz);
-            if (mob != null) {
+            if (mob != null && mob.getRegistryId() == id) {
                 net.classicremastered.minecraft.level.itemstack.Equipment.load(mob, mobTag);
                 VillagerDoorManager.loadHome(mob, mobTag);
-                mob.yRot = myRot;
-                mob.xRot = mxRot;
-                mob.health = health;
+                mob.moveTo(mx, my, mz, myRot, mxRot);
+                mob.health = mob.lastHealth = health;
                 mob.loadPersistence(mobTag);
                 level.addEntity(mob);
                 ridingLinks.read(mob, mobTag);
             }
         }
-        ridingLinks.readPassenger(level.player, player);
         WorldStateNbtCodec.load(level, root, ridingLinks);
+        PlayerNbtCodec.load(level, player);
+        ridingLinks.readPassenger(level.player, player);
         ridingLinks.restore();
         level.updateDayNightColorsSmooth();
 

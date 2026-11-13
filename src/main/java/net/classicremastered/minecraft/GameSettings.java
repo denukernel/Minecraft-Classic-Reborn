@@ -13,6 +13,7 @@ import javax.imageio.ImageIO;
 public final class GameSettings {
     public static final int MOB_SHADOWS = 18;
     public static final int PLAYER_SHADOWS = 19;
+    public static final int COMBAT_STYLE = 20;
 
     public GameSettings(Minecraft minecraft, File minecraftFolder) {
         bindings =
@@ -119,6 +120,7 @@ public final class GameSettings {
     public boolean anaglyph = false;
     public boolean limitFramerate = false;
     public boolean finiteWater = true;
+    public boolean modernCombat;
     public boolean multithreaded = true;
     public KeyBinding flyToggleKey = new KeyBinding("Fly", Keyboard.KEY_V);
     public KeyBinding forwardKey = new KeyBinding("Forward", 17);
@@ -281,10 +283,12 @@ public final class GameSettings {
         if (setting == 17) parsecMode = !parsecMode;
         if (setting == MOB_SHADOWS) mobShadows = !mobShadows;
         if (setting == PLAYER_SHADOWS) playerShadows = !playerShadows;
+        if (setting == COMBAT_STYLE) modernCombat = !modernCombat;
         save();
     }
 
     public String getSetting(int id) {
+        if (id == COMBAT_STYLE) return modernCombat ? "Combat: Modern" : "Combat: Legacy";
         if (id == 16) return "Auto-Jump: " + (autoJump ? "ON" : "OFF");
         if (id == 17) return "Parsec Mode: " + (parsecMode ? "ON" : "OFF");
         if (id == MOB_SHADOWS) return "Mob Shadows: " + (mobShadows ? "ON" : "OFF");
@@ -451,6 +455,9 @@ public final class GameSettings {
                     if (setting[0].equals("finiteWater")) {
                         finiteWater = setting[1].equals("true");
                     }
+                    if (setting[0].equals("modernCombat")) {
+                        modernCombat = setting[1].equals("true");
+                    }
 
                     if (setting[0].equals("smoothing")) {
                         smoothing = Integer.parseInt(setting[1]);
@@ -509,6 +516,7 @@ public final class GameSettings {
             writer.println("anaglyph3d:" + anaglyph);
             writer.println("limitFramerate:" + limitFramerate);
             writer.println("finiteWater:" + finiteWater);
+            writer.println("modernCombat:" + modernCombat);
             writer.println("difficulty:" + difficulty.name());
             writer.println("smoothing:" + smoothing);
             writer.println("anisotropic:" + anisotropic);

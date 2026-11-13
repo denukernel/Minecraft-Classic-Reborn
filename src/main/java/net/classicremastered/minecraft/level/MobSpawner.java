@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.ProgressBarDisplay;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
@@ -117,8 +118,8 @@ public final class MobSpawner {
 
     private boolean animalSpot(int x, int y, int z) {
         return level.getTile(x, y - 1, z) == Block.GRASS.id
-                && level.isLit(x, y, z)
-                && level.getDaylightBrightness() >= .6f;
+                && level.getDaylightBrightness() >= .6f
+                && hasOpenSky(x, y, z);
     }
 
     private boolean dark(int x, int y, int z) {
@@ -238,45 +239,24 @@ public final class MobSpawner {
                                 || nearby(sx, sy, sz, 0, IronGolem.class, 32) > 0)) continue;
                 if (vandal && !villagerNear(sx, sy, sz)) continue;
                 short variant = id;
-                if (id == 2 && level.random.nextInt(100) < 5) variant = BabySkeleton.REGISTRY_ID;
+                if (id == 2) {
+                    int roll = level.random.nextInt(100);
+                    if (roll < 5) variant = BabySkeleton.REGISTRY_ID;
+                    else if (roll < 13 && CombatRules.difficulty(level) == Difficulty.EXTREME)
+                        variant = SkeletonTrap.REGISTRY_ID;
+                }
                 if (id == 1) {
-                    boolean baby = level.random.nextInt(100) < 5;
                     var biome = biomes == null ? null : biomes.biomeAt(sx, sz);
-                    if (biome == BiomeLevelGenerator.Biome.DESERT) {
-                        variant =
-                                baby
-                                        ? net.classicremastered.minecraft.mob.BabyHusk.REGISTRY_ID
-                                        : Husk.REGISTRY_ID;
-                    } else if (!level.isDaytime()
-                            && (biome == BiomeLevelGenerator.Biome.SNOWY_PLAINS
-                                    || biome == BiomeLevelGenerator.Biome.SNOWY_FOREST)) {
-                        variant =
-                                baby
-                                        ? net.classicremastered.minecraft.mob.BabyFrostbite
-                                                .REGISTRY_ID
-                                        : net.classicremastered.minecraft.mob.Frostbite.REGISTRY_ID;
-                    } else if (baby) {
-                        variant = 40;
-                    } else {
-                        var difficulty = CombatRules.difficulty(level);
-                        if (difficulty.ordinal()
-                                >= net.classicremastered.minecraft.Difficulty.VERY_HARD.ordinal()) {
-                            int roll = level.random.nextInt(100);
-                            int igniterChance =
-                                    difficulty == net.classicremastered.minecraft.Difficulty.EXTREME
-                                            ? 12
-                                            : 2;
-                            if (roll < igniterChance) variant = ZombieIgniter.REGISTRY_ID;
-                            else if (roll < igniterChance + 2)
-                                variant = MobRegistry.idOfName("ZombieBuilder");
-                        }
-                    }
+                    variant = zombieVariant(biome, sx, sy, sz);
                 }
                 Mob mob = MobRegistry.create(variant, level, sx + .5f, sy, sz + .5f);
                 if (mob == null || mob.getRegistryId() != variant || !place(mob, sx, sy, sz, near))
                     continue;
                 Mob chicken = null;
-                if (mob instanceof Zombie && mob.isBaby() && level.random.nextInt(20) == 0) {
+                if (mob instanceof Zombie
+                        && mob.isBaby()
+                        && level.random.nextInt(20) == 0
+                        && hasOpenSky(sx, sy, sz)) {
                     var candidate = MobRegistry.create((short) 25, level, sx + .5f, sy, sz + .5f);
                     if (candidate instanceof net.classicremastered.minecraft.mob.Chicken
                             && place(candidate, sx, sy, sz, near)) chicken = candidate;
@@ -295,6 +275,44 @@ public final class MobSpawner {
             }
         }
         return spawned;
+    }
+
+    private short zombieVariant(BiomeLevelGenerator.Biome biome, int x, int y, int z) {
+        boolean surface = hasOpenSky(x, y, z);
+        boolean baby = level.random.nextInt(100) < 5;
+        short adult = 1;
+        short igniter = ZombieIgniter.REGISTRY_ID;
+        if (surface && biome == BiomeLevelGenerator.Biome.DESERT) {
+            if (baby) return BabyHusk.REGISTRY_ID;
+            adult = Husk.REGISTRY_ID;
+            igniter = HuskIgniter.REGISTRY_ID;
+        } else if (surface
+                && !level.isDaytime()
+                && (biome == BiomeLevelGenerator.Biome.SNOWY_PLAINS
+                        || biome == BiomeLevelGenerator.Biome.SNOWY_FOREST)) {
+            if (baby) return BabyFrostbite.REGISTRY_ID;
+            adult = Frostbite.REGISTRY_ID;
+            igniter = FrostbiteIgniter.REGISTRY_ID;
+        } else if (baby) {
+            return 40;
+        }
+
+        Difficulty difficulty = CombatRules.difficulty(level);
+        if (difficulty.ordinal() < Difficulty.VERY_HARD.ordinal()) return adult;
+        int roll = level.random.nextInt(100);
+        int igniterChance = difficulty == Difficulty.EXTREME ? 12 : 2;
+        if (roll < igniterChance) return igniter;
+        if (surface && adult == 1 && roll < igniterChance + 2)
+            return MobRegistry.idOfName("ZombieBuilder");
+        return adult;
+    }
+
+    private boolean hasOpenSky(int x, int y, int z) {
+        for (int above = y + 1; above < level.depth; above++) {
+            Block roof = Block.blocks[level.getTile(x, above, z)];
+            if (roof != null && roof.isOpaque()) return false;
+        }
+        return true;
     }
 
     private boolean dry(AABB bounds) {

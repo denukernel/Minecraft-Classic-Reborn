@@ -238,6 +238,15 @@ public class CircuitBlock extends Block {
         return true;
     }
 
+    public boolean renderTorchCracks(
+            Level level, int x, int y, int z, ShapeRenderer renderer, int cracks) {
+        if (!isTorch()) return false;
+        var state = level.redstone().state(x, y, z);
+        int texture = kind == Kind.NORMAL_TORCH ? textureId : state.power > 0 ? 140 : 141;
+        BlockModels.torch(renderer, x, y, z, state.facing, texture, 1, cracks);
+        return true;
+    }
+
     @Override
     public void renderFullbright(ShapeRenderer renderer) {
         RedstoneEngine.State preview = new RedstoneEngine.State(id);

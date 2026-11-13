@@ -22,7 +22,6 @@ public final class MultiplayerConnectScreen extends GuiScreen {
 
     @Override
     public void onOpen() {
-        this.buttons.clear();
         Keyboard.enableRepeatEvents(true);
 
         // Load persisted settings
@@ -39,7 +38,12 @@ public final class MultiplayerConnectScreen extends GuiScreen {
             this.port = "25565";
         }
 
-        // Add action buttons
+        onResize();
+    }
+
+    @Override
+    protected void onResize() {
+        this.buttons.clear();
         this.buttons.add(new Button(0, this.width / 2 - 100, this.height / 4 + 125, "Connect"));
         this.buttons.add(new Button(1, this.width / 2 - 100, this.height / 4 + 150, "Cancel"));
 

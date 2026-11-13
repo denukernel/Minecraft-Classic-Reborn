@@ -200,6 +200,8 @@ public final class MobRegistry {
         tryRegister((short) 1, "Zombie", Zombie.class, (l, x, y, z) -> new Zombie(l, x, y, z));
         tryRegister(
                 (short) 2, "Skeleton", Skeleton.class, (l, x, y, z) -> new Skeleton(l, x, y, z));
+        tryRegister(
+                SkeletonTrap.REGISTRY_ID, "SkeletonTrap", SkeletonTrap.class, SkeletonTrap::new);
         tryRegister((short) 3, "Creeper", Creeper.class, (l, x, y, z) -> new Creeper(l, x, y, z));
         tryRegister(
                 (short) 4,
@@ -230,6 +232,12 @@ public final class MobRegistry {
                 "ZombieIgniter",
                 ZombieIgniter.class,
                 ZombieIgniter::new);
+        tryRegister(
+                FrostbiteIgniter.REGISTRY_ID,
+                "FrostbiteIgniter",
+                FrostbiteIgniter.class,
+                FrostbiteIgniter::new);
+        tryRegister(HuskIgniter.REGISTRY_ID, "HuskIgniter", HuskIgniter.class, HuskIgniter::new);
         tryRegister(Husk.REGISTRY_ID, "Husk", Husk.class, (l, x, y, z) -> new Husk(l, x, y, z));
         tryRegister((short) 26, "Bee", Bee.class, (l, x, y, z) -> new Bee(l, x, y, z));
         tryRegister(

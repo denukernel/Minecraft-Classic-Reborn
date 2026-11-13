@@ -2,12 +2,32 @@ package net.classicremastered.minecraft.gui;
 
 import org.lwjgl.opengl.GL11;
 
+import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
 
 public class Screen {
 
     protected float imgZ = 0.0F;
+
+    protected static void drawDurabilityBar(int raw, int wear, int x, int y) {
+        if (wear <= 0) return;
+        var gear = Equipment.gear(raw);
+        if (gear == null || gear.maxDurability <= 0) return;
+        float remaining = 1.0f - (float) Equipment.armorWear(raw, wear) / gear.maxDurability;
+        int length = Math.round(13 * remaining);
+        int color = java.awt.Color.HSBtoRGB(remaining / 3.0f, 1.0f, 1.0f);
+        int left = x + 2;
+        int top = y + 13;
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT);
+        try {
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            drawBox(left, top, left + 13, top + 2, 0xFF000000);
+            if (length > 0) drawBox(left, top, left + length, top + 1, color);
+        } finally {
+            GL11.glPopAttrib();
+        }
+    }
 
     protected static void drawMinecoinIcon(TextureManager textures, int x, int y) {
         GL11.glPushAttrib(

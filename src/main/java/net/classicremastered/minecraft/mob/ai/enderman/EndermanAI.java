@@ -81,10 +81,6 @@ public final class EndermanAI extends BasicAI {
         return navigation;
     }
 
-    public void evadeArrow(Enderman enderman) {
-        teleportation().teleportRandom(enderman);
-    }
-
     @Override
     public void hurt(Entity src, int dmg) {
         super.hurt(src, dmg);

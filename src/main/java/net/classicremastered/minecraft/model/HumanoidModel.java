@@ -13,6 +13,12 @@ public class HumanoidModel extends Model {
     private boolean ridingPose;
     private net.classicremastered.minecraft.player.Player developerPlayer;
     private float renderPartial;
+    private net.classicremastered.minecraft.render.TextureManager attachmentTextures;
+
+    public void setAttachmentTextures(
+            net.classicremastered.minecraft.render.TextureManager textures) {
+        attachmentTextures = textures;
+    }
 
     @Override
     public void preAnimate(Object entity) {
@@ -140,6 +146,10 @@ public class HumanoidModel extends Model {
         leftArm.render(scale);
         rightLeg.render(scale);
         leftLeg.render(scale);
+        if (developerPlayer != null && attachmentTextures != null) {
+            net.classicremastered.minecraft.entity.Arrow.renderStuckArrows(
+                    developerPlayer, this, attachmentTextures, scale);
+        }
     }
 
     private void renderDeveloperParts(float scale) {

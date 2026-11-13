@@ -19,6 +19,7 @@ import net.classicremastered.util.MathHelper;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -36,11 +37,12 @@ public final class HUDScreen extends Screen {
     private Player heartPlayer;
     private Level heartLevel;
     private int observedHealth, displayHealth, healthBlinkUntil, settleHealthAt;
+    private List<String> debugHardware;
 
     public HUDScreen(Minecraft mc, int w, int h) {
         this.mc = mc;
-        this.width = w * 240 / h;
-        this.height = h * 240 / h;
+        this.width = Minecraft.guiWidth(w, h);
+        this.height = Minecraft.guiHeight(w, h);
     }
 
     private void updateHeartDisplay(Player player, int health) {
@@ -59,77 +61,162 @@ public final class HUDScreen extends Screen {
         observedHealth = health;
     }
 
-    private void renderDebugOverlay(FontRenderer font, long maxMemory) {
+    private void renderDebugOverlay(FontRenderer font) {
         Player player = mc.player;
         int x = (int) Math.floor(player.x);
         int y = (int) Math.floor(player.bb.y0);
         int z = (int) Math.floor(player.z);
         float yaw = (float) Math.IEEEremainder(player.aimYaw(1f), 360);
-        String facing = switch (Math.floorMod(Math.round(yaw / 90f), 4)) {
-            case 0 -> "north (-Z)";
-            case 1 -> "east (+X)";
-            case 2 -> "south (+Z)";
-            default -> "west (-X)";
-        };
-        String mode = mc.gamemode.isSpectator() ? "Spectator"
-                : mc.gamemode.isSurvival()      ? "Survival"
-                                                : "Creative";
-        List<String> world = new ArrayList<>(List.of(
-                "Minecraft Classic Reborn " + Constants.MINECRAFT_VERSION, mc.debug, "",
-                String.format(
-                        Locale.ROOT, "XYZ: %.3f / %.3f / %.3f", player.x, player.bb.y0, player.z),
-                "Block: " + x + " " + y + " " + z,
-                "Chunk: " + (x >> 4) + " " + (y >> 4) + " " + (z >> 4),
-                String.format(Locale.ROOT, "Facing: %s (%.1f / %.1f)", facing, yaw, player.xRot),
-                String.format(Locale.ROOT, "Client brightness: %.2f",
-                        mc.level.lightEngine.getBrightness(x, y, z)),
-                "Time: " + mc.level.timeOfDay,
-                "Mode: " + mode + " / " + mc.settings.difficulty.getLabel()));
+        String facing =
+                switch (Math.floorMod(Math.round(yaw / 90f), 4)) {
+                    case 0 -> "north (-Z)";
+                    case 1 -> "east (+X)";
+                    case 2 -> "south (+Z)";
+                    default -> "west (-X)";
+                };
+        String mode =
+                mc.gamemode.isSpectator()
+                        ? "Spectator"
+                        : mc.gamemode.isSurvival() ? "Survival" : "Creative";
+        List<String> world =
+                new ArrayList<>(
+                        List.of(
+                                "Minecraft Classic Reborn " + Constants.MINECRAFT_VERSION,
+                                mc.debug,
+                                "",
+                                String.format(
+                                        Locale.ROOT,
+                                        "XYZ: %.3f / %.3f / %.3f",
+                                        player.x,
+                                        player.bb.y0,
+                                        player.z),
+                                "Block: " + x + " " + y + " " + z,
+                                "Chunk: " + (x >> 4) + " " + (y >> 4) + " " + (z >> 4),
+                                String.format(
+                                        Locale.ROOT,
+                                        "Facing: %s (%.1f / %.1f)",
+                                        facing,
+                                        yaw,
+                                        player.xRot),
+                                String.format(
+                                        Locale.ROOT,
+                                        "Client brightness: %.2f",
+                                        mc.level.lightEngine.getBrightness(x, y, z)),
+                                "Time: "
+                                        + mc.level.timeOfDay
+                                        + (mc.level.doDayNightCycle ? " (3x)" : " (paused)"),
+                                "Mode: " + mode + " / " + mc.settings.difficulty.getLabel()));
         if (mc.level.biomeSeed != null) {
             if (!mc.level.biomeSeed.equals(debugBiomeSeed)) {
                 debugBiomeSeed = mc.level.biomeSeed;
                 debugBiomes = new BiomeLevelGenerator(debugBiomeSeed);
             }
-            world.add("Biome: " + debugBiomes.biomeAt(x, z).name().toLowerCase(Locale.ROOT));
+            world.add(
+                    "Biome: "
+                            + debugBiomes
+                                    .surfaceBiomeAt(x, z, mc.level.depth, mc.level.flatBiomes)
+                                    .name()
+                                    .toLowerCase(Locale.ROOT));
         }
         world.add("");
         world.add("F3 + N: Toggle spectator");
         world.add("F3 + B: Toggle entity hitboxes");
 
         Runtime runtime = Runtime.getRuntime();
-        long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
-        List<String> system = new ArrayList<>(List.of("Java: " + System.getProperty("java.version"),
-                "Mem: " + usedMemory + " / " + maxMemory + " MiB",
-                "Display: " + mc.width + "x" + mc.height));
+        long max = runtime.maxMemory();
+        long allocated = runtime.totalMemory();
+        long used = allocated - runtime.freeMemory();
+        List<String> system =
+                new ArrayList<>(
+                        List.of(
+                                "Java: "
+                                        + System.getProperty("java.version")
+                                        + " ("
+                                        + System.getProperty("os.arch")
+                                        + ")",
+                                String.format(
+                                        Locale.ROOT,
+                                        "Heap: %d%% %d/%d MiB",
+                                        used * 100 / max,
+                                        mib(used),
+                                        mib(max)),
+                                String.format(
+                                        Locale.ROOT,
+                                        "Allocated heap: %d%% %d MiB",
+                                        allocated * 100 / max,
+                                        mib(allocated)),
+                                "Display: "
+                                        + mc.width
+                                        + "x"
+                                        + mc.height
+                                        + " / "
+                                        + mc.settings.graphicsMode.label));
+        system.addAll(debugHardware());
         MovingObjectPosition blockHit = mc.debugBlockTarget;
         if (blockHit != null) {
             int id = mc.level.getTile(blockHit.x, blockHit.y, blockHit.z);
             Block block = Block.blocks[id];
             system.add("");
             system.add("Targeted Block: " + blockHit.x + " " + blockHit.y + " " + blockHit.z);
-            if (block != null)
-                system.add(block.name + " (" + id + ")");
+            if (block != null) system.add(block.name + " (" + id + ")");
         }
         if (mc.selected != null && mc.selected.entity != null) {
             system.add("");
             system.add("Targeted Entity");
             system.add(mc.selected.entity.getClass().getSimpleName());
         }
-        int leftWidth = world.stream().mapToInt(font::getWidth).max().orElse(0);
-        int rightWidth = system.stream().mapToInt(font::getWidth).max().orElse(0);
-        drawDebugLines(font, world, 2, false);
-        drawDebugLines(
-                font, system, leftWidth + rightWidth + 8 < width ? 2 : 2 + world.size() * 9, true);
+        int leftWidth =
+                Math.min(width * 3 / 5, world.stream().mapToInt(font::getWidth).max().orElse(0));
+        drawDebugLines(font, world, leftWidth, false);
+        drawDebugLines(font, system, width - leftWidth - 8, true);
         GL11.glColor4f(1, 1, 1, 1);
     }
 
-    private void drawDebugLines(FontRenderer font, List<String> lines, int y, boolean right) {
+    private List<String> debugHardware() {
+        if (debugHardware != null) return debugHardware;
+        List<String> lines = new ArrayList<>();
+        var os = ManagementFactory.getOperatingSystemMXBean();
+        String cpu = System.getenv("PROCESSOR_IDENTIFIER");
+        if (cpu == null || cpu.isBlank()) cpu = os.getArch();
+        lines.add("CPU: " + os.getAvailableProcessors() + " logical / " + cpu);
+        if (os instanceof com.sun.management.OperatingSystemMXBean system
+                && system.getTotalMemorySize() > 0) {
+            lines.add(
+                    String.format(
+                            Locale.ROOT,
+                            "System RAM: %.1f GiB",
+                            system.getTotalMemorySize() / (1024.0 * 1024 * 1024)));
+        }
+        lines.add("GPU: " + GL11.glGetString(GL11.GL_RENDERER));
+        lines.add("GPU vendor: " + GL11.glGetString(GL11.GL_VENDOR));
+        lines.add("OpenGL: " + GL11.glGetString(GL11.GL_VERSION));
+        lines.add("OS: " + os.getName() + " " + os.getVersion());
+        debugHardware = List.copyOf(lines);
+        return debugHardware;
+    }
+
+    private static long mib(long bytes) {
+        return bytes / (1024L * 1024L);
+    }
+
+    private void drawDebugLines(
+            FontRenderer font, List<String> lines, int maxWidth, boolean right) {
+        int y = 2;
         for (String line : lines) {
-            if (!line.isEmpty()) {
-                int lineWidth = font.getWidth(line);
+            while (!line.isEmpty() && y + 8 < height) {
+                int end = line.length();
+                while (end > 1 && font.getWidth(line.substring(0, end)) > maxWidth) end--;
+                if (end < line.length()) {
+                    int space = line.lastIndexOf(' ', end);
+                    if (space > 0) end = space;
+                }
+                String part = line.substring(0, end);
+                int lineWidth = font.getWidth(part);
                 int x = right ? width - 2 - lineWidth : 2;
                 drawBox(x - 1, y - 1, x + lineWidth + 1, y + 8, 0x90505050);
-                font.render(line, x, y, 0xE0E0E0);
+                font.render(part, x, y, 0xE0E0E0);
+                line = line.substring(end).stripLeading();
+                if (!line.isEmpty()) y += 9;
             }
             y += 9;
         }
@@ -236,6 +323,17 @@ public final class HUDScreen extends Screen {
             // --------------------------------------------------------------------
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
             this.drawImage(this.width / 2 - 7, this.height / 2 - 7, 0, 0, 16, 16);
+            if (mc.currentScreen == null && mc.input != null) {
+                float charge = mc.input.attackCharge(partial);
+                if (charge < 1) {
+                    int x = width / 2 - 8, y = height / 2 + 9;
+                    int filled = Math.round(charge * 16);
+                    drawBox(x, y, x + 16, y + 3, 0xA0000000);
+                    if (filled > 0) drawBox(x, y, x + filled, y + 2, 0xFFE0E0E0);
+                    GL11.glColor4f(1, 1, 1, 1);
+                    GL11.glEnable(GL11.GL_BLEND);
+                }
+            }
 
             // --------------------------------------------------------------------
             // Hotbar items (ONLY first 9 slots, even if inventory is larger)
@@ -288,9 +386,17 @@ public final class HUDScreen extends Screen {
                 }
                 GL11.glPopMatrix();
 
+                drawDurabilityBar(id, inv.armorWear(slot), x + 2, y - 4);
                 if (inv.count[slot] > 1) {
                     String countStr = "" + inv.count[slot];
                     font.render(countStr, x + 19 - font.getWidth(countStr), y + 6, 0xFFFFFF);
+                }
+            }
+            if (mc.currentScreen == null && inv.getCount(inv.selected) > 0) {
+                String durability =
+                        ItemTooltip.durabilityText(inv.getSelected(), inv.armorWear(inv.selected));
+                if (!durability.isEmpty()) {
+                    drawCenteredString(font, durability, width / 2, height - 61, 0xFFFFFF);
                 }
             }
         }
@@ -316,7 +422,7 @@ public final class HUDScreen extends Screen {
             drawCenteredString(this.mc.fontRenderer, warn, this.width / 2, 2, color);
         }
         if (showDebug) {
-            renderDebugOverlay(font, totalMem);
+            renderDebugOverlay(font);
         } else if (this.mc.settings.showFrameRate) {
             font.render("&7Minecraft &6Classic &b0.30", 2, 2, 0xFFFFFF);
             font.render("&7Difficulty: &e" + mc.settings.difficulty.getLabel(), 2, 12, 0xFFFFFF);
@@ -348,41 +454,21 @@ public final class HUDScreen extends Screen {
                 int yPos = this.height - 8 - i * 9 - 20;
                 String msg = line.message;
 
-                if (msg.contains("[Open folder]")) {
-                    String left = msg.substring(0, msg.indexOf("[Open folder]"));
-                    String clickable = "[Open folder]";
-                    String right = msg.substring(msg.indexOf("[Open folder]") + clickable.length());
-
-                    int x = 2;
-                    font.render(left, x, yPos, 0xFFFFFF);
-                    x += font.getWidth(left);
-
-                    // detect hover
-                    int mouseX = Mouse.getX() * this.width / this.mc.width;
-                    int mouseY = this.height - (Mouse.getY() * this.height / this.mc.height) - 1;
-                    boolean hovering =
+                font.render(msg, 2, yPos, 0xFFFFFF);
+                int x = 2 + font.getWidth(msg);
+                int mouseX = Mouse.isCreated() ? Mouse.getX() * width / mc.width : -1;
+                int mouseY =
+                        Mouse.isCreated() ? height - Mouse.getY() * height / mc.height - 1 : -1;
+                for (ChatLine.Action action : line.actions) {
+                    x += 4;
+                    int actionWidth = font.getWidth(action.label());
+                    boolean hover =
                             mouseX >= x
-                                    && mouseX <= x + font.getWidth(clickable)
-                                    && mouseY >= yPos - 1
-                                    && mouseY <= yPos + 9;
-
-                    // render clickable text (hover = underline + brighter color)
-                    int color = hovering ? 0x88FFFF : 0x55FFFF;
-                    font.render(clickable, x, yPos, color);
-                    if (hovering) {
-                        GL11.glDisable(GL11.GL_TEXTURE_2D);
-                        GL11.glColor3f(0.33F, 1.0F, 1.0F);
-                        GL11.glBegin(GL11.GL_LINES);
-                        GL11.glVertex2f(x, yPos + 9);
-                        GL11.glVertex2f(x + font.getWidth(clickable), yPos + 9);
-                        GL11.glEnd();
-                        GL11.glEnable(GL11.GL_TEXTURE_2D);
-                    }
-
-                    x += font.getWidth(clickable);
-                    font.render(right, x, yPos, 0xFFFFFF);
-                } else {
-                    font.render(msg, 2, yPos, 0xFFFFFF);
+                                    && mouseX < x + actionWidth
+                                    && mouseY >= yPos
+                                    && mouseY < yPos + 9;
+                    font.render(action.label(), x, yPos, hover ? 0x88FFFF : 0x55FFFF);
+                    x += actionWidth;
                 }
             }
         }
@@ -460,53 +546,57 @@ public final class HUDScreen extends Screen {
     }
 
     public void onMouseClick(int x, int y, int button) {
-        if (button != 0) return;
+        onChatClick(x * width / mc.width, y * height / mc.height, button);
+    }
 
-        // Convert from full window → HUD logical scale
-        int scaledX = (int) ((x / (float) this.mc.width) * this.width);
-        int scaledY = (int) ((y / (float) this.mc.height) * this.height);
-
-        int lineHeight = 9;
-        int baseY = this.height - 8 - 20;
-        int maxLines =
-                (this.mc.currentScreen
-                                instanceof net.classicremastered.minecraft.chat.ChatInputScreen)
-                        ? 20
-                        : 10;
-
-        for (int i = 0; i < this.chat.size() && i < maxLines; ++i) {
-            ChatLine line = this.chat.get(i);
-            if (!line.message.contains("[Open folder]")) continue;
-
-            int yTop = baseY - i * lineHeight;
-            int yBottom = yTop - lineHeight;
-
-            // check if click inside the text's Y range
-            if (scaledY >= yBottom && scaledY <= yTop) {
-                String left = line.message.substring(0, line.message.indexOf("[Open folder]"));
-                int leftW = this.mc.fontRenderer.getWidth(left);
-                int openW = this.mc.fontRenderer.getWidth("[Open folder]");
-                int openStart = 2 + leftW;
-                int openEnd = openStart + openW;
-
-                // now compare using scaledX (not raw x)
-                if (scaledX >= openStart && scaledX <= openEnd) {
-                    java.io.File dir =
-                            new java.io.File(
-                                    net.classicremastered.minecraft.Minecraft.mcDir, "screenshots");
-                    net.classicremastered.minecraft.util.FileOpener.openDirectory(dir);
-                    this.mc.hud.addChat("&7Opening screenshots folder...");
-                    System.out.println("[HUD] Clicked Open folder → " + dir.getAbsolutePath());
-                    return;
+    public boolean onChatClick(int x, int y, int button) {
+        if (button != 0) return false;
+        boolean chatOpen = mc.currentScreen instanceof ChatInputScreen;
+        int maxLines = chatOpen ? 20 : 10;
+        for (int i = 0; i < chat.size() && i < maxLines; i++) {
+            ChatLine line = chat.get(i);
+            int top = height - 28 - i * 9;
+            if ((!chatOpen && line.time >= 200) || y < top || y >= top + 9) continue;
+            int left = 2 + mc.fontRenderer.getWidth(line.message);
+            for (ChatLine.Action action : line.actions) {
+                left += 4;
+                int actionWidth = mc.fontRenderer.getWidth(action.label());
+                if (x >= left && x < left + actionWidth) {
+                    action.run().run();
+                    return true;
                 }
+                left += actionWidth;
             }
         }
+        return false;
     }
 
     public final void addChat(String msg) {
-        this.chat.add(0, new ChatLine(msg));
-        while (this.chat.size() > 50) {
-            this.chat.remove(this.chat.size() - 1);
-        }
+        addChat(msg, new ChatLine.Action[0]);
+    }
+
+    public final void addChat(String msg, ChatLine.Action... actions) {
+        chat.add(0, new ChatLine(msg, actions));
+        while (chat.size() > 50) chat.remove(chat.size() - 1);
+    }
+
+    public void screenshotSaved(java.io.File file, String label) {
+        addChat(
+                "&a" + label + " saved!",
+                new ChatLine.Action("[View]", () -> openScreenshot(file, false)),
+                new ChatLine.Action("[Paint]", () -> openScreenshot(file, true)),
+                new ChatLine.Action(
+                        "[Folder]",
+                        () ->
+                                net.classicremastered.minecraft.util.FileOpener.openDirectory(
+                                        file.getParentFile())));
+    }
+
+    private void openScreenshot(java.io.File file, boolean paint) {
+        boolean opened =
+                paint
+                        ? net.classicremastered.minecraft.util.FileOpener.editImage(file)
+                        : net.classicremastered.minecraft.util.FileOpener.openImage(file);
+        if (!opened) addChat("&cCould not open " + file.getName());
     }
 }

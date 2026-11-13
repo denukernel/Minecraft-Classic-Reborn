@@ -35,6 +35,7 @@ public final class GuiCrafting extends CraftingContainerScreen {
     private int carriedId = -1;
     private int carriedCnt = 0;
     private PackedTurret carriedCrate;
+    private int carriedWear;
 
     // Drag-paint state
     private boolean draggingRMB = false;
@@ -83,28 +84,32 @@ public final class GuiCrafting extends CraftingContainerScreen {
         if (p != null && p.inventory != null) {
             for (int i = 0; i < 9; i++) {
                 if (craftMatrix[i] > 0 && craftCount[i] > 0) {
-                    craftCount[i] = returnStack(p, craftMatrix[i], craftCount[i], null);
+                    craftCount[i] = returnStack(p, craftMatrix[i], craftCount[i], null, 0);
                     if (craftCount[i] == 0) craftMatrix[i] = -1;
                 }
             }
 
             // Also flush carried item
             if (carriedId > 0 && carriedCnt > 0) {
-                carriedCnt = returnStack(p, carriedId, carriedCnt, carriedCrate);
+                carriedCnt = returnStack(p, carriedId, carriedCnt, carriedCrate, carriedWear);
                 if (carriedCnt == 0) {
                     carriedId = -1;
                     carriedCrate = null;
+                    carriedWear = 0;
                 }
             }
         }
         super.onClose();
     }
 
-    private int returnStack(Player player, int id, int count, PackedTurret crate) {
+    private int returnStack(Player player, int id, int count, PackedTurret crate, int wear) {
         if (crate != null) {
             if (player.inventory.addCrate(crate)) return 0;
         } else {
-            while (count > 0 && player.inventory.addResource(id)) count--;
+            while (count > 0 && player.inventory.addResource(id, wear)) {
+                count--;
+                wear = 0;
+            }
         }
         if (count > 0 && player.level != null) {
             net.classicremastered.minecraft.Entity dropped;
@@ -112,7 +117,8 @@ public final class GuiCrafting extends CraftingContainerScreen {
                 dropped =
                         new net.classicremastered.minecraft.entity.DroppedItem(
                                         player.level, player.x, player.y, player.z, id - 256, count)
-                                .withCrate(crate);
+                                .withCrate(crate)
+                                .withArmorWear(wear);
             } else {
                 dropped =
                         new net.classicremastered.minecraft.entity.DroppedBlock(
@@ -143,6 +149,8 @@ public final class GuiCrafting extends CraftingContainerScreen {
             int id = slot < 9 ? craftMatrix[slot] : inventory.getId(inventorySlot);
             int count = slot < 9 ? craftCount[slot] : inventory.getCount(inventorySlot);
             drawRecipeItem(id, count, position[0], position[1]);
+            if (slot >= 9)
+                drawDurabilityBar(id, inventory.armorWear(inventorySlot), position[0], position[1]);
         }
         int resultX = x0 + RESULT_X, resultY = y0 + RESULT_Y;
         drawRecipeItem(resultId, resultCount, resultX, resultY);
@@ -165,6 +173,19 @@ public final class GuiCrafting extends CraftingContainerScreen {
         if (carriedId > 0 && carriedCnt > 0) {
             GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
             drawRecipeItem(carriedId, carriedCnt, mouseX - 8, mouseY - 8);
+            drawDurabilityBar(carriedId, carriedWear, mouseX - 8, mouseY - 8);
+        } else if (hover >= 9) {
+            int slot = hover < 36 ? hover : hover - 36;
+            int raw = inventory.getId(slot);
+            if (raw > 0) {
+                ItemTooltip.draw(
+                        this,
+                        raw,
+                        inventory.crate(slot),
+                        inventory.armorWear(slot),
+                        mouseX,
+                        mouseY);
+            }
         }
     }
 
@@ -222,7 +243,7 @@ public final class GuiCrafting extends CraftingContainerScreen {
 
     private void clickUnifiedSlot(int slot, int button) {
         if (slot < craftMatrix.length) {
-            if (carriedCrate != null) return;
+            if (carriedCrate != null || carriedWear > 0) return;
             clearRecipeRequirements();
             slotClick(craftMatrix, craftCount, slot, button);
             checkRecipe();
@@ -310,14 +331,17 @@ public final class GuiCrafting extends CraftingContainerScreen {
         int id = inventory.getId(slot);
         int count = inventory.getCount(slot);
         PackedTurret crate = inventory.crate(slot);
+        int wear = inventory.armorWear(slot);
         if (carriedId <= 0) {
             if (id <= 0 || count <= 0) return;
             carriedId = id;
             carriedCnt = button == 1 ? (count + 1) / 2 : count;
             carriedCrate = crate;
+            carriedWear = wear;
             int remaining = count - carriedCnt;
             inventory.setIdCount(slot, remaining > 0 ? id : -1, remaining);
-        } else if (count == 0 || id == carriedId && crate == null && carriedCrate == null) {
+        } else if (count == 0
+                || id == carriedId && cap(id) > 1 && crate == null && carriedCrate == null) {
             int amount = Math.min(button == 1 ? 1 : carriedCnt, cap(carriedId) - count);
             if (amount <= 0) return;
             putCarried(inventory, slot, count + amount);
@@ -331,12 +355,17 @@ public final class GuiCrafting extends CraftingContainerScreen {
             carriedId = id;
             carriedCnt = count;
             carriedCrate = crate;
+            carriedWear = wear;
         }
     }
 
     private void putCarried(Inventory inventory, int slot, int count) {
         if (carriedCrate != null) inventory.setCrate(slot, carriedCrate);
-        else inventory.setIdCount(slot, carriedId, count);
+        else {
+            inventory.setIdCount(slot, carriedId, count);
+            inventory.setArmorWear(slot, carriedWear);
+            carriedWear = 0;
+        }
     }
 
     private void checkRecipe() {
@@ -351,7 +380,7 @@ public final class GuiCrafting extends CraftingContainerScreen {
     }
 
     private void handleOutputClick() {
-        if (resultId <= 0 || carriedCrate != null) return;
+        if (resultId <= 0 || carriedCrate != null || carriedWear > 0) return;
 
         // Can we pick it up?
         if (carriedId == -1) {

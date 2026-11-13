@@ -3,7 +3,6 @@ package net.classicremastered.minecraft.mob.ai;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.mob.Skeleton;
 import net.classicremastered.minecraft.mob.Zombie;
 import net.classicremastered.minecraft.mob.ai.goal.Goal;
 import net.classicremastered.minecraft.mob.ai.goal.GoalSelector;
@@ -49,6 +48,9 @@ public class BasicAI extends AI {
     private transient boolean steeredThisTick;
     private int wanderRouteTicks;
     private transient GroundWander wander;
+    private transient GroundWander blockedPursuit;
+    private transient Entity blockedPursuitTarget;
+    private transient boolean detouring;
     private transient CrowdMotion crowdMotion;
     private transient boolean routeDriven;
     private transient float routeYaw;
@@ -60,7 +62,7 @@ public class BasicAI extends AI {
     }
 
     public final boolean pursuingRoute() {
-        return routeDriven;
+        return routeDriven && !detouring;
     }
 
     public final CrowdMotion crowdMotion() {
@@ -95,8 +97,13 @@ public class BasicAI extends AI {
         } else {
             steeredThisTick = false;
             routeDriven = false;
+            detouring = false;
+            if (blockedPursuitTarget != attackTarget) {
+                blockedPursuit = null;
+                blockedPursuitTarget = null;
+            }
             float previousYaw = mob.yRot;
-            if (!seekSunlightWater() && !escapeFire()) {
+            if (!escapeFire() && !seekSunlightWater()) {
                 this.update();
                 goalSelector().tick();
             } else if (selector != null) {
@@ -138,13 +145,12 @@ public class BasicAI extends AI {
             }
         }
 
-        if (routeDriven && mob.onGround && yya > 0 && navigationAllowed()) {
+        if (pursuingRoute() && mob.onGround && yya > 0 && navigationAllowed()) {
             float factor = crowdMotion().forwardFactor(this, routeYaw);
             if (factor < 0.15f) {
                 // A stationary leader can leave a whole queue suppressing its own jumps.
-                boolean recoverQueue = mob instanceof Zombie && !(mob instanceof Skeleton);
-                if (!recoverQueue || crowdWaitTicks < 20) {
-                    if (recoverQueue) crowdWaitTicks++;
+                if (crowdWaitTicks < 20) {
+                    crowdWaitTicks++;
                     yieldingToCrowd = true;
                     jumping = false;
                     mob.xd *= 0.6f;
@@ -155,7 +161,7 @@ public class BasicAI extends AI {
                 }
             } else crowdWaitTicks = 0;
             yya *= factor;
-        } else if (!routeDriven || attackTarget == null) {
+        } else if (!pursuingRoute() || attackTarget == null) {
             crowdWaitTicks = 0;
         }
         if (mob.health > 0
@@ -369,7 +375,10 @@ public class BasicAI extends AI {
     }
 
     private boolean escapeFire() {
-        if (!navigationAllowed() || mob.remainingFireTicks <= 0 || !mob.overlapsFire(mob.bb))
+        if (!navigationAllowed()) return false;
+        boolean igniter = mob instanceof net.classicremastered.minecraft.mob.ZombieIgniter;
+        var fireBounds = igniter ? mob.bb.grow(.5f, 0, .5f) : mob.bb;
+        if ((!igniter && mob.remainingFireTicks <= 0) || !mob.overlapsFire(fireBounds))
             return false;
 
         float bestDistance = Float.POSITIVE_INFINITY;
@@ -382,7 +391,7 @@ public class BasicAI extends AI {
                 var next = mob.bb.cloneMove(dx * distance, 0, dz * distance);
                 if (!level.getCubes(next).isEmpty()
                         || level.getCubes(next.cloneMove(0, -.65f, 0)).isEmpty()) break;
-                if (!mob.overlapsFire(next)) {
+                if (!mob.overlapsFire(fireBounds.cloneMove(dx * distance, 0, dz * distance))) {
                     bestDistance = distance;
                     bestYaw = yaw;
                     break;
@@ -476,9 +485,11 @@ public class BasicAI extends AI {
     public final boolean navigateTo(float x, float feetY, float z, float speed) {
         wander = null;
         steeredThisTick = true;
-        if (attackTarget != null
-                && Math.abs(x - attackTarget.x) < 0.01f
-                && Math.abs(z - attackTarget.z) < 0.01f) {
+        boolean pursuingTarget =
+                attackTarget != null
+                        && Math.abs(x - attackTarget.x) < 0.01f
+                        && Math.abs(z - attackTarget.z) < 0.01f;
+        if (pursuingTarget) {
             float[] approach = crowdMotion().approach(this);
             if (approach != null) {
                 x = approach[0];
@@ -486,8 +497,29 @@ public class BasicAI extends AI {
                 z = approach[2];
             }
         }
-        getNavigator().setGoal(x, feetY, z);
-        return applyRoute(getNavigator().steer(mob), speed);
+        var pursuit = getNavigator().setGoal(x, feetY, z);
+        var route = pursuit.steer(mob);
+        if (pursuingTarget
+                && pursuit.isWaitingForRoute()
+                && !route.forward
+                && !route.ladder
+                && this
+                        instanceof
+                        net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI combat
+                && !(combat.withinMeleeReach(attackTarget, 2f)
+                        && combat.hasLineOfSight(mob, attackTarget))) {
+            if (blockedPursuit == null
+                    || blockedPursuit.level != level
+                    || blockedPursuitTarget != attackTarget) {
+                blockedPursuit = new GroundWander(level, random);
+                blockedPursuitTarget = attackTarget;
+            }
+            detouring = true;
+            return applyRoute(blockedPursuit.steer(mob, random), speed * .75f);
+        }
+        blockedPursuit = null;
+        blockedPursuitTarget = null;
+        return applyRoute(route, speed);
     }
 
     /** For specialized AI that applies acceleration after the normal travel step. */

@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.GameSettings;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.util.MathHelper;
+
 import paulscode.sound.Channel;
 import paulscode.sound.SoundSystem;
 import paulscode.sound.SoundSystemConfig;
@@ -28,6 +29,7 @@ public final class PaulsCodeSoundManager {
     private static final String FAR_LANDS_MELODY = "FarLandsMelody";
     private static final String FAR_LANDS_HARMONY = "FarLandsHarmony";
     private static final String MOB_SOURCE_PREFIX = "mob_sfx_";
+    private static final String VOICE_SOURCE_PREFIX = "mob_voice_";
     private static final float SOUND_RANGE = 32f;
     private static final float MOB_PAN_LIMIT = .6f;
     private static final float MOB_PAN_RADIUS = 8f;
@@ -97,15 +99,16 @@ public final class PaulsCodeSoundManager {
     }
 
     private static boolean canPlay(Source source, List<Channel> channels) {
-        if (source == null || !source.sourcename.startsWith(MOB_SOURCE_PREFIX))
-            return true;
-        int reserve = Math.min(4, Math.max(0, channels.size() - 1));
+        if (source == null || !source.sourcename.startsWith(MOB_SOURCE_PREFIX)) return true;
+        int reserve = Math.min(8, Math.max(0, channels.size() / 4));
         int free = 0;
+        int effects = 0;
         for (Channel channel : channels) {
-            if (!channel.playing() && ++free > reserve)
-                return true;
+            if (!channel.playing()) free++;
+            else if (channel.attachedSource != null
+                    && channel.attachedSource.sourcename.startsWith(MOB_SOURCE_PREFIX)) effects++;
         }
-        return false;
+        return free > reserve && effects < Math.max(4, channels.size() / 2);
     }
 
     private GameSettings settings;
@@ -121,6 +124,7 @@ public final class PaulsCodeSoundManager {
             SoundSystemConfig.addLibrary(MobBudgetJavaSound.class);
             SoundSystemConfig.setCodec("ogg", CodecJOrbis.class);
             SoundSystemConfig.setCodec("wav", CodecWav.class);
+            SoundSystemConfig.setNumberNormalChannels(64);
         } catch (Throwable t) {
             System.err.println("[Audio] init failed: " + t);
         }
@@ -130,8 +134,7 @@ public final class PaulsCodeSoundManager {
     /* ---------------- registry helpers ---------------- */
 
     public boolean hasSound(String key) {
-        if (key == null)
-            return false;
+        if (key == null) return false;
         key = key.replace('/', '.'); // normalize
         return registeredKeys.contains(key);
     }
@@ -299,16 +302,30 @@ public final class PaulsCodeSoundManager {
         }
 
         URL u = list.get(rng.nextInt(list.size()));
-        int attenuation = positional ? SoundSystemConfig.ATTENUATION_LINEAR
-                : SoundSystemConfig.ATTENUATION_NONE;
+        int attenuation =
+                positional
+                        ? SoundSystemConfig.ATTENUATION_LINEAR
+                        : SoundSystemConfig.ATTENUATION_NONE;
         synchronized (SoundSystemConfig.THREAD_SYNC) {
-            String id = (mobSound ? MOB_SOURCE_PREFIX : "sfx_") + ++seq;
-            Vec3D position = mixedMob ? currentListener.mobPanPosition(x, y, z) : new Vec3D(x, y, z);
+            boolean voice = mobSound && (key.startsWith("mob/") || key.startsWith("mob."));
+            String id =
+                    (voice ? VOICE_SOURCE_PREFIX : mobSound ? MOB_SOURCE_PREFIX : "sfx_") + ++seq;
+            Vec3D position =
+                    mixedMob ? currentListener.mobPanPosition(x, y, z) : new Vec3D(x, y, z);
             float sourceVolume = Math.min(1f, volume);
             if (mixedMob)
                 mobPlaybacks.put(id, new MobPlayback(x, y, z, sourceVolume, System.nanoTime()));
-            sys.newSource(mobSound || volume > 1f, id, u, u.toString(), false, position.x, position.y,
-                    position.z, attenuation, mixedMob ? MOB_PAN_RANGE : positional ? SOUND_RANGE : 0f);
+            sys.newSource(
+                    voice || forceClean || !mobSound && volume > 1f,
+                    id,
+                    u,
+                    u.toString(),
+                    false,
+                    position.x,
+                    position.y,
+                    position.z,
+                    attenuation,
+                    mixedMob ? MOB_PAN_RANGE : positional ? SOUND_RANGE : 0f);
             sys.setTemporary(id, true);
             sys.setPitch(id, Math.max(0.01f, pitch));
             sys.setVolume(id, sourceVolume * master * distanceGain);

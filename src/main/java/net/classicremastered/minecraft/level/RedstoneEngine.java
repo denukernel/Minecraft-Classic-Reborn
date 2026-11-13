@@ -31,6 +31,7 @@ public final class RedstoneEngine {
         public int[] items = new int[27], counts = new int[27];
         public final net.classicremastered.minecraft.level.itemstack.PackedTurret[] crates =
                 new net.classicremastered.minecraft.level.itemstack.PackedTurret[27];
+        public final int[] armorWear = new int[27];
 
         public State(int block) {
             this.block = block;
@@ -136,7 +137,12 @@ public final class RedstoneEngine {
             if (old.block == Block.CHEST.id) {
                 ChestController.removed(level, p, old);
                 for (int slot = 0; slot < 27; slot++)
-                    drop(p, old.items[slot], old.counts[slot], old.crates[slot]);
+                    drop(
+                            p,
+                            old.items[slot],
+                            old.counts[slot],
+                            old.crates[slot],
+                            old.armorWear[slot]);
             }
         }
         if (tracked(id)) state(x, y, z);
@@ -146,13 +152,15 @@ public final class RedstoneEngine {
             Pos p,
             int id,
             int count,
-            net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
+            net.classicremastered.minecraft.level.itemstack.PackedTurret crate,
+            int wear) {
         if (id <= 0 || count <= 0 || level.isNetworkMode()) return;
         if (id >= 256)
             level.addEntity(
                     new net.classicremastered.minecraft.entity.DroppedItem(
                                     level, p.x + .5f, p.y + .5f, p.z + .5f, id - 256, count)
-                            .withCrate(crate));
+                            .withCrate(crate)
+                            .withArmorWear(wear));
         else
             level.addEntity(
                     new net.classicremastered.minecraft.entity.DroppedBlock(
@@ -589,6 +597,7 @@ public final class RedstoneEngine {
                     slot.putInt("Id", s.items[i]);
                     slot.putInt("Count", s.counts[i]);
                     if (s.crates[i] != null) slot.put(s.crates[i].save());
+                    if (s.armorWear[i] > 0) slot.putInt("ArmorWear", s.armorWear[i]);
                     inventory.add(slot);
                 }
             tag.put(inventory);
@@ -647,6 +656,9 @@ public final class RedstoneEngine {
                                         item);
                     }
                     s.counts[slot] = Math.max(0, Math.min(99, item.getInt("Count")));
+                    s.armorWear[slot] =
+                            net.classicremastered.minecraft.level.itemstack.Equipment.armorWear(
+                                    s.items[slot], item.getInt("ArmorWear"));
                 }
             }
             net.classicremastered.minecraft.player.Inventory.splitOversized(

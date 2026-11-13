@@ -8,11 +8,8 @@ import java.util.List;
 
 public final class GameruleCommand implements Command, AliasedCommand {
     public static final List<String> RULES =
-            List.of(
-                    "doDayNightCycle",
-                    "doMobSpawning",
-                    "doMobLoot",
-                    "keepInventory");
+            List.of("doDayNightCycle", "doMobSpawning", "doMobLoot", "keepInventory");
+    private static final String KEEP_INVENTORY_ALIAS = "keep_inventory";
 
     public String getName() {
         return "gamerule";
@@ -38,6 +35,7 @@ public final class GameruleCommand implements Command, AliasedCommand {
                 if (update != null) level.doMobLoot = update;
                 return level.doMobLoot;
             case "keepinventory":
+            case KEEP_INVENTORY_ALIAS:
                 if (update != null) level.keepInventory = update;
                 return level.keepInventory;
             default:

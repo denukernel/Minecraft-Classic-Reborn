@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.mob.ai.AI;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.model.MD3Cache;
@@ -114,6 +115,7 @@ public abstract class Mob extends Entity {
     public float modelGroundOffset = 23.0F;
 
     public int[] equipment = new int[5];
+    public int[] armorWear;
     public boolean equipmentRolled;
     public boolean legacyArmor;
     public int armorRemainder;
@@ -613,7 +615,21 @@ public abstract class Mob extends Entity {
                 MD3Model m = MD3Cache.getModel(this.modelName);
                 if (m != null) MD3Renderer.render(m, this.textureName, tm, scale);
             } else if (this.modelName != null) {
-                this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
+                var humanoid =
+                        this instanceof net.classicremastered.minecraft.player.Player
+                                        && modelCache != null
+                                        && modelCache.getModel(modelName)
+                                                instanceof
+                                                net.classicremastered.minecraft.model.HumanoidModel
+                                                                model
+                                ? model
+                                : null;
+                if (humanoid != null) humanoid.setAttachmentTextures(tm);
+                try {
+                    this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
+                } finally {
+                    if (humanoid != null) humanoid.setAttachmentTextures(null);
+                }
                 if (modelCache != null
                         && modelCache.getModel(this.modelName)
                                 instanceof
@@ -721,6 +737,8 @@ public abstract class Mob extends Entity {
             skeletonModel.setRenderTextures(tm);
             skeletonModel.setRenderPartial(partial);
         }
+        if (m instanceof net.classicremastered.minecraft.model.SkeletonTrapModel trapModel)
+            trapModel.setRenderContext(tm, partial);
         if (this instanceof net.classicremastered.minecraft.mob.Chicken
                 && m instanceof net.classicremastered.minecraft.model.ChickenModel) {
             ((net.classicremastered.minecraft.model.ChickenModel) m)
@@ -776,6 +794,7 @@ public abstract class Mob extends Entity {
     /** DAMAGE ALLOWED in both Survival and Creative. */
     @Override
     public void hurt(Entity src, int dmg) {
+        if (dmg <= 0) return;
         Entity responsible =
                 src instanceof net.classicremastered.minecraft.entity.Arrow arrow
                         ? arrow.getOwner()
@@ -798,6 +817,7 @@ public abstract class Mob extends Entity {
                         || this.invulnerableTime <= this.invulnerableDuration / 2f
                         || src instanceof net.classicremastered.minecraft.player.Player player
                                 && player.developerPowers().isRapidPunch();
+        int armorDamage = dmg;
         if (src != null || explosionDamage) {
             net.classicremastered.minecraft.Entity attacker =
                     src instanceof net.classicremastered.minecraft.entity.Arrow a
@@ -819,17 +839,15 @@ public abstract class Mob extends Entity {
                                     (Mob) attacker,
                                     src instanceof net.classicremastered.minecraft.entity.Arrow);
             }
+            armorDamage = dmg;
             if (freshHit) {
-                dmg = net.classicremastered.minecraft.level.itemstack.Equipment.reduce(this, dmg);
-                if (dmg <= 0) return;
+                dmg = Equipment.reduce(this, dmg);
+                if (dmg <= 0) {
+                    Equipment.damageArmor(this, armorDamage);
+                    return;
+                }
             } else {
-                dmg =
-                        dmg
-                                * (100
-                                        - 4
-                                                * net.classicremastered.minecraft.level.itemstack
-                                                        .Equipment.points(this))
-                                / 100;
+                dmg = dmg * (100 - 4 * Equipment.points(this)) / 100;
             }
         }
         if (ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic)
@@ -848,6 +866,7 @@ public abstract class Mob extends Entity {
             this.hurtTime = this.hurtDuration = 10;
         }
 
+        Equipment.damageArmor(this, armorDamage);
         playHurtSound();
 
         this.hurtDir = 0.0F;
@@ -923,7 +942,8 @@ public abstract class Mob extends Entity {
                         && !(this instanceof net.classicremastered.minecraft.player.Player))
                     level.addEntity(
                             new net.classicremastered.minecraft.entity.DroppedItem(
-                                    level, x, y, z, raw - 256));
+                                            level, x, y, z, raw - 256)
+                                    .withArmorWear(Equipment.wear(this, slot)));
             }
             if (this instanceof Enderman
                     && level.random.nextBoolean()

@@ -1,9 +1,9 @@
 package net.classicremastered.minecraft;
 
+import net.classicremastered.minecraft.model.SkeletonTrapBone;
 import net.classicremastered.minecraft.model.Vec3D;
 
-public class MovingObjectPosition
-{
+public class MovingObjectPosition {
 	public MovingObjectPosition(int x, int y, int z, int side, Vec3D blockPos)
 	{
 		entityPos = 0;
@@ -23,7 +23,15 @@ public class MovingObjectPosition
 		this.entity = entity;
 	}
 
-	public int entityPos;
+    public MovingObjectPosition(Entity entity, SkeletonTrapBone bone, Vec3D hit) {
+        this(entity);
+        this.bone = bone;
+        this.vec = hit;
+    }
+
+    public SkeletonTrapBone bone;
+
+    public int entityPos;
 
 	public int x;
 	public int y;

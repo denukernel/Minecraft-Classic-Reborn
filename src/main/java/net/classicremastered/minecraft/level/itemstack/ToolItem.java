@@ -48,6 +48,18 @@ public class ToolItem extends Item {
         return kind;
     }
 
+    public final float attackDamage() {
+        if (kind != Kind.PICKAXE && kind != Kind.SHOVEL) return 0;
+        int bonus =
+                switch (material) {
+                    case WOOD, GOLDEN -> 0;
+                    case STONE -> 1;
+                    case IRON -> 2;
+                    case DIAMOND -> 3;
+                };
+        return bonus + (kind == Kind.PICKAXE ? 2f : 2.5f);
+    }
+
     public final float miningSpeed(net.classicremastered.minecraft.level.tile.Block block) {
         boolean effective =
                 switch (kind) {

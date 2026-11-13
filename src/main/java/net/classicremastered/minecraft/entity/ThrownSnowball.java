@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.particle.TerrainParticle;
@@ -26,7 +27,9 @@ public final class ThrownSnowball extends ThrownEnderPearl {
     @Override
     protected void onImpact(Mob victim, Vec3D impact) {
         remove();
-        if (victim != null && !level.isNetworkMode()) {
+        if (victim != null
+                && !level.isNetworkMode()
+                && !(victim instanceof Enderman enderman && enderman.tryEvadeProjectile())) {
             float dx = -xd, dz = -zd;
             if (dx * dx + dz * dz < 1e-8f) {
                 dx = impact.x - victim.x;

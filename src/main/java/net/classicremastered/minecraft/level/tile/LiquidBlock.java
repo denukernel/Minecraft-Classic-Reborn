@@ -353,7 +353,8 @@ public class LiquidBlock extends Block {
             return super.render(level, x, y, z, renderer);
         }
 
-        boolean top = canRenderSide(level, x, y + 1, z, 1);
+        // A solid ceiling can only hide a water surface that reaches its underside.
+        boolean top = level.isInBounds(x, y + 1, z) && !level.isWater(x, y + 1, z);
         boolean north = canRenderSide(level, x, y, z - 1, 2);
         boolean south = canRenderSide(level, x, y, z + 1, 3);
         boolean west = canRenderSide(level, x - 1, y, z, 4);
@@ -367,18 +368,26 @@ public class LiquidBlock extends Block {
             return bottom;
         }
 
-        float nw = cornerWaterHeight(level, x, y, z);
-        float ne = cornerWaterHeight(level, x + 1, y, z);
-        float sw = cornerWaterHeight(level, x, y, z + 1);
-        float se = cornerWaterHeight(level, x + 1, y, z + 1);
+        float nw = cornerWaterHeight(level, x, y, z, -1, -1);
+        float ne = cornerWaterHeight(level, x, y, z, 1, -1);
+        float sw = cornerWaterHeight(level, x, y, z, -1, 1);
+        float se = cornerWaterHeight(level, x, y, z, 1, 1);
         float u0 = (textureId % 16) / 16.0F;
         float v0 = (textureId / 16) / 16.0F;
         float uvSize = 15.99F / 256.0F;
-        if (top) {
+        boolean renderTop =
+                top
+                        && (Math.min(Math.min(nw, ne), Math.min(sw, se)) < 1.0F
+                                || canRenderSide(level, x, y + 1, z, 1));
+        if (renderTop) {
             colorWater(renderer, level, x, y + 1, z, 1.0F);
             renderer.vertexUV(x + 1, y + se, z + 1, u0 + uvSize, v0 + uvSize);
             renderer.vertexUV(x + 1, y + ne, z, u0 + uvSize, v0);
             renderer.vertexUV(x, y + nw, z, u0, v0);
+            renderer.vertexUV(x, y + nw, z, u0, v0);
+            renderer.vertexUV(x + 1, y + se, z + 1, u0 + uvSize, v0 + uvSize);
+            renderer.vertexUV(x, y + nw, z, u0, v0);
+            renderer.vertexUV(x, y + sw, z + 1, u0, v0 + uvSize);
             renderer.vertexUV(x, y + sw, z + 1, u0, v0 + uvSize);
         }
         if (north) {
@@ -397,39 +406,43 @@ public class LiquidBlock extends Block {
             colorWater(renderer, level, x + 1, y, z, 0.6F);
             renderWaterWall(renderer, x + 1, z, ne, x + 1, z + 1, se, y, u0, v0, uvSize);
         }
-        return true;
+        return renderTop || bottom || north || south || west || east;
     }
 
     public static float waterSurface(Level level, int x, int y, int z) {
         if (level.getLiquid(x, y, z) != LiquidType.WATER) return Float.NEGATIVE_INFINITY;
         return y
-                + (cornerWaterHeight(level, x, y, z)
-                                + cornerWaterHeight(level, x + 1, y, z)
-                                + cornerWaterHeight(level, x, y, z + 1)
-                                + cornerWaterHeight(level, x + 1, y, z + 1))
+                + (cornerWaterHeight(level, x, y, z, -1, -1)
+                                + cornerWaterHeight(level, x, y, z, 1, -1)
+                                + cornerWaterHeight(level, x, y, z, -1, 1)
+                                + cornerWaterHeight(level, x, y, z, 1, 1))
                         * .25f;
     }
 
     /** Surface at the local horizontal coordinates of a water block. */
     public static float waterSurfaceAt(
             Level level, int x, int y, int z, float localX, float localZ) {
-        float nw = cornerWaterHeight(level, x, y, z);
-        float se = cornerWaterHeight(level, x + 1, y, z + 1);
+        float nw = cornerWaterHeight(level, x, y, z, -1, -1);
+        float se = cornerWaterHeight(level, x, y, z, 1, 1);
         // The top face runs from southeast to northwest across its diagonal.
         if (localX >= localZ) {
-            float ne = cornerWaterHeight(level, x + 1, y, z);
+            float ne = cornerWaterHeight(level, x, y, z, 1, -1);
             return y + nw + (ne - nw) * localX + (se - ne) * localZ;
         }
-        float sw = cornerWaterHeight(level, x, y, z + 1);
+        float sw = cornerWaterHeight(level, x, y, z, -1, 1);
         return y + nw + (sw - nw) * localZ + (se - sw) * localX;
     }
 
-    private static float cornerWaterHeight(Level level, int x, int y, int z) {
+    private static float cornerWaterHeight(Level level, int x, int y, int z, int dx, int dz) {
         float total = 0;
         int samples = 0;
         boolean levelled = usesLevelledFlow(level);
-        for (int nx = x - 1; nx <= x; nx++) {
-            for (int nz = z - 1; nz <= z; nz++) {
+        boolean connected = level.isWater(x + dx, y, z) || level.isWater(x, y, z + dz);
+        for (int ox = 0; ox <= 1; ox++) {
+            int nx = x + ox * dx;
+            for (int oz = 0; oz <= 1; oz++) {
+                if (ox == 1 && oz == 1 && !connected) continue;
+                int nz = z + oz * dz;
                 if (level.getLiquid(nx, y, nz) == LiquidType.WATER) {
                     if (level.getLiquid(nx, y + 1, nz) == LiquidType.WATER) {
                         return 1.0F;
@@ -444,10 +457,11 @@ public class LiquidBlock extends Block {
                 }
             }
         }
-        return total / (samples * 9.0F);
+        return samples == 0 ? 0 : total / (samples * 9.0F);
     }
 
-    private static void colorWater(ShapeRenderer renderer, Level level, int x, int y, int z, float shade) {
+    private static void colorWater(
+            ShapeRenderer renderer, Level level, int x, int y, int z, float shade) {
         float light = level.getRenderBrightness(x, y, z) * shade;
         renderer.color(light, light, light);
     }

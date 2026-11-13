@@ -12,6 +12,7 @@ import org.lwjgl.opengl.GL11;
 public final class ChestScreen extends InventoryScreen {
     private final int x, y, z;
     private int carriedId = -1, carriedCount;
+    private int carriedWear;
     private net.classicremastered.minecraft.level.itemstack.PackedTurret carriedCrate;
     private ChestController.View view;
     private boolean opened;
@@ -83,22 +84,31 @@ public final class ChestScreen extends InventoryScreen {
     }
 
     private void set(int slot, int id, int count) {
-        set(slot, id, count, null);
+        set(slot, id, count, null, 0);
+    }
+
+    private int wear(int slot) {
+        return slot < chestSlots()
+                ? view.state(slot).armorWear[slot % 27]
+                : minecraft.player.inventory.armorWear(playerSlot(slot));
     }
 
     private void set(
             int slot,
             int id,
             int count,
-            net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
+            net.classicremastered.minecraft.level.itemstack.PackedTurret crate,
+            int wear) {
         if (slot < chestSlots()) {
             view.state(slot).items[slot % 27] = count > 0 ? id : 0;
             view.state(slot).counts[slot % 27] = count;
             view.state(slot).crates[slot % 27] = count > 0 ? crate : null;
+            view.state(slot).armorWear[slot % 27] = count > 0 ? wear : 0;
         } else if (crate != null && count > 0) {
             minecraft.player.inventory.setCrate(playerSlot(slot), crate);
         } else {
             minecraft.player.inventory.setIdCount(playerSlot(slot), id, count);
+            minecraft.player.inventory.setArmorWear(playerSlot(slot), wear);
         }
     }
 
@@ -146,10 +156,13 @@ public final class ChestScreen extends InventoryScreen {
             if (slot == hovered)
                 drawBox(slotX(slot), slotY(slot), slotX(slot) + 16, slotY(slot) + 16, 0x80FFFFFF);
             drawStack(id(slot), count(slot), slotX(slot), slotY(slot));
+            drawDurabilityBar(id(slot), wear(slot), slotX(slot), slotY(slot));
         }
-        if (carriedCount > 0) drawStack(carriedId, carriedCount, mx - 8, my - 8);
-        else if (hovered >= 0 && count(hovered) > 0) {
-            ItemTooltip.draw(this, id(hovered), crate(hovered), mx, my);
+        if (carriedCount > 0) {
+            drawStack(carriedId, carriedCount, mx - 8, my - 8);
+            drawDurabilityBar(carriedId, carriedWear, mx - 8, my - 8);
+        } else if (hovered >= 0 && count(hovered) > 0) {
+            ItemTooltip.draw(this, id(hovered), crate(hovered), wear(hovered), mx, my);
         }
         GL11.glColor4f(1, 1, 1, 1);
     }
@@ -188,8 +201,9 @@ public final class ChestScreen extends InventoryScreen {
     private void dropChestStack(int button) {
         if (carriedCount <= 0 || button < 0 || button > 1) return;
         int count = button == 0 ? carriedCount : 1;
-        if (minecraft.player.dropStack(carriedId, count, carriedCrate)) {
+        if (minecraft.player.dropStack(carriedId, count, carriedCrate, carriedWear)) {
             carriedCount -= count;
+            carriedWear = 0;
             if (carriedCount == 0) {
                 carriedId = -1;
                 carriedCrate = null;
@@ -209,24 +223,33 @@ public final class ChestScreen extends InventoryScreen {
             if (count == 0) return;
             carriedId = id;
             carriedCrate = crate(slot);
+            carriedWear = wear(slot);
             carriedCount = button == 1 ? (count + 1) / 2 : count;
             set(slot, id, count - carriedCount);
-        } else if (count == 0 || id == carriedId && carriedCrate == null && crate(slot) == null) {
+        } else if (count == 0
+                || id == carriedId
+                        && limit(id) > 1
+                        && carriedCrate == null
+                        && crate(slot) == null) {
             int amount = Math.min(button == 1 ? 1 : carriedCount, limit(carriedId) - count);
             if (amount > 0) {
-                set(slot, carriedId, count + amount, carriedCrate);
+                set(slot, carriedId, count + amount, carriedCrate, carriedWear);
                 carriedCount -= amount;
+                carriedWear = 0;
             }
         } else if (button == 0 && carriedCount <= limit(carriedId)) {
             var previousCrate = crate(slot);
-            set(slot, carriedId, carriedCount, carriedCrate);
+            int previousWear = wear(slot);
+            set(slot, carriedId, carriedCount, carriedCrate, carriedWear);
             carriedCrate = previousCrate;
+            carriedWear = previousWear;
             carriedId = id;
             carriedCount = count;
         }
         if (carriedCount == 0) {
             carriedId = -1;
             carriedCrate = null;
+            carriedWear = 0;
         }
     }
 
@@ -234,6 +257,7 @@ public final class ChestScreen extends InventoryScreen {
         int id = id(slot), remaining = count(slot);
         if (remaining == 0) return;
         var crate = crate(slot);
+        int wear = wear(slot);
         int start = slot < chestSlots() ? chestSlots() : 0;
         int end = slot < chestSlots() ? chestSlots() + 36 : chestSlots();
         for (int pass = 0; pass < 2; pass++)
@@ -242,11 +266,12 @@ public final class ChestScreen extends InventoryScreen {
                 if ((pass == 0 && count > 0 && id(target) == id) || (pass == 1 && count == 0)) {
                     int amount = Math.min(remaining, Math.max(0, limit(id) - count));
                     if (amount <= 0) continue;
-                    set(target, id, count + amount, crate);
+                    set(target, id, count + amount, crate, wear);
+                    wear = 0;
                     remaining -= amount;
                 }
             }
-        set(slot, id, remaining, crate);
+        set(slot, id, remaining, crate, wear);
     }
 
     @Override
@@ -273,7 +298,11 @@ public final class ChestScreen extends InventoryScreen {
                     if (amount <= 0) continue;
                     if (carriedCrate != null)
                         minecraft.player.inventory.setCrate(slot, carriedCrate);
-                    else minecraft.player.inventory.setIdCount(slot, carriedId, count + amount);
+                    else {
+                        minecraft.player.inventory.setIdCount(slot, carriedId, count + amount);
+                        minecraft.player.inventory.setArmorWear(slot, carriedWear);
+                    }
+                    carriedWear = 0;
                     carriedCount -= amount;
                 }
             }
@@ -296,11 +325,13 @@ public final class ChestScreen extends InventoryScreen {
                                         minecraft.player.z,
                                         carriedId - 256,
                                         carriedCount)
-                                .withCrate(carriedCrate));
+                                .withCrate(carriedCrate)
+                                .withArmorWear(carriedWear));
         }
         carriedCount = 0;
         carriedId = -1;
         carriedCrate = null;
+        carriedWear = 0;
         super.onClose();
     }
 }

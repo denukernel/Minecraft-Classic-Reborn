@@ -4,8 +4,8 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
-import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.mob.Creeper;
 import net.classicremastered.minecraft.mob.IronGolem;
 import net.classicremastered.minecraft.mob.Mob;
@@ -87,7 +87,8 @@ public class Level implements Serializable {
     public transient boolean spectatorMode;
     public int waterLevel;
     public int skyColor; // --- Day/Night cycle ---
-    public int dayLength = 24000; // ticks per full day (~20 min at 20 TPS)
+    private static final int DAY_TIME_PER_TICK = 6;
+    public int dayLength = 24000; // world time units per full day
     public int timeOfDay = 2000; // 8:00 AM start
     public boolean doMobSpawning = true;
     private int gameRulesVersion = 1;
@@ -115,7 +116,7 @@ public class Level implements Serializable {
     // === Apocalypse overrides ===
     public boolean forceRainbowSky = false;
     public transient LightEngine lightEngine = new LightEngine(this);
-    public final LevelHelper helper;
+    public transient LevelHelper helper;
 
     public transient java.util.HashMap<Long, Byte> flowLevels = new java.util.HashMap<>();
     private transient java.util.HashMap<Long, Byte> cactusAges = new java.util.HashMap<>();
@@ -203,11 +204,13 @@ public class Level implements Serializable {
     }
 
     public float getCelestialAngle(float partial) {
-        return celestialAngleAt(timeOfDay + Math.max(0f, Math.min(1f, partial)) * 2f);
+        float advance =
+                doDayNightCycle ? DAY_TIME_PER_TICK * Math.max(0f, Math.min(1f, partial)) : 0;
+        return celestialAngleAt(timeOfDay + advance);
     }
 
     private float celestialAngleAt(float time) {
-        // Keep this project noon-based clock and Classic speed. Ease only the orbit:
+        // Keep the noon-based clock and ease the orbit:
         // slower at the horizons, faster overhead, as in the modern daylight cycle.
         float fraction = ((time % dayLength) + dayLength) % dayLength / dayLength;
         float eased = (1f - (float) Math.cos(fraction * Math.PI)) * 0.5f;
@@ -273,6 +276,8 @@ public class Level implements Serializable {
     }
 
     void initTransient(RidingLinks ridingLinks) {
+        if (helper == null) helper = new LevelHelper(this);
+        if (lightEngine == null) lightEngine = new LightEngine(this);
         if (cactusAges == null) cactusAges = new java.util.HashMap<>();
         if (this.blocks == null) {
             throw new RuntimeException("The level is corrupt!");
@@ -319,17 +324,12 @@ public class Level implements Serializable {
                     net.classicremastered.minecraft.mob.Mob m =
                             net.classicremastered.minecraft.mob.MobRegistry.create(
                                     s.id, this, s.x, s.y, s.z);
-                    if (m == null) continue; // SAFETY: refuse unregistered/missing
+                    if (m == null || m.getRegistryId() != s.id) continue;
                     net.classicremastered.minecraft.level.itemstack.Equipment.load(m, s.extraData);
                     if (s.extraData != null) m.loadPersistence(s.extraData);
                     VillagerDoorManager.loadHome(m, s.extraData);
-                    m.yRot = s.yRot;
-                    m.xRot = s.xRot;
-                    try {
-                        java.lang.reflect.Field hf = m.getClass().getField("health");
-                        if (hf.getType() == int.class) hf.setInt(m, s.health);
-                    } catch (Throwable ignored) {
-                    }
+                    m.moveTo(s.x, s.y, s.z, s.yRot, s.xRot);
+                    m.health = m.lastHealth = s.health;
                     this.addEntity(m);
                     ridingLinks.read(m, s.extraData);
                 }
@@ -1185,7 +1185,7 @@ public class Level implements Serializable {
     // Level.java
     public void tickTime() {
         lastTimeOfDay = timeOfDay;
-        if (doDayNightCycle) timeOfDay = (timeOfDay + 2) % dayLength;
+        if (doDayNightCycle) timeOfDay = (timeOfDay + DAY_TIME_PER_TICK) % dayLength;
     }
 
     /** Shared by finite and infinite world tick implementations. */

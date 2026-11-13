@@ -161,6 +161,17 @@ public class GuiScreen extends Screen {
         return parentScreen != null && parentScreen.pausesLocalWorld();
     }
 
+    public final void resize(int w, int h) {
+        if (width == w && height == h) return;
+        width = w;
+        height = h;
+        onResize();
+    }
+
+    protected void onResize() {
+        onOpen();
+    }
+
     public void onOpen() {}
 
     public final void doInput() {

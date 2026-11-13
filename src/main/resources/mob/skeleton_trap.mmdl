@@ -1,0 +1,98 @@
+{
+  "name": "Skeleton Trap",
+  "atlasW": 64,
+  "atlasH": 64,
+  "parts": [
+    {
+      "name": "head",
+      "u": 0,
+      "v": 0,
+      "x": -4,
+      "y": -8,
+      "z": -4,
+      "w": 8,
+      "h": 8,
+      "d": 8,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "mirror": false
+    },
+    {
+      "name": "body",
+      "u": 16,
+      "v": 16,
+      "x": -4,
+      "y": 0,
+      "z": -2,
+      "w": 8,
+      "h": 12,
+      "d": 4,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "mirror": false
+    },
+    {
+      "name": "right_arm",
+      "u": 40,
+      "v": 16,
+      "x": -1,
+      "y": -2,
+      "z": -1,
+      "w": 2,
+      "h": 12,
+      "d": 2,
+      "posX": -5,
+      "posY": 2,
+      "posZ": 0,
+      "mirror": false
+    },
+    {
+      "name": "left_arm",
+      "u": 40,
+      "v": 32,
+      "x": -1,
+      "y": -2,
+      "z": -1,
+      "w": 2,
+      "h": 12,
+      "d": 2,
+      "posX": 5,
+      "posY": 2,
+      "posZ": 0,
+      "mirror": true
+    },
+    {
+      "name": "right_leg",
+      "u": 0,
+      "v": 16,
+      "x": -1,
+      "y": 0,
+      "z": -1,
+      "w": 2,
+      "h": 12,
+      "d": 2,
+      "posX": -2,
+      "posY": 12,
+      "posZ": 0,
+      "mirror": false
+    },
+    {
+      "name": "left_leg",
+      "u": 0,
+      "v": 32,
+      "x": -1,
+      "y": 0,
+      "z": -1,
+      "w": 2,
+      "h": 12,
+      "d": 2,
+      "posX": 2,
+      "posY": 12,
+      "posZ": 0,
+      "mirror": true
+    }
+  ]
+}
+

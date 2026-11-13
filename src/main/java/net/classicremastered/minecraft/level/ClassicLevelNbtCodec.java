@@ -1,6 +1,5 @@
 package net.classicremastered.minecraft.level;
 
-import net.classicremastered.minecraft.Entity;
 import net.classicremastered.nbt.*;
 
 import java.io.*;
@@ -38,40 +37,8 @@ final class ClassicLevelNbtCodec {
         map.putFloat("SpawnRot", level.rotSpawn);
         root.put(map);
 
-        CompoundTag player = new CompoundTag("Player");
-        player.putString("id", "Player");
-        Entity savePlayer = level.player;
-        if (savePlayer == null && level.minecraft != null) {
-            savePlayer = level.minecraft.player;
-        }
-        if (savePlayer != null) {
-            ListTag pos = new ListTag("Pos", (byte) 5); // TAG_Float
-            pos.add(new FloatTag(null, savePlayer.x));
-            pos.add(new FloatTag(null, savePlayer.y));
-            pos.add(new FloatTag(null, savePlayer.z));
-            player.put(pos);
-
-            ListTag rot = new ListTag("Rotation", (byte) 5); // TAG_Float
-            rot.add(new FloatTag(null, savePlayer.yRot));
-            rot.add(new FloatTag(null, savePlayer.xRot));
-            player.put(rot);
-        } else {
-            ListTag pos = new ListTag("Pos", (byte) 5);
-            pos.add(new FloatTag(null, 0f));
-            pos.add(new FloatTag(null, 0f));
-            pos.add(new FloatTag(null, 0f));
-            player.put(pos);
-
-            ListTag rot = new ListTag("Rotation", (byte) 5);
-            rot.add(new FloatTag(null, 0f));
-            rot.add(new FloatTag(null, 0f));
-            rot.add(new FloatTag(null, 0f));
-            player.put(rot);
-        }
+        root.put(PlayerNbtCodec.save(level));
         var all = level.blockMap != null ? level.blockMap.all : java.util.Collections.emptyList();
-        PlayerNbtCodec.save(player, savePlayer);
-        RidingLinks.savePassenger(all, savePlayer, player);
-        root.put(player);
 
         ListTag entities = new ListTag("Entities", (byte) 10); // TAG_Compound
         for (Object e : all) {
@@ -79,13 +46,7 @@ final class ClassicLevelNbtCodec {
             if (m instanceof net.classicremastered.minecraft.player.Player) continue;
             if (m.removed || m.health <= 0) continue;
 
-            try {
-                java.lang.reflect.Field f = m.getClass().getField("persistent");
-                if (f.getType() == boolean.class && !f.getBoolean(m) && m.riding == null
-                        && m.rider == null)
-                    continue;
-            } catch (Throwable ignored) {
-            }
+            if (!m.isPersistenceRequired()) continue;
 
             short id = net.classicremastered.minecraft.mob.MobRegistry.idOf(m);
             if (id < 0) continue;
@@ -187,35 +148,9 @@ final class ClassicLevelNbtCodec {
         level.initTransient(ridingLinks);
 
         CompoundTag player = root.getCompound("Player");
-        if (player.hasKey("Pos")) {
-            ListTag pos = player.getList("Pos");
-            ListTag rot = player.getList("Rotation");
-            float px = 0f, py = 0f, pz = 0f;
-            if (pos.size() >= 3) {
-                px = ((FloatTag) pos.get(0)).value;
-                py = ((FloatTag) pos.get(1)).value;
-                pz = ((FloatTag) pos.get(2)).value;
-            }
-            float yaw = 0f, pitch = 0f;
-            if (rot.size() >= 2) {
-                yaw = ((FloatTag) rot.get(0)).value;
-                pitch = ((FloatTag) rot.get(1)).value;
-            }
-
-            if (level.player == null) {
-                net.classicremastered.minecraft.player.Player loadedPlayer =
-                        new net.classicremastered.minecraft.player.Player(null);
-                loadedPlayer.level = level;
-                level.player = loadedPlayer;
-                loadedPlayer.moveTo(px, py, pz, yaw, pitch);
-                level.addEntity(loadedPlayer);
-            } else {
-                level.player.moveTo(px, py, pz, yaw, pitch);
-            }
-        }
-        PlayerNbtCodec.load(player, level.player);
-        ridingLinks.readPassenger(level.player, player);
         WorldStateNbtCodec.load(level, root, ridingLinks);
+        PlayerNbtCodec.load(level, player);
+        ridingLinks.readPassenger(level.player, player);
         ridingLinks.restore();
         level.updateDayNightColorsSmooth();
 

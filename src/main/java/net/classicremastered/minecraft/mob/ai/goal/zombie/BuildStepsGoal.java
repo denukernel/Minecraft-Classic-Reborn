@@ -3,10 +3,12 @@ package net.classicremastered.minecraft.mob.ai.goal.zombie;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.StairBlock;
 import net.classicremastered.minecraft.mob.ZombieBuilder;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.goal.Goal;
 import net.classicremastered.minecraft.mob.ai.zombie.ZombieBuilderAI;
+import net.classicremastered.minecraft.path.Pathfinder;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
@@ -18,6 +20,9 @@ public final class BuildStepsGoal extends Goal {
     private int stepX, stepY, stepZ, breakX, breakY, breakZ, breakHP;
     private float goalX, goalZ;
     private boolean descending, stepReady;
+    private int routeCheckTicks;
+    private boolean walkingRoute;
+    private float routeX, routeY, routeZ;
 
     public BuildStepsGoal(ZombieBuilder builder) {
         this.builder = builder;
@@ -33,6 +38,7 @@ public final class BuildStepsGoal extends Goal {
     public void tick() {
 
         if (cooldown > 0) cooldown--;
+        if (routeCheckTicks > 0) routeCheckTicks--;
         if (poseTicks > 0 && --poseTicks == 0) {
             builder.poseBreaking = builder.posePlacing = false;
         }
@@ -60,6 +66,15 @@ public final class BuildStepsGoal extends Goal {
             travelTicks = 0;
             return;
         }
+        builder.leaveTowerFor(p);
+        if (builder.onGround
+                && (travelTicks == 0 || !descending || stepReady)
+                && hasWalkingRoute(p)) {
+            travelTicks = 0;
+            breakHP = 0;
+            builder.poseBreaking = builder.posePlacing = false;
+            return;
+        }
         if (travelTicks > 0) {
             travelTicks--;
             if (Math.abs(goalX - p.x) > 2 || Math.abs(goalZ - p.z) > 2) {
@@ -70,7 +85,6 @@ public final class BuildStepsGoal extends Goal {
                 builder.xd = builder.zd = 0;
                 stepReady = prepareDescent();
                 if (!stepReady) return;
-                builder.leaveTowerFor(p);
             }
             float sx = stepX + .5f - builder.x,
                     sz = stepZ + .5f - builder.z,
@@ -186,6 +200,22 @@ public final class BuildStepsGoal extends Goal {
         }
     }
 
+    private boolean hasWalkingRoute(Player player) {
+        if (Math.abs(player.x - routeX) > .5f
+                || Math.abs(player.bb.y0 - routeY) > .5f
+                || Math.abs(player.z - routeZ) > .5f) routeCheckTicks = 0;
+        if (routeCheckTicks == 0) {
+            routeCheckTicks = 10;
+            routeX = player.x;
+            routeY = player.bb.y0;
+            routeZ = player.z;
+            walkingRoute =
+                    Pathfinder.findChasePath(builder.level, builder, routeX, routeY, routeZ, 1024)
+                            != null;
+        }
+        return walkingRoute;
+    }
+
     private boolean prepareDescent() {
         // Clear the whole swept body space before opening the lower landing.
         for (int y = stepY + 3; y > stepY; y--) {
@@ -194,14 +224,22 @@ public final class BuildStepsGoal extends Goal {
                 return false;
             }
         }
-        if (builder.level.isSolidTile(stepX, stepY, stepZ)) return true;
         int x = (int) Math.floor(builder.x), z = (int) Math.floor(builder.z);
+        int facing = stepX > x ? 4 : stepX < x ? 5 : stepZ > z ? 2 : 3;
+        int stair = StairBlock.id(2, facing, false);
+        if (builder.level.getTile(stepX, stepY, stepZ) == stair) return true;
+        if (!air(stepX, stepY, stepZ)) {
+            if (builder.level.isSolidTile(stepX, stepY, stepZ)
+                    && breakableBlock(stepX, stepY, stepZ) == null) return true;
+            clear(stepX, stepY, stepZ);
+            return false;
+        }
         // Extend the underside of the current footing, then attach the next tread.
         if (!builder.level.isSolidTile(x, stepY, z)) {
             place(x, stepY, z);
             return false;
         }
-        return place(stepX, stepY, stepZ);
+        return place(stepX, stepY, stepZ, stair);
     }
 
     private boolean descentSpace(int x, int feetY, int z) {
@@ -229,24 +267,34 @@ public final class BuildStepsGoal extends Goal {
     }
 
     private boolean place(int x, int y, int z) {
+        return place(x, y, z, Block.STONE.id);
+    }
+
+    private boolean supportsConstruction(int x, int y, int z) {
+        return builder.level.isSolidTile(x, y, z)
+                || Block.blocks[builder.level.getTile(x, y, z)] instanceof StairBlock;
+    }
+
+    private boolean place(int x, int y, int z, int block) {
         if (cooldown > 0 || !air(x, y, z)) return false;
         AABB cell = new AABB(x, y, z, x + 1, y + 1, z + 1);
         if (builder.bb.intersects(cell) || !builder.level.findEntities(builder, cell).isEmpty())
             return false;
-        if (!builder.level.isSolidTile(x, y - 1, z)
-                && !builder.level.isSolidTile(x, y + 1, z)
-                && !builder.level.isSolidTile(x - 1, y, z)
-                && !builder.level.isSolidTile(x + 1, y, z)
-                && !builder.level.isSolidTile(x, y, z - 1)
-                && !builder.level.isSolidTile(x, y, z + 1)) return false;
+        if (!supportsConstruction(x, y - 1, z)
+                && !supportsConstruction(x, y + 1, z)
+                && !supportsConstruction(x - 1, y, z)
+                && !supportsConstruction(x + 1, y, z)
+                && !supportsConstruction(x, y, z - 1)
+                && !supportsConstruction(x, y, z + 1)) return false;
         if ((net.classicremastered.minecraft.level.structure.GeneratedHouse.protects(
                                 builder.level, x, y, z)
                         && !(descending && builder.canBuildTowerExit(x, y, z)))
-                || !builder.level.setTile(x, y, z, Block.STONE.id)) return false;
+                || !builder.level.setTile(x, y, z, block)) return false;
         cooldown = 6;
         poseTicks = 6;
         builder.posePlacing = true;
         builder.poseBreaking = false;
+        routeCheckTicks = 0;
         return true;
     }
 
@@ -274,7 +322,8 @@ public final class BuildStepsGoal extends Goal {
         float dx = x + .5f - builder.x,
                 dy = y + .5f - (builder.bb.y0 + 1),
                 dz = z + .5f - builder.z;
-        if (dx * dx + dy * dy + dz * dz > 2.2f * 2.2f) return;
+        float reach = descending ? 3f : 2.2f;
+        if (dx * dx + dy * dy + dz * dz > reach * reach) return;
         if (breakHP <= 0 || x != breakX || y != breakY || z != breakZ) {
             breakX = x;
             breakY = y;
@@ -288,6 +337,7 @@ public final class BuildStepsGoal extends Goal {
         builder.posePlacing = false;
         if (breakHP <= 0) {
             builder.level.setTile(x, y, z, 0);
+            routeCheckTicks = 0;
             if (builder.level.particleEngine != null)
                 b.spawnBreakParticles(builder.level, x, y, z, builder.level.particleEngine);
         }

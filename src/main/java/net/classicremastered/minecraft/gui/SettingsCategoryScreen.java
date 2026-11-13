@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.gui;
 
 import net.classicremastered.minecraft.GameSettings;
+
 import org.lwjgl.input.Mouse;
 
 final class SettingsCategoryScreen extends GuiScreen {
@@ -20,7 +21,7 @@ final class SettingsCategoryScreen extends GuiScreen {
                 GameSettings.MOB_SHADOWS,
                 GameSettings.PLAYER_SHADOWS),
         SOUND("Sound", 0, 1, 12),
-        GAMEPLAY("Gameplay", 10, 11, 2, 16, 17);
+        GAMEPLAY("Gameplay", 10, 11, 2, 16, 17, GameSettings.COMBAT_STYLE);
 
         final String label;
         final int[] options;
@@ -114,5 +115,25 @@ final class SettingsCategoryScreen extends GuiScreen {
                     0xFFFFFF);
         }
         super.render(x, y);
+        if (page == Page.GAMEPLAY) {
+            String first =
+                    settings.modernCombat
+                            ? "Wait for the attack meter to recharge for full damage."
+                            : "Classic attacks deal full damage on every swing.";
+            String second =
+                    settings.modernCombat
+                            ? "Crit while falling. Sweep with a sword on the ground."
+                            : "Hold attack to strike repeatedly.";
+            drawCenteredString(fontRenderer, first, width / 2, sliderY + 8, 0xFFFFFF);
+            drawCenteredString(fontRenderer, second, width / 2, sliderY + 20, 0xD0D0D0);
+            if (settings.modernCombat) {
+                drawCenteredString(
+                        fontRenderer,
+                        "Sprint into a charged hit for extra knockback.",
+                        width / 2,
+                        sliderY + 32,
+                        0xD0D0D0);
+            }
+        }
     }
 }

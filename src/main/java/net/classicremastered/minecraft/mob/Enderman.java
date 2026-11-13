@@ -45,20 +45,21 @@ public final class Enderman extends Mob {
     }
 
     /**
-     * Creates a tall slim AABB centered on the entity (uses current x/y/z). Called
-     * once in ctor; tick() also refreshes in case engine doesn't auto-sync.
+     * Creates a tall slim AABB centered on the entity (uses current x/y/z). Called once in ctor;
+     * tick() also refreshes in case engine doesn't auto-sync.
      */
     private void getAndSetAABB(float width, float height) {
         float hw = width * 0.5f;
         // Note: Entity/Mob uses this.x, this.y, this.z as the entity origin.
-        this.bb = new AABB(
-                this.x - hw, // x0
-                this.y, // y0 (feet at entity.y)
-                this.z - hw, // z0
-                this.x + hw, // x1
-                this.y + height, // y1 (top)
-                this.z + hw // z1
-        );
+        this.bb =
+                new AABB(
+                        this.x - hw, // x0
+                        this.y, // y0 (feet at entity.y)
+                        this.z - hw, // z0
+                        this.x + hw, // x1
+                        this.y + height, // y1 (top)
+                        this.z + hw // z1
+                        );
     }
 
     @Override
@@ -79,13 +80,20 @@ public final class Enderman extends Mob {
 
     @Override
     public void hurt(Entity source, int damage) {
-        if (source instanceof Arrow && ai instanceof EndermanAI endermanAI) {
-            if (health > 0) {
-                endermanAI.evadeArrow(this);
-            }
+        if (source instanceof Arrow && ai instanceof EndermanAI) {
+            tryEvadeProjectile();
             return;
         }
         super.hurt(source, damage);
+    }
+
+    public boolean tryEvadeProjectile() {
+        return health > 0
+                && !removed
+                && level != null
+                && !level.isNetworkMode()
+                && ai instanceof EndermanAI endermanAI
+                && endermanAI.teleportation().teleportRandom(this);
     }
 
     @Override

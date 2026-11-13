@@ -786,9 +786,8 @@ public final class ClassicLauncher {
             t.printStackTrace();
         }
 
-        // Ensure the canvas dictates the window size
+        // Use the selected resolution for the initial window size.
         canvas.setPreferredSize(new Dimension(width, height));
-        canvas.setMinimumSize(new Dimension(width, height));
         canvas.setMinecraft(mc);
         win.add(canvas, BorderLayout.CENTER);
 
@@ -807,8 +806,10 @@ public final class ClassicLauncher {
                     }
                 });
         win.pack();
+        Insets insets = win.getInsets();
+        win.setMinimumSize(
+                new Dimension(320 + insets.left + insets.right, 240 + insets.top + insets.bottom));
         win.setLocationRelativeTo(null);
-        win.setResizable(false);
         win.setVisible(true);
         win.toFront();
         win.requestFocus();

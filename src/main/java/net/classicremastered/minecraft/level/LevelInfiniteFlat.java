@@ -58,17 +58,11 @@ public final class LevelInfiniteFlat extends Level {
     }
 
     private void markSliceAndNeighbors(int x, int y, int z) {
-        if (this.minecraft == null || this.minecraft.levelRenderer == null) return;
-        final int cx = x >> 4, sy = y >> 4, cz = z >> 4;
-        final var lr = this.minecraft.levelRenderer;
-        lr.markDirty(cx, sy, cz);
-        int lx = x & 15, ly = y & 15, lz = z & 15;
-        if (lx == 0) lr.markDirty(cx - 1, sy, cz);
-        if (lx == 15) lr.markDirty(cx + 1, sy, cz);
-        if (lz == 0) lr.markDirty(cx, sy, cz - 1);
-        if (lz == 15) lr.markDirty(cx, sy, cz + 1);
-        if (ly == 0) lr.markDirty(cx, sy - 1, cz);
-        if (ly == 15) lr.markDirty(cx, sy + 1, cz);
+        if (minecraft == null || minecraft.levelRenderer == null) return;
+        var renderer = minecraft.levelRenderer;
+        if (renderer.level == this) {
+            renderer.queueChunks(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
+        }
     }
 
     @Override

@@ -4,6 +4,7 @@ package net.classicremastered.minecraft.entity;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
@@ -14,11 +15,17 @@ public class DroppedItem extends Entity {
     public int itemId;
     public int life = 6000; // ~5 mins
     public int count = 1;
+    public int armorWear;
     public net.classicremastered.minecraft.level.itemstack.PackedTurret crate;
 
     public DroppedItem withCrate(
             net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
         this.crate = crate;
+        return this;
+    }
+
+    public DroppedItem withArmorWear(int wear) {
+        armorWear = Equipment.armorWear(itemId + 256, wear);
         return this;
     }
 
@@ -75,8 +82,11 @@ public class DroppedItem extends Entity {
 
         int added = 0;
         for (int i = 0; i < (crate == null ? this.count : 1); i++) {
-            if (crate != null ? p.inventory.addCrate(crate) : p.inventory.addResource(idToAdd)) {
+            if (crate != null
+                    ? p.inventory.addCrate(crate)
+                    : p.inventory.addResource(idToAdd, armorWear)) {
                 added++;
+                armorWear = 0;
             } else {
                 break;
             }

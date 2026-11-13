@@ -197,8 +197,8 @@ public final class Minecraft implements Runnable {
                     this.parsecMouseCaptured = false;
                 }
             }
-            int uiW = this.width * 240 / this.height;
-            int uiH = this.height * 240 / this.height;
+            int uiW = guiWidth();
+            int uiH = guiHeight();
             next.open(this, uiW, uiH);
             this.online = false;
         } else {
@@ -412,6 +412,7 @@ public final class Minecraft implements Runnable {
                     if (this.waiting) {
                         try {
                             if (org.lwjgl.opengl.Display.isCreated()) {
+                                resize();
                                 // minimal GUI-only frame so ErrorScreen is visible
                                 GL11.glViewport(0, 0, this.width, this.height);
                                 GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
@@ -435,15 +436,8 @@ public final class Minecraft implements Runnable {
                             this.running = false;
                         }
                         if (quitRequested) break;
-                        if (this.canvas != null && !Display.isFullscreen()) {
-                            final int cw = this.canvas.getWidth();
-                            final int ch = this.canvas.getHeight();
-                            if (cw > 0 && ch > 0 && (cw != this.width || ch != this.height)) {
-                                resizeTo(cw, ch);
-                            }
-                        }
-
                         try {
+                            resize();
                             Timer t = this.timer;
                             long nowMs;
                             long sysDeltaMs = (nowMs = System.currentTimeMillis()) - t.lastSysClock;
@@ -1294,7 +1288,7 @@ public final class Minecraft implements Runnable {
         // --- Clear particles and rebind ---
         if (this.particleManager != null) {
             if (var1 != null) var1.particleEngine = this.particleManager;
-            for (int i = 0; i < 2; ++i) this.particleManager.particles[i].clear();
+            this.particleManager.clear();
         }
 
         // === Restore serialized mobs after renderer is ready ===
@@ -1358,6 +1352,22 @@ public final class Minecraft implements Runnable {
         return dist2 <= (max * max);
     }
 
+    public int guiWidth() {
+        return guiWidth(width, height);
+    }
+
+    public int guiHeight() {
+        return guiHeight(width, height);
+    }
+
+    public static int guiWidth(int width, int height) {
+        return Math.max(320, width * 240 / Math.max(1, height));
+    }
+
+    public static int guiHeight(int width, int height) {
+        return Math.max(240, height * 320 / Math.max(1, width));
+    }
+
     private void resizeTo(int w, int h) {
         this.width = w;
         this.height = h;
@@ -1368,13 +1378,11 @@ public final class Minecraft implements Runnable {
         }
 
         if (hud != null) {
-            hud.width = w * 240 / h;
-            hud.height = h * 240 / h;
+            hud.width = guiWidth();
+            hud.height = guiHeight();
         }
         if (currentScreen != null) {
-            currentScreen.width = w * 240 / h;
-            currentScreen.height = h * 240 / h;
-            currentScreen.onOpen();
+            currentScreen.resize(guiWidth(), guiHeight());
         }
     }
 
@@ -1387,6 +1395,6 @@ public final class Minecraft implements Runnable {
             w = Display.getWidth();
             h = Display.getHeight();
         }
-        if (w > 0 && h > 0) resizeTo(w, h);
+        if (w > 0 && h > 0 && (w != width || h != height)) resizeTo(w, h);
     }
 }

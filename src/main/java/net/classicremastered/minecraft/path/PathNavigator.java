@@ -53,6 +53,10 @@ public final class PathNavigator {
         return hasGoal;
     }
 
+    public boolean isWaitingForRoute() {
+        return failedPlans > 0 && index >= path.size();
+    }
+
     public List<Pathfinder.Node> pathSnapshot() {
         return List.copyOf(path);
     }

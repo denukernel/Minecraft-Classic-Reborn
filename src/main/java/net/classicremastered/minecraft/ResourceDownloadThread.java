@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft;
 
+import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -9,8 +11,6 @@ import java.util.Enumeration;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-
-import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
 
 public class ResourceDownloadThread extends Thread {
     public volatile boolean running = false;
@@ -118,6 +118,13 @@ public class ResourceDownloadThread extends Thread {
                 registerBundledSound(sm, "item/grappling_hook/launch.wav");
                 registerBundledSound(sm, "item/grappling_hook/latch.wav");
                 registerBundledSound(sm, "item/grappling_hook/release.wav");
+                for (String attack : new String[] {"strong", "miss"}) {
+                    registerBundledSound(sm, "combat/" + attack + ".wav");
+                }
+                registerCombatSounds(sm, "weak", 4);
+                registerCombatSounds(sm, "crit", 3);
+                registerCombatSounds(sm, "sweep", 7);
+                registerCombatSounds(sm, "knockback", 4);
                 scanDir(
                         new File(resDir, "music"),
                         (f, rel) -> {
@@ -279,6 +286,12 @@ public class ResourceDownloadThread extends Thread {
                 sm.registerSound(bundled, path);
                 sfxCount++;
             }
+        }
+    }
+
+    private void registerCombatSounds(PaulsCodeSoundManager sm, String attack, int variants) {
+        for (int i = 1; i <= variants; i++) {
+            registerBundledSound(sm, "combat/" + attack + i + ".ogg");
         }
     }
 

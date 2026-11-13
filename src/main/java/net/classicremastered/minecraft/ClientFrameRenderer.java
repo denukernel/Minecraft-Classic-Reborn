@@ -88,8 +88,8 @@ final class ClientFrameRenderer {
             }
 
             if (!r.minecraft.online) {
-                mouseDX = r.minecraft.width * 240 / r.minecraft.height;
-                mouseDY = r.minecraft.height * 240 / r.minecraft.height;
+                mouseDX = r.minecraft.guiWidth();
+                mouseDY = r.minecraft.guiHeight();
                 int mouseUiX = Mouse.getX() * mouseDX / r.minecraft.width;
                 uiH = mouseDY - Mouse.getY() * mouseDY / r.minecraft.height - 1;
                 if (r.minecraft.level != null) {
@@ -328,24 +328,43 @@ final class ClientFrameRenderer {
                                 int pickId = lr.level.getTile(pick.x, pick.y, pick.z);
                                 Block pickBlock = pickId > 0 ? Block.blocks[pickId] : null;
                                 if (pickBlock == null) pickBlock = Block.STONE;
-                                float cx = (pickBlock.x1 + pickBlock.x2) / 2.0F;
-                                float cy = (pickBlock.y1 + pickBlock.y2) / 2.0F;
-                                float cz = (pickBlock.z1 + pickBlock.z2) / 2.0F;
-                                GL11.glTranslatef(pick.x + cx, pick.y + cy, pick.z + cz);
-                                GL11.glScalef(1.01F, 1.01F, 1.01F);
-                                GL11.glTranslatef(-(pick.x + cx), -(pick.y + cy), -(pick.z + cz));
-                                sr1.begin();
-                                sr1.noColor();
                                 GL11.glDepthMask(false);
-                                for (int face = 0; face < 6; ++face)
-                                    pickBlock.renderSide(
-                                            sr1,
-                                            pick.x,
-                                            pick.y,
-                                            pick.z,
-                                            face,
-                                            crackTexture(lrPick.cracks));
-                                sr1.end();
+                                int stageTexture = crackTexture(lrPick.cracks);
+                                if (pickBlock
+                                        instanceof
+                                        net.classicremastered.minecraft.level.tile.CircuitBlock
+                                                        circuit) {
+                                    GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
+                                    GL11.glPolygonOffset(-1, -1);
+                                    sr1.begin();
+                                    sr1.noColor();
+                                    boolean drawn =
+                                            circuit.renderTorchCracks(
+                                                    lr.level,
+                                                    pick.x,
+                                                    pick.y,
+                                                    pick.z,
+                                                    sr1,
+                                                    stageTexture);
+                                    sr1.end();
+                                    GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
+                                    if (drawn) pickBlock = null;
+                                }
+                                if (pickBlock != null) {
+                                    float cx = (pickBlock.x1 + pickBlock.x2) / 2.0F;
+                                    float cy = (pickBlock.y1 + pickBlock.y2) / 2.0F;
+                                    float cz = (pickBlock.z1 + pickBlock.z2) / 2.0F;
+                                    GL11.glTranslatef(pick.x + cx, pick.y + cy, pick.z + cz);
+                                    GL11.glScalef(1.01F, 1.01F, 1.01F);
+                                    GL11.glTranslatef(
+                                            -(pick.x + cx), -(pick.y + cy), -(pick.z + cz));
+                                    sr1.begin();
+                                    sr1.noColor();
+                                    for (int face = 0; face < 6; ++face)
+                                        pickBlock.renderSide(
+                                                sr1, pick.x, pick.y, pick.z, face, stageTexture);
+                                    sr1.end();
+                                }
                                 GL11.glDepthMask(true);
                                 GL11.glPopMatrix();
                             }
@@ -482,12 +501,8 @@ final class ClientFrameRenderer {
                                     : Screenshot.take(Minecraft.mcDir);
                     if (mc.hud != null) {
                         String label = bugReport ? "Bug report screenshot" : "Screenshot";
-                        mc.hud.addChat(
-                                screenshot != null
-                                        ? "&a"
-                                                + label
-                                                + " saved! &7(Type &e/screenshots&7 to open folder)"
-                                        : "&cFailed to save screenshot.");
+                        if (screenshot != null) mc.hud.screenshotSaved(screenshot, label);
+                        else mc.hud.addChat("&cFailed to save screenshot.");
                     }
                 }
 
@@ -498,7 +513,9 @@ final class ClientFrameRenderer {
     }
 
     private static void renderParticles(ParticleManager manager, float partial) {
-        if (manager.particles[0].isEmpty() && manager.particles[1].isEmpty()) return;
+        if (manager.particles[0].isEmpty()
+                && manager.particles[1].isEmpty()
+                && manager.particles[ParticleManager.COMBAT_PASS].isEmpty()) return;
         PARTICLE_VIEW.clear();
         GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, PARTICLE_VIEW);
         Vec3D right = new Vec3D(PARTICLE_VIEW.get(0), PARTICLE_VIEW.get(4), PARTICLE_VIEW.get(8));
@@ -508,10 +525,15 @@ final class ClientFrameRenderer {
             GL11.glDisable(GL11.GL_CULL_FACE);
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             GL11.glEnable(GL11.GL_ALPHA_TEST);
-            for (int pass = 0; pass < 2; pass++) {
+            for (int pass = 0; pass < manager.particles.length; pass++) {
                 var particles = manager.particles[pass];
                 if (particles.isEmpty()) continue;
-                String texture = pass == 0 ? "/particles.png" : BlockTextureAtlas.RESOURCE;
+                String texture =
+                        switch (pass) {
+                            case 0 -> "/particles.png";
+                            case ParticleManager.COMBAT_PASS -> "/textures/particle/combat.png";
+                            default -> BlockTextureAtlas.RESOURCE;
+                        };
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, manager.textureManager.load(texture));
                 ShapeRenderer shape = ShapeRenderer.instance;
                 shape.begin();

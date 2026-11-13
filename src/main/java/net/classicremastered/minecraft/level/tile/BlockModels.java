@@ -239,6 +239,18 @@ public final class BlockModels {
 
     public static void torch(
             ShapeRenderer r, int x, int y, int z, int facing, int texture, float light) {
+        torch(r, x, y, z, facing, texture, light, -1);
+    }
+
+    static void torch(
+            ShapeRenderer r,
+            int x,
+            int y,
+            int z,
+            int facing,
+            int texture,
+            float light,
+            int cracks) {
         Face side = tile(texture, 7, 6, 9, 16, 0);
         Face[] faces = {
             tile(texture, 7, 13, 9, 15, 0),
@@ -248,11 +260,78 @@ public final class BlockModels {
             side,
             tile(texture, 7, 16, 9, 6, 0)
         };
-        if (facing == 1) {
-            box(r, x, y, z, 7, 0, 7, 9, 10, 9, 2, light, faces);
-        } else {
-            box(r, x, y, z, 7, 3.5f, 15, 9, 13.5f, 17, facing, light, faces, 0, true);
+        boolean wall = facing != 1;
+        int rotation = wall ? facing : 2;
+        float base = wall ? 3.5f : 0;
+        float centerZ = wall ? 16 : 8;
+        if (cracks >= 0) fillCrackFaces(faces, cracks);
+        box(
+                r,
+                x,
+                y,
+                z,
+                7,
+                base,
+                centerZ - 1,
+                9,
+                base + 10,
+                centerZ + 1,
+                rotation,
+                light,
+                faces,
+                0,
+                wall);
+        if (texture == 140) {
+            Face[] head = {
+                tile(texture, 7, 5, 8, 6, 0),
+                tile(texture, 8, 5, 9, 6, 0),
+                tile(texture, 6, 6, 7, 7, 0),
+                tile(texture, 9, 6, 10, 7, 0),
+                tile(texture, 6, 7, 7, 8, 0),
+                tile(texture, 9, 7, 10, 8, 0)
+            };
+            if (cracks >= 0) {
+                fillCrackFaces(head, cracks);
+                box(
+                        r,
+                        x,
+                        y,
+                        z,
+                        6.5f,
+                        base + 7.5f,
+                        centerZ - 1.5f,
+                        9.5f,
+                        base + 10.5f,
+                        centerZ + 1.5f,
+                        rotation,
+                        light,
+                        head,
+                        0,
+                        wall);
+            } else {
+                // The red shell faces inward so the bright core remains visible.
+                box(
+                        r,
+                        x,
+                        y,
+                        z,
+                        9.5f,
+                        base + 10.5f,
+                        centerZ + 1.5f,
+                        6.5f,
+                        base + 7.5f,
+                        centerZ - 1.5f,
+                        rotation,
+                        light,
+                        head,
+                        0,
+                        wall);
+            }
         }
+    }
+
+    private static void fillCrackFaces(Face[] faces, int texture) {
+        java.util.Arrays.fill(faces, tile(texture, .01f, .01f, 15.99f, 15.99f, 0));
     }
 
     public static void logicGate(

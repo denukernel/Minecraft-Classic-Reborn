@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.player;
 import java.io.Serializable;
 
 import net.classicremastered.minecraft.CreativeInventoryBlocks;
+import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.tile.Block;
 
 public class Inventory implements Serializable {
@@ -17,6 +18,35 @@ public class Inventory implements Serializable {
     public int[] slots = new int[HOTBAR_SIZE];
     private java.util.Map<Integer, net.classicremastered.minecraft.level.itemstack.PackedTurret>
             crates;
+    private java.util.Map<Integer, Integer> armorWear;
+
+    public int armorWear(int slot) {
+        return armorWear == null
+                ? 0
+                : Equipment.armorWear(getId(slot), armorWear.getOrDefault(slot, 0));
+    }
+
+    public void setArmorWear(int slot, int wear) {
+        wear = Equipment.armorWear(getId(slot), wear);
+        if (wear == 0) {
+            if (armorWear != null) armorWear.remove(slot);
+        } else {
+            if (armorWear == null) armorWear = new java.util.HashMap<>();
+            armorWear.put(slot, wear);
+        }
+    }
+
+    public boolean addResource(int id, int wear) {
+        if (Equipment.armorWear(id, wear) == 0) return addResource(id);
+        for (int slot = 0; slot < totalSize(); slot++) {
+            if (getCount(slot) <= 0 || getId(slot) <= 0) {
+                setIdCount(slot, id, 1);
+                setArmorWear(slot, wear);
+                return true;
+            }
+        }
+        return false;
+    }
 
     public net.classicremastered.minecraft.level.itemstack.PackedTurret crate(int slot) {
         return crates == null || getId(slot) != PACKED_TURRET_ID || getCount(slot) != 1
@@ -112,6 +142,7 @@ public class Inventory implements Serializable {
         if (count[selected] <= 0) return false;
 
         setCrate(selected, null);
+        setArmorWear(selected, 0);
         count[selected] -= n;
         if (count[selected] <= 0) {
             count[selected] = 0;
@@ -156,11 +187,14 @@ public class Inventory implements Serializable {
             int s;
             if ((s = this.getSlot(b.id)) >= 0) {
                 var movedCrate = crate(this.selected);
+                int movedWear = armorWear(this.selected);
                 setCrate(s, null);
                 this.slots[s] = this.slots[this.selected];
                 if (movedCrate != null) setCrate(s, movedCrate);
+                setArmorWear(s, movedWear);
             }
             setCrate(this.selected, null);
+            setArmorWear(this.selected, 0);
             this.slots[this.selected] = b.id;
         }
     }
@@ -170,12 +204,15 @@ public class Inventory implements Serializable {
             int s;
             if ((s = this.getSlot(id)) >= 0) {
                 var movedCrate = crate(this.selected);
+                int movedWear = armorWear(this.selected);
                 setCrate(s, null);
                 this.slots[s] = this.slots[this.selected];
                 if (movedCrate != null) setCrate(s, movedCrate);
                 this.count[s] = this.count[this.selected];
+                setArmorWear(s, movedWear);
             }
             setCrate(this.selected, null);
+            setArmorWear(this.selected, 0);
             this.slots[this.selected] = id;
             this.count[this.selected] = 1;
         }
@@ -221,6 +258,7 @@ public class Inventory implements Serializable {
         // --- pass 2: first empty hotbar slot ---
         for (int i = 0; i < HOTBAR_SIZE; i++) {
             if (slots[i] < 0 || count[i] <= 0) {
+                setArmorWear(i, 0);
                 slots[i] = id;
                 count[i] = 1;
                 popTime[i] = POP_TIME_DURATION;
@@ -231,6 +269,7 @@ public class Inventory implements Serializable {
         // --- pass 3: first empty grid slot ---
         for (int g = 0; g < gridSlots.length; g++) {
             if (gridSlots[g] < 0 || gridCount[g] <= 0) {
+                setArmorWear(HOTBAR_SIZE + g, 0);
                 gridSlots[g] = id;
                 gridCount[g] = 1;
                 gridPopTime[g] = POP_TIME_DURATION;
@@ -251,6 +290,7 @@ public class Inventory implements Serializable {
         if (id == PACKED_TURRET_ID) return false;
         int s = this.getSlot(id);
         if (s >= 0) {
+            setArmorWear(s, 0);
             if (this.count[s] <= 0) {
                 this.slots[s] = -1;
                 return false;
@@ -265,6 +305,7 @@ public class Inventory implements Serializable {
         // Also check grid (optional)
         int g = getGridSlot(id);
         if (g >= 0) {
+            setArmorWear(HOTBAR_SIZE + g, 0);
             if (this.gridCount[g] <= 0) {
                 this.gridSlots[g] = -1;
                 return false;
@@ -314,6 +355,7 @@ public class Inventory implements Serializable {
 
     public void setLoadedStack(int globalSlot, int id, int cnt) {
         setCrate(globalSlot, null);
+        setArmorWear(globalSlot, 0);
         cnt = id > 0 ? Math.max(0, Math.min(99, cnt)) : 0;
         if (cnt == 0) id = -1;
         if (globalSlot < 0) return;
@@ -403,6 +445,10 @@ public class Inventory implements Serializable {
         if (crates != null) {
             int retainedSlots = HOTBAR_SIZE + newSize;
             crates.keySet().removeIf(slot -> slot >= retainedSlots);
+        }
+        if (armorWear != null) {
+            int retainedSlots = HOTBAR_SIZE + newSize;
+            armorWear.keySet().removeIf(slot -> slot >= retainedSlots);
         }
         gridSlots = ns;
         gridCount = nc;

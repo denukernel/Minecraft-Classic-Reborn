@@ -1,5 +1,10 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.ProgressBarDisplay;
+import net.classicremastered.minecraft.level.infinite.SimpleChunk;
+import net.classicremastered.nbt.*;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -10,14 +15,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
-
-import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.ProgressBarDisplay;
-import net.classicremastered.minecraft.level.infinite.SimpleChunk;
-import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
-import net.classicremastered.minecraft.player.Inventory;
-import net.classicremastered.minecraft.player.Player;
-import net.classicremastered.nbt.*;
 
 /**
  * Unified level serializer:
@@ -254,8 +251,10 @@ public final class LevelIO {
 
                 int ver = in.readByte() & 0xFF;
                 switch (ver) {
-                    case VERSION_CLASSIC:      return loadClassic(gis);
-                    case VERSION_INFINITE:     return loadInfiniteFlat(in);
+                    case VERSION_CLASSIC:
+                        return loadClassic(in);
+                    case VERSION_INFINITE:
+                        return loadInfiniteFlat(in);
                     case VERSION_TERRAIN:      return loadInfiniteTerrain(in);
                     case VERSION_CLASSIC_NBT:  {
                         CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
@@ -341,15 +340,13 @@ public final class LevelIO {
         float yaw = in.readFloat();
         float pitch = in.readFloat();
 
-        if (inf.player == null) {
-            net.classicremastered.minecraft.player.Player loadedPlayer = new net.classicremastered.minecraft.player.Player(
-                    null);
+        if (inf.player == null && (px != 0 || py != 0 || pz != 0 || yaw != 0 || pitch != 0)) {
+            net.classicremastered.minecraft.player.Player loadedPlayer =
+                    new net.classicremastered.minecraft.player.Player(null);
             loadedPlayer.level = inf;
             inf.player = loadedPlayer;
-            loadedPlayer.moveTo(px, py, pz, yaw, pitch);
+            PlayerNbtCodec.restoreLegacyPosition(loadedPlayer, px, py, pz, yaw, pitch);
             inf.addEntity(loadedPlayer);
-        } else {
-            inf.player.moveTo(px, py, pz, yaw, pitch);
         }
 
         int count = in.readInt();
@@ -362,11 +359,9 @@ public final class LevelIO {
             float xRot = in.readFloat();
             int health = in.readInt();
             var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
-            if (mob == null)
-                continue;
-            mob.yRot = yRot;
-            mob.xRot = xRot;
-            mob.health = health;
+            if (mob == null || mob.getRegistryId() != id) continue;
+            mob.moveTo(x, y, z, yRot, xRot);
+            mob.health = mob.lastHealth = health;
             inf.addEntity(mob);
         }
         inf.updateDayNightColorsSmooth();
@@ -382,9 +377,13 @@ public final class LevelIO {
         try {
             URL base = new URL("http://" + host + "/");
             String name = base.getHost().toLowerCase(java.util.Locale.ROOT);
-            if (name.equals("minecraft.net") || name.endsWith(".minecraft.net")
-                    || name.equals("classicremastered.net") || name.endsWith(".classicremastered.net")) {
-                System.err.println("[LevelIO] The Classic online map service is retired; choose a local level file.");
+            if (name.equals("minecraft.net")
+                    || name.endsWith(".minecraft.net")
+                    || name.equals("classicremastered.net")
+                    || name.endsWith(".classicremastered.net")) {
+                System.err.println(
+                        "[LevelIO] The Classic online map service is retired; choose a local level"
+                            + " file.");
                 return null;
             }
             String encodedUser = java.net.URLEncoder.encode(user, java.nio.charset.StandardCharsets.UTF_8);
@@ -413,7 +412,8 @@ public final class LevelIO {
     public static byte[] decompress(InputStream in0) {
         try (DataInputStream in = new DataInputStream(new GZIPInputStream(in0))) {
             int len = in.readInt();
-            if (len <= 0 || len > 64 * 1024 * 1024) throw new IOException("Invalid map size: " + len);
+            if (len <= 0 || len > 64 * 1024 * 1024)
+                throw new IOException("Invalid map size: " + len);
             byte[] arr = new byte[len];
             in.readFully(arr);
             return arr;

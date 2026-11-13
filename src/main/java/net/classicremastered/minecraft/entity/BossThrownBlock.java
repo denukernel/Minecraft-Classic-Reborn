@@ -3,11 +3,13 @@ import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.model.Vec3D;
-import net.classicremastered.minecraft.render.*;
-import org.lwjgl.opengl.GL11;
 import net.classicremastered.minecraft.mob.StickFigure;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.particle.SmokeParticle;
+import net.classicremastered.minecraft.render.*;
+
+import org.lwjgl.opengl.GL11;
+
 public final class BossThrownBlock extends Entity {
     private static final long serialVersionUID = -8182415197836441336L;
     public static final float GRAVITY = .025f;
@@ -65,12 +67,16 @@ public final class BossThrownBlock extends Entity {
         zo = z;
         ProjectileSweep.Impact impact = ProjectileSweep.move(this, owner);
         if (impact != null) {
+            Mob target = impact.mob();
+            boolean dodged =
+                    target instanceof net.classicremastered.minecraft.mob.Enderman enderman
+                            && enderman.tryEvadeProjectile();
             if (explosive) {
                 detonate();
             } else if (blockId == Block.TNT.id) {
                 PrimedTnt.detonate(this, owner, 4f);
             } else {
-                if (impact.mob() != null) impact.mob().hurt(owner, 5);
+                if (target != null && !dodged) target.hurt(owner, 5);
                 shatter();
             }
             return;

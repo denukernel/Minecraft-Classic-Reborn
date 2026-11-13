@@ -76,7 +76,7 @@ public class Sheep extends QuadrupedMob {
     public void hurt(Entity var1, int var2) {
         if (health <= 0 || dead || removed)
             return;
-        if (this.hasFur && var1 instanceof Player) {
+        if (this.hasFur && var1 instanceof Player && !"modern_melee".equals(damageCause)) {
             // In Creative: remove fur but DO NOT drop wool
             if (this.level != null && this.level.creativeMode) {
                 this.hasFur = false;

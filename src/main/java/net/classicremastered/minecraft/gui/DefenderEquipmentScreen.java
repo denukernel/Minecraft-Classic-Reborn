@@ -30,6 +30,11 @@ public final class DefenderEquipmentScreen extends InventoryScreen {
     @Override
     public void onOpen() {
         super.onOpen();
+        onResize();
+    }
+
+    @Override
+    protected void onResize() {
         buttons.clear();
         buttons.add(new Button(0, left() + 225, top() + 201, 65, 20, "Done"));
     }
@@ -113,8 +118,10 @@ public final class DefenderEquipmentScreen extends InventoryScreen {
             message = "Choose an empty slot or matching gear.";
             return;
         }
+        int incomingWear = inventory.armorWear(target);
         inventory.setIdCount(target, equipped, 1);
-        defender.equipment[gear] = count == 0 ? 0 : destination;
+        inventory.setArmorWear(target, Equipment.wear(defender, gear));
+        Equipment.equip(defender, gear, count == 0 ? 0 : destination, incomingWear);
         message = "Equipment returned.";
     }
 
@@ -142,11 +149,12 @@ public final class DefenderEquipmentScreen extends InventoryScreen {
         super.onClose();
     }
 
-    private void slot(int raw, int count, int x, int y) {
+    private void slot(int raw, int count, int wear, int x, int y) {
         drawBox(x - 1, y - 1, x + 18, y + 18, 0xFF10171D);
         drawBox(x, y, x + 17, y + 17, 0xFF53616C);
         if (raw > 0 && count > 0) {
             drawIdIcon(raw, x, y);
+            drawDurabilityBar(raw, wear, x, y);
             drawStackCount(count, x, y);
         }
     }
@@ -167,13 +175,14 @@ public final class DefenderEquipmentScreen extends InventoryScreen {
         for (int s = 0; s < 5; s++) {
             int x = left() + 12 + s * 39;
             drawString(fontRenderer, LABELS[s], x, top() + 41, 0xCFD8E0);
-            slot(defender.equipment[s], 1, x, top() + 53);
+            slot(defender.equipment[s], 1, Equipment.wear(defender, s), x, top() + 53);
         }
         drawString(fontRenderer, "Your inventory", left() + 12, top() + 85, 0xFFFFFF);
         for (int s = 0; s < Math.min(36, minecraft.player.inventory.totalSize()); s++)
             slot(
                     minecraft.player.inventory.getId(s),
                     minecraft.player.inventory.getCount(s),
+                    minecraft.player.inventory.armorWear(s),
                     left() + 12 + s % 9 * 20,
                     top() + 100 + s / 9 * 22);
         drawString(fontRenderer, message, left() + 8, top() + 188, 0xFFE6A0);
@@ -205,6 +214,25 @@ public final class DefenderEquipmentScreen extends InventoryScreen {
                         pressedSlot < EQUIPMENT_START ? inventory.getCount(pressedSlot) : 1,
                         mx - 8,
                         my - 8);
+            }
+        } else {
+            int hovered = equipmentInventorySlotAt(mx, my);
+            if (hovered >= EQUIPMENT_START) {
+                int slot = hovered - EQUIPMENT_START;
+                int raw = defender.equipment[slot];
+                if (raw > 0)
+                    ItemTooltip.draw(this, raw, null, Equipment.wear(defender, slot), mx, my);
+            } else if (hovered >= 0) {
+                var inventory = minecraft.player.inventory;
+                if (inventory.getId(hovered) > 0) {
+                    ItemTooltip.draw(
+                            this,
+                            inventory.getId(hovered),
+                            inventory.crate(hovered),
+                            inventory.armorWear(hovered),
+                            mx,
+                            my);
+                }
             }
         }
     }

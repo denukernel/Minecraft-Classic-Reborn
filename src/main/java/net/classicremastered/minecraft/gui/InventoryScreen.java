@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.gui;
 
 import net.classicremastered.minecraft.crafting.CraftingManager;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Inventory;
 import net.classicremastered.minecraft.render.ShapeRenderer;
@@ -23,12 +24,14 @@ public class InventoryScreen extends CraftingContainerScreen {
 
     protected final void discardCarriedStack() {
         carriedCrate = null;
+        carriedWear = 0;
         carriedId = -1;
         carriedCnt = 0;
         draggingRMB = false;
     }
 
     private net.classicremastered.minecraft.level.itemstack.PackedTurret carriedCrate;
+    private int carriedWear;
     private int carriedCnt = 0;
 
     // drag-paint (RMB) state
@@ -86,7 +89,7 @@ public class InventoryScreen extends CraftingContainerScreen {
             carriedId = id;
             carriedCnt = button == 1 ? (count + 1) / 2 : count;
             craftingCounts[slot] -= carriedCnt;
-        } else if (carriedCrate != null) {
+        } else if (carriedCrate != null || carriedWear > 0) {
             return;
         } else if (id <= 0 || id == carriedId) {
             int moved = Math.min(button == 1 ? 1 : carriedCnt, maxStackFor(carriedId) - count);
@@ -159,6 +162,7 @@ public class InventoryScreen extends CraftingContainerScreen {
 
         carriedId = -1;
         carriedCnt = 0;
+        carriedWear = 0;
         draggingRMB = false;
         for (int i = 0; i < painted.length; i++) painted[i] = false;
 
@@ -170,6 +174,12 @@ public class InventoryScreen extends CraftingContainerScreen {
     }
 
     // ---------- helpers ----------
+
+    @Override
+    protected void onResize() {
+        // Slot positions use the live screen dimensions.
+    }
+
     private static int maxStackFor(int id) {
         return Item.stackLimit(id);
     }
@@ -180,7 +190,11 @@ public class InventoryScreen extends CraftingContainerScreen {
 
     private void putCarried(Inventory inventory, int slot, int count) {
         if (carriedCrate != null) inventory.setCrate(slot, carriedCrate);
-        else inventory.setIdCount(slot, carriedId, count);
+        else {
+            inventory.setIdCount(slot, carriedId, count);
+            inventory.setArmorWear(slot, carriedWear);
+            carriedWear = 0;
+        }
     }
 
     protected final void pickUpAll(Inventory inv, int slot) {
@@ -188,6 +202,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         int id = inv.getId(slot);
         int cnt = inv.getCount(slot);
         if (id <= 0 || cnt <= 0) return;
+        carriedWear = inv.armorWear(slot);
         carriedId = id;
         carriedCnt = cnt;
         inv.setIdCount(slot, -1, 0);
@@ -198,6 +213,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         int id = inv.getId(slot);
         int cnt = inv.getCount(slot);
         if (id <= 0 || cnt <= 0) return;
+        carriedWear = inv.armorWear(slot);
         int half = (cnt + 1) / 2;
         carriedId = id;
         carriedCnt = half;
@@ -227,7 +243,8 @@ public class InventoryScreen extends CraftingContainerScreen {
             return;
         }
         var previousCrate = inv.crate(slot);
-        if (dstId == carriedId && carriedCrate == null && previousCrate == null) {
+        int previousWear = inv.armorWear(slot);
+        if (dstId == carriedId && cap > 1 && carriedCrate == null && previousCrate == null) {
             int put = Math.min(Math.max(0, cap - dstCnt), carriedCnt);
             if (put <= 0) return;
             inv.setIdCount(slot, dstId, dstCnt + put);
@@ -238,6 +255,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         if (carriedCnt > cap) return;
         putCarried(inv, slot, carriedCnt);
         carriedCrate = previousCrate;
+        carriedWear = previousWear;
         carriedId = dstId;
         carriedCnt = dstCnt;
     }
@@ -352,8 +370,12 @@ public class InventoryScreen extends CraftingContainerScreen {
         for (int slot = 0; slot < ARMOR_SLOTS.length; slot++) {
             int sx = armorX(slot), sy = armorY(slot);
             int id = minecraft.player.equipment[slot];
-            if (id > 0) drawIdIcon(id, sx, sy);
-            else drawSprite("/gui/armor_slot_" + ARMOR_SLOTS[slot] + ".png", sx, sy, 16, 16);
+            if (id > 0) {
+                drawIdIcon(id, sx, sy);
+                drawDurabilityBar(id, Equipment.wear(minecraft.player, slot), sx, sy);
+            } else {
+                drawSprite("/gui/armor_slot_" + ARMOR_SLOTS[slot] + ".png", sx, sy, 16, 16);
+            }
         }
         int hover = renderPlayerInventory(mouseX, mouseY);
         Inventory inv = minecraft.player.inventory;
@@ -371,7 +393,14 @@ public class InventoryScreen extends CraftingContainerScreen {
         }
         if (carriedId <= 0 && !hasCatalogCursor() && tooltipRaw > 0) {
             ItemTooltip.draw(
-                    this, tooltipRaw, hover >= 0 ? inv.crate(hover) : null, mouseX, mouseY);
+                    this,
+                    tooltipRaw,
+                    gearSlot < 0 && hover >= 0 ? inv.crate(hover) : null,
+                    gearSlot >= 0
+                            ? Equipment.wear(minecraft.player, gearSlot)
+                            : hover >= 0 ? inv.armorWear(hover) : 0,
+                    mouseX,
+                    mouseY);
         }
         renderInventoryExtras(mouseX, mouseY);
         renderCarriedStack(mouseX, mouseY);
@@ -426,6 +455,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         if (hasCarriedStack()) {
             int cx = mouseX - 8, cy = mouseY - 8;
             drawIdIcon(carriedId, cx, cy);
+            drawDurabilityBar(carriedId, carriedWear, cx, cy);
             drawStackCount(carriedCnt, cx, cy);
         }
     }
@@ -478,6 +508,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         int[] xy = new int[2];
         slotXY(slot, xy);
         drawIdIcon(id, xy[0], xy[1]);
+        drawDurabilityBar(id, inv.armorWear(slot), xy[0], xy[1]);
     }
 
     private void drawCount(Inventory inv, int slot) {
@@ -573,7 +604,8 @@ public class InventoryScreen extends CraftingContainerScreen {
                                         minecraft.player.z,
                                         carriedId - 256,
                                         carriedCnt)
-                                .withCrate(carriedCrate));
+                                .withCrate(carriedCrate)
+                                .withArmorWear(carriedWear));
             else
                 for (int i = 0; i < carriedCnt; i++)
                     this.minecraft.level.addEntity(
@@ -586,6 +618,7 @@ public class InventoryScreen extends CraftingContainerScreen {
             carriedCnt = 0;
         }
         carriedCrate = null;
+        carriedWear = 0;
         // Done: clear cursor + drag state
         carriedId = -1;
         draggingRMB = false;
@@ -650,8 +683,9 @@ public class InventoryScreen extends CraftingContainerScreen {
     protected final void dropCarriedStack(int button) {
         if (!hasCarriedStack() || button < 0 || button > 1) return;
         int count = button == 0 ? carriedCnt : 1;
-        if (minecraft.player.dropStack(carriedId, count, carriedCrate)) {
+        if (minecraft.player.dropStack(carriedId, count, carriedCrate, carriedWear)) {
             carriedCnt -= count;
+            carriedWear = 0;
             if (carriedCnt == 0) discardCarriedStack();
         }
     }
@@ -706,10 +740,13 @@ public class InventoryScreen extends CraftingContainerScreen {
 
         int gearSlot = armorSlotAt(mx, my);
         if (gearSlot >= 0) {
-            var gear = net.classicremastered.minecraft.level.itemstack.Equipment.gear(carriedId);
-            if (carriedId <= 0 || gear != null && gear.slot == gearSlot) {
+            var gear = Equipment.gear(carriedId);
+            if (carriedId <= 0 || gear != null && gear.slot == gearSlot && carriedCnt == 1) {
                 int old = minecraft.player.equipment[gearSlot];
-                minecraft.player.equipment[gearSlot] = carriedId > 0 ? carriedId : 0;
+                int oldWear = Equipment.wear(minecraft.player, gearSlot);
+                Equipment.equip(
+                        minecraft.player, gearSlot, carriedId > 0 ? carriedId : 0, carriedWear);
+                carriedWear = oldWear;
                 carriedId = old > 0 ? old : -1;
                 carriedCnt = old > 0 ? 1 : 0;
             }

@@ -78,6 +78,7 @@ final class WorldStateNbtCodec {
                     tag.putInt("Id", item.itemId);
                     count = item.count;
                     life = item.life;
+                    if (item.armorWear > 0) tag.putInt("ArmorWear", item.armorWear);
                     if (item.crate != null) tag.put(item.crate.save());
                 } else {
                     continue;
@@ -106,6 +107,7 @@ final class WorldStateNbtCodec {
     }
 
     static void load(Level level, CompoundTag root, RidingLinks ridingLinks) throws IOException {
+        net.classicremastered.minecraft.level.itemstack.ItemRegistry.bootstrap();
         if (root.hasKey("GameMode")) {
             int mode = root.getInt("GameMode");
             level.spectatorMode = mode == 3;
@@ -138,6 +140,7 @@ final class WorldStateNbtCodec {
                     break;
                 case "Item":
                     DroppedItem item = new DroppedItem(level, x, y, z, id, count);
+                    item.withArmorWear(tag.getInt("ArmorWear"));
                     item.life = life;
                     if (id == net.classicremastered.minecraft.level.itemstack.TurretItems.PACKED) {
                         item.crate =

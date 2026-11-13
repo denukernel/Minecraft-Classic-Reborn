@@ -64,8 +64,8 @@ public class LocateStructureCommand implements Command {
                                     java.util.Comparator.comparingDouble(
                                             site -> site.distanceSquared(sender.x, sender.z)))
                             .orElse(null);
-            hud(mc, nearest == null ? "&eNo Cobblestone Tower has generated yet"
-                    : "&aCobblestone Tower at &f" + nearest.x() + " " + nearest.y() + " " + nearest.z());
+            if (nearest == null) hud(mc, "&eNo Cobblestone Tower has generated yet");
+            else found(mc, "Cobblestone Tower", nearest.x(), nearest.y(), nearest.z());
             return;
         }
 
@@ -92,16 +92,8 @@ public class LocateStructureCommand implements Command {
                         nearest = site;
                     }
                 }
-            hud(
-                    mc,
-                    nearest == null
-                            ? "&eNo desert pyramid found nearby"
-                            : "&aDesert pyramid at &f"
-                                    + nearest.x()
-                                    + " "
-                                    + (nearest.y() + 1)
-                                    + " "
-                                    + nearest.z());
+            if (nearest == null) hud(mc, "&eNo desert pyramid found nearby");
+            else found(mc, "Desert pyramid", nearest.x(), nearest.y() + 1, nearest.z());
             return;
         }
 
@@ -136,20 +128,41 @@ public class LocateStructureCommand implements Command {
         if (bestX == -1) {
             hud(mc, "&eNo suitable placement found for &f" + id);
         } else {
-            hud(
+            found(
                     mc,
-                    "&aNearest "
+                    "Nearest "
                             + id
-                            + " at &f"
-                            + bestX
-                            + " "
-                            + bestY
-                            + " "
-                            + bestZ
-                            + " &7("
-                            + String.format("%.1f", Math.sqrt(bestD2))
-                            + " blocks)");
+                            + " ("
+                            + String.format(Locale.ROOT, "%.1f", Math.sqrt(bestD2))
+                            + " blocks)",
+                    bestX,
+                    bestY,
+                    bestZ);
         }
+    }
+
+    private static void found(Minecraft mc, String name, int x, int y, int z) {
+        if (mc.hud == null) return;
+        Level world = mc.level;
+        mc.hud.addChat(
+                "&a" + name + " at",
+                new net.classicremastered.minecraft.ChatLine.Action(
+                        "[" + x + " " + y + " " + z + "]",
+                        () -> {
+                            if (mc.level != world) {
+                                hud(mc, "&cThis location belongs to a different world.");
+                                return;
+                            }
+                            new TeleportCommand()
+                                    .execute(
+                                            mc,
+                                            mc.player,
+                                            new String[] {
+                                                Integer.toString(x),
+                                                Integer.toString(y),
+                                                Integer.toString(z)
+                                            });
+                        }));
     }
 
     private static void hud(Minecraft mc, String msg) {

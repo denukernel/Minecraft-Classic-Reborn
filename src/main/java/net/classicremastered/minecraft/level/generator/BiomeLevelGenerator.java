@@ -1,13 +1,13 @@
 package net.classicremastered.minecraft.level.generator;
 
+import net.classicremastered.minecraft.level.GeneratedOccupant;
+import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.infinite.SimpleChunk;
+import net.classicremastered.minecraft.level.structure.DesertPyramid;
+import net.classicremastered.minecraft.level.tile.Block;
+
 import java.util.ArrayList;
 import java.util.List;
-import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.GeneratedOccupant;
-import net.classicremastered.minecraft.level.infinite.SimpleChunk;
-import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.level.structure.DesertPyramid;
-
 import java.util.Random;
 
 /** Seeded terrain with coherent climate regions and biome vegetation. */
@@ -19,7 +19,9 @@ public final class BiomeLevelGenerator {
         HILLS,
         WETLAND,
         SNOWY_PLAINS,
-        SNOWY_FOREST;
+        SNOWY_FOREST,
+        BEACH,
+        SNOWY_BEACH;
 
         boolean snowy() {
             return this == SNOWY_PLAINS || this == SNOWY_FOREST;
@@ -71,6 +73,20 @@ public final class BiomeLevelGenerator {
         return Biome.PLAINS;
     }
 
+    public Biome surfaceBiomeAt(int x, int z, int depth, boolean flat) {
+        Biome biome = biomeAt(x, z);
+        int top = flat ? 34 : groundHeight(x, z, depth);
+        int sea = Math.max(1, depth / 2 - 2);
+        if (biome != Biome.DESERT && top >= sea && hasSandSurface(biome, top, sea)) {
+            return biome.snowy() ? Biome.SNOWY_BEACH : Biome.BEACH;
+        }
+        return biome;
+    }
+
+    private static boolean hasSandSurface(Biome biome, int top, int sea) {
+        return biome == Biome.DESERT || top <= sea + 1;
+    }
+
     private int surfaceHeight(int x, int z) {
         double hills = Math.max(0, noise(x / 52.0, z / 52.0, 93) - 0.15) * 18;
         double lowlands =
@@ -119,7 +135,7 @@ public final class BiomeLevelGenerator {
                     else if (y > top && y <= sea) id = Block.STATIONARY_WATER.id;
                     else if (y <= top) {
                         if (y < top - 3) id = oreBlock(y, random);
-                        else if (biome == Biome.DESERT || top <= sea + 1) id = Block.SAND.id;
+                        else if (hasSandSurface(biome, top, sea)) id = Block.SAND.id;
                         else id = y == top ? grassId(biome) : Block.DIRT.id;
                     }
                     chunk.blocks[SimpleChunk.idx(x, y, z, chunk.height)] = (byte) id;
@@ -357,7 +373,7 @@ public final class BiomeLevelGenerator {
                     else if (y > top) id = Block.STATIONARY_WATER.id;
                     else if (y >= top - 3)
                         id =
-                                biome == Biome.DESERT || top <= sea + 1
+                                hasSandSurface(biome, top, sea)
                                         ? Block.SAND.id
                                         : y == top ? grassId(biome) : Block.DIRT.id;
                     else {

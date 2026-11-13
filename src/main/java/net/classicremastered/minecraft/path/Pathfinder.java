@@ -19,6 +19,7 @@ public final class Pathfinder {
 
     public static float dropLimit(Mob mob) {
         if (mob instanceof net.classicremastered.minecraft.mob.Chicken) return 8;
+        if (mob instanceof net.classicremastered.minecraft.mob.ZombieBuilder) return 3;
         return 3
                 + (mob.ai instanceof net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI
                         ? Math.min(3, Math.max(0, (mob.health - 1) / 4))
@@ -109,6 +110,27 @@ public final class Pathfinder {
     public static List<Node> findPath(
             Level level, Mob mob, int tx, float ty, int tz, int maxNodes) {
         return findPath(new GroundClearance(level, mob), mob, tx, ty, tz, maxNodes);
+    }
+
+    public static List<Node> findChasePath(
+            Level level, Mob mob, float x, float feetY, float z, int maxNodes) {
+        GroundClearance ground = new GroundClearance(level, mob);
+        Node goal = ground.chaseGoal(x, feetY, z);
+        return goal == null ? null : findPath(ground, mob, goal.x, goal.feetY, goal.z, maxNodes);
+    }
+
+    public static List<Node> findPathWithRemovableFire(
+            Level level,
+            Mob mob,
+            float x,
+            float feetY,
+            float z,
+            int maxNodes,
+            java.util.function.Predicate<net.classicremastered.minecraft.level.RedstoneEngine.Pos>
+                    removableFire) {
+        GroundClearance ground = new GroundClearance(level, mob, removableFire);
+        Node goal = ground.chaseGoal(x, feetY, z);
+        return goal == null ? null : findPath(ground, mob, goal.x, goal.feetY, goal.z, maxNodes);
     }
 
     static List<Node> findPath(

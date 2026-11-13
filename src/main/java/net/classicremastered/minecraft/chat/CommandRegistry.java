@@ -35,6 +35,7 @@ public final class CommandRegistry {
         CommandManager.register(
                 new net.classicremastered.minecraft.chat.commands.DifficultyCommand());
         CommandManager.register(new TeleportCommand());
+        CommandManager.register(new net.classicremastered.minecraft.chat.commands.SpawnpointCommand());
         CommandManager.register(new net.classicremastered.minecraft.chat.commands.MobVoteCommand());
         CommandManager.register(new net.classicremastered.minecraft.chat.commands.CoinsCommand());
         CommandManager.register(

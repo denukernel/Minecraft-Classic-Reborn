@@ -47,8 +47,8 @@ public void setProgress(int pct) {
     if (now - this.start >= 0L && now - this.start < 20L) return;
     this.start = now;
 
-    final int w = Math.max(1, this.minecraft.width  * 240 / Math.max(1, this.minecraft.height));
-    final int h = Math.max(1, this.minecraft.height * 240 / Math.max(1, this.minecraft.height));
+        final int w = minecraft.guiWidth();
+        final int h = minecraft.guiHeight();
 
  // ---------- Clear & prep 2D ----------
     GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
@@ -139,8 +139,8 @@ public void setProgress(int pct) {
         // guard again, since some callers might call during teardown
         if (!glReady()) return;
 
-        final int w = Math.max(1, this.minecraft.width  * 240 / Math.max(1, this.minecraft.height));
-        final int h = Math.max(1, this.minecraft.height * 240 / Math.max(1, this.minecraft.height));
+        final int w = minecraft.guiWidth();
+        final int h = minecraft.guiHeight();
 
         GL11.glMatrixMode(GL11.GL_PROJECTION);
         GL11.glLoadIdentity();

@@ -7,25 +7,49 @@ import net.classicremastered.minecraft.level.itemstack.PackedTurret;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
 import net.classicremastered.minecraft.mob.TurretVariant;
+import org.lwjgl.opengl.GL11;
 
 final class ItemTooltip {
     private ItemTooltip() {}
 
     static void draw(GuiScreen screen, int raw, PackedTurret crate, int x, int y) {
+        draw(screen, raw, crate, 0, x, y);
+    }
+
+    static void draw(GuiScreen screen, int raw, PackedTurret crate, int wear, int x, int y) {
         String name = BlockSelectScreen.displayName(raw);
         String detail = description(raw, crate);
+        String durability = durabilityText(raw, wear);
         var font = screen.fontRenderer;
-        int width = Math.max(font.getWidth(name), font.getWidth(detail));
+        int width =
+                Math.max(
+                        font.getWidth(durability),
+                        Math.max(font.getWidth(name), font.getWidth(detail)));
+        int height = 11 + (detail.isEmpty() ? 0 : 12) + (durability.isEmpty() ? 0 : 12);
         int left = Math.max(3, Math.min(screen.width - width - 5, x + 9));
-        int top = Math.max(3, Math.min(screen.height - (detail.isEmpty() ? 15 : 27), y + 10));
-        Screen.drawBox(
-                left - 3,
-                top - 3,
-                left + width + 3,
-                top + (detail.isEmpty() ? 11 : 23),
-                0xF0100010);
-        Screen.drawString(font, name, left, top, 0xFFFF80);
-        if (!detail.isEmpty()) Screen.drawString(font, detail, left, top + 12, 0xFFFFFF);
+        int top = Math.max(3, Math.min(screen.height - height - 4, y + 10));
+        GL11.glPushAttrib(
+                GL11.GL_ENABLE_BIT
+                        | GL11.GL_COLOR_BUFFER_BIT
+                        | GL11.GL_CURRENT_BIT
+                        | GL11.GL_TEXTURE_BIT);
+        try {
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            Screen.drawBox(left - 3, top - 3, left + width + 3, top + height, 0xF0100010);
+            Screen.drawString(font, name, left, top, 0xFFFF80);
+            if (!detail.isEmpty()) Screen.drawString(font, detail, left, top + 12, 0xFFFFFF);
+            if (!durability.isEmpty())
+                Screen.drawString(font, durability, left, top + height - 11, 0xFFFFFF);
+        } finally {
+            GL11.glPopAttrib();
+        }
+    }
+
+    static String durabilityText(int raw, int wear) {
+        var gear = Equipment.gear(raw);
+        if (gear == null || gear.maxDurability <= 0) return "";
+        int remaining = gear.maxDurability - Equipment.armorWear(raw, wear);
+        return "Durability " + remaining + "/" + gear.maxDurability;
     }
 
     static String description(int raw, PackedTurret crate) {
