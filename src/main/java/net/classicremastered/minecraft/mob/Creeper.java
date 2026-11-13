@@ -2,6 +2,8 @@ package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.entity.ProjectileSweep;
+import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.mob.ai.*;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 import net.classicremastered.minecraft.mob.ai.creeper.CreeperAI;
@@ -42,6 +44,12 @@ public class Creeper extends Mob {
 
     @Override
     public void tick() {
+        if (health > 0 && !removed && GravityGunItem.armedMobs.containsKey(this)) {
+            resetInterpolation();
+            if (ProjectileSweep.move(this, GravityGunItem.thrownBy.get(this)) != null) detonate();
+            else yd -= .04f;
+            return;
+        }
         // Migrate saved creepers away from the legacy melee AI.
         if (!(ai instanceof CreeperAI)) ai = new CreeperAI();
         super.tick();
@@ -76,11 +84,15 @@ public class Creeper extends Mob {
             fuseTicks++;
             xd = zd = 0;
             if (fuseTicks >= FUSE_LENGTH) {
-                remove();
-                level.playExplosionEffects(x, bb.y0, z, 3f);
-                level.explode(this, x, bb.y0, z, 3f);
+                detonate();
             }
         } else fuseTicks = Math.max(0, fuseTicks - 1);
+    }
+
+    private void detonate() {
+        remove();
+        level.playExplosionEffects(x, bb.y0, z, 3f);
+        level.explode(this, x, bb.y0, z, 3f);
     }
 
     public boolean igniteFuse() {

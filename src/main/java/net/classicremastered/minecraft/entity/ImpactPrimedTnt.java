@@ -42,6 +42,7 @@ public class ImpactPrimedTnt extends Entity {
     private int ownerIgnoreTicks = 6; // ignore owner for first ~0.3s
     private boolean explodeOnGround = true;
     private boolean explodeOnPlayer = true;
+    private boolean gravityGunLaunch;
 
     // ------------------------------------------------------------
     // Constructors
@@ -186,6 +187,12 @@ public class ImpactPrimedTnt extends Entity {
         this.yo = this.y;
         this.zo = this.z;
 
+        if (gravityGunLaunch) {
+            if (ProjectileSweep.move(this, ownerRef) != null) explode();
+            else tickFuse();
+            return;
+        }
+
         if (ownerIgnoreTicks > 0) ownerIgnoreTicks--;
 
         // gravity (0 in “sniper” mode)
@@ -242,6 +249,15 @@ public class ImpactPrimedTnt extends Entity {
         }
     }
 
+    public void armOnImpact(Entity thrower) {
+        ownerRef = thrower;
+        gravityGunLaunch = true;
+    }
+
+    public void clearGravityGunLaunch() {
+        gravityGunLaunch = false;
+    }
+
     // ------------------------------------------------------------
     // Explosion
     // ------------------------------------------------------------
@@ -289,9 +305,10 @@ public class ImpactPrimedTnt extends Entity {
         GL11.glPushMatrix();
         GL11.glColor4f(brightness, brightness, brightness, 1.0F);
         GL11.glTranslatef(
-                xo + (x - xo) * partial - 0.5F,
-                yo + (y - yo) * partial - 0.5F,
-                zo + (z - zo) * partial - 0.5F);
+                xo + (x - xo) * partial - bbWidth * .5f,
+                yo + (y - yo) * partial - bbHeight * .5f,
+                zo + (z - zo) * partial - bbWidth * .5f);
+        GL11.glScalef(bbWidth, bbHeight, bbWidth);
 
         ShapeRenderer sr = ShapeRenderer.instance;
         Block.TNT.renderPreview(sr);

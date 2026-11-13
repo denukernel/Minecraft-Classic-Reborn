@@ -75,6 +75,8 @@ public final class GunEntityDrag {
         entity.xd = entity.yd = entity.zd = 0;
         if (entity instanceof Arrow arrow)
             arrow.releaseFromBlock();
+        if (entity instanceof PrimedTnt tnt) tnt.setImpactFuse(false);
+        if (entity instanceof ImpactPrimedTnt tnt) tnt.clearGravityGunLaunch();
     }
 
     public static void release(Player player, int tool, float force) {
@@ -83,13 +85,20 @@ public final class GunEntityDrag {
             return;
         held.remove(player);
         distances.remove(player);
-        Vec3D direction = GravityGunItem.look(player);
+        Vec3D direction =
+                tool == GravityGunItem.RAW_ID && force > 0
+                        ? GravityGunItem.launchDirection(player, entity)
+                        : GravityGunItem.look(player);
         entity.xd = direction.x * force;
         entity.yd = direction.y * force;
         entity.zd = direction.z * force;
         entity.fallDistance = 0;
         if (entity instanceof Arrow arrow)
             arrow.releaseFromBlock();
+        if (tool == GravityGunItem.RAW_ID && force > 0) {
+            if (entity instanceof PrimedTnt tnt) tnt.armOnImpact(player);
+            if (entity instanceof ImpactPrimedTnt tnt) tnt.armOnImpact(player);
+        }
     }
 
     public static void controls(Player player, int tool, boolean farther, boolean closer) {

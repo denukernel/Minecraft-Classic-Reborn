@@ -1,16 +1,19 @@
 package net.classicremastered.minecraft.mob.ai.goal.combat;
 
-import java.util.List;
+import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.Arrow;
-import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.mob.Skeleton;
+import net.classicremastered.minecraft.entity.ImpactPrimedTnt;
+import net.classicremastered.minecraft.entity.PrimedTnt;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.util.MathHelper;
 
 public final class HostileThreats {
 
-    int dodgeTicks, avoidTicks;
+    int dodgeTicks;
     float dodgeStrafe;
+    Entity primedTnt;
+
     public void scan(BasicAttackAI ai) {
         ai.evading = false;
         // Ground navigation validates support ahead without random yaw nudges.
@@ -54,29 +57,22 @@ public final class HostileThreats {
             }
         }
 
-        // TNT avoidance (static): if TNT block within 3 blocks, back away a bit
-        if (ai.isTntAvoidanceEnabled() && ai.level != null && ai.mob != null) {
-            int bx = fi(ai.mob.x), by = fi(ai.mob.y), bz = fi(ai.mob.z);
-            final int R = 3;
-            boolean nearTnt = false;
-            for (int dy = -R; dy <= R && !nearTnt; dy++)
-                for (int dz = -R; dz <= R && !nearTnt; dz++)
-                    for (int dx = -R; dx <= R && !nearTnt; dx++) {
-                        int id = ai.level.getTile(bx + dx, by + dy, bz + dz);
-                        if (id == Block.TNT.id)
-                            nearTnt = true;
-                    }
-            if (nearTnt) {
-                avoidTicks = 12;
-                // gentle backpedal
-                ai.yya = -0.6f;
+        primedTnt = null;
+        if (!ai.isTntAvoidanceEnabled() || ai.level == null || ai.mob == null) return;
+        float nearest = 36f;
+        for (Entity candidate : ai.level.blockMap.getEntities(ai.mob, ai.mob.bb.grow(6, 6, 6))) {
+            if (candidate.removed
+                    || !(candidate instanceof PrimedTnt || candidate instanceof ImpactPrimedTnt))
+                continue;
+            float distance = ai.mob.distanceToSqr(candidate);
+            if (distance >= nearest) continue;
+            Vec3D start = new Vec3D(ai.mob.x, (ai.mob.bb.y0 + ai.mob.bb.y1) * .5f, ai.mob.z);
+            if (ai.level.clip(start, new Vec3D(candidate.x, candidate.y, candidate.z), true)
+                    == null) {
+                nearest = distance;
+                primedTnt = candidate;
             }
         }
-
-    }
-
-    private static int fi(float f) {
-        return (int) Math.floor(f);
     }
 
     private static float wrap(float a) {

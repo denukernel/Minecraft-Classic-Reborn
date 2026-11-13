@@ -61,6 +61,7 @@ final class WorldStateNbtCodec {
                     tag.putInt("Id", Block.TNT.id);
                     tag.putInt("Fuse", tnt.life);
                     tag.putBoolean("PlayerIgniter", tnt.hasPlayerIgniter());
+                    tag.putBoolean("ImpactFuse", tnt.hasImpactFuse());
                     saveMotion(entity, tag);
                     moving.add(tag);
                     continue;
@@ -189,6 +190,7 @@ final class WorldStateNbtCodec {
                 if (fuse <= 0) throw new IOException("Invalid TNT fuse");
                 PrimedTnt tnt = new PrimedTnt(level, x, y, z, null, fuse);
                 tnt.restorePlayerIgniter(tag.getBoolean("PlayerIgniter"));
+                tnt.setImpactFuse(tag.getBoolean("ImpactFuse"));
                 restoreMotion(level, tnt, tag);
             } else {
                 throw new IOException("Invalid moving block type");

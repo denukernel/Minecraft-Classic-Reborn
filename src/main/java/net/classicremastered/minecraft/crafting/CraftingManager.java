@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.level.itemstack.BoatItem;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.OreMaterials;
+import net.classicremastered.minecraft.level.itemstack.StructureLocatorItem.Filter;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -80,6 +81,33 @@ public class CraftingManager {
         int baseTurret = net.classicremastered.minecraft.level.itemstack.TurretItems.TURRET + 256;
         int iron = net.classicremastered.minecraft.level.itemstack.OreMaterials.RAW_IRON + 256;
         int redstone = Item.REDSTONE_DUST_ID + 256;
+        int locator = Filter.ALL.id + 256;
+        addRecipe(
+                new ItemStack(locator, 1),
+                "igi",
+                "iri",
+                " i ",
+                'i',
+                iron,
+                'g',
+                Block.GLASS.id,
+                'r',
+                redstone);
+        addRecipe(
+                new ItemStack(Filter.PYRAMID.id + 256, 1),
+                "ls",
+                'l',
+                locator,
+                's',
+                Block.SANDSTONE.id);
+        addRecipe(new ItemStack(Filter.HOUSE.id + 256, 1), "lw", 'l', locator, 'w', Block.WOOD.id);
+        addRecipe(
+                new ItemStack(Filter.TOWER.id + 256, 1),
+                "lc",
+                'l',
+                locator,
+                'c',
+                Block.COBBLESTONE.id);
         addRecipe(new ItemStack(316, 1), "itw", 'i', iron, 't', baseTurret, 'w', Block.WOOD.id);
         addRecipe(
                 new ItemStack(317, 1),

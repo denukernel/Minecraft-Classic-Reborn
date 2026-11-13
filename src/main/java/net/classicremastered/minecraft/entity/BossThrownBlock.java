@@ -3,7 +3,6 @@ import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.render.*;
 import org.lwjgl.opengl.GL11;
@@ -51,8 +50,7 @@ public final class BossThrownBlock extends Entity {
 
     @Override
     public void tick() {
-        if (removed)
-            return;
+        if (removed) return;
         boolean explosive = owner instanceof StickFigure;
         if (explosive) {
             // Center collision on the rendered cube, including projectiles loaded from older saves.
@@ -65,42 +63,21 @@ public final class BossThrownBlock extends Entity {
         xo = x;
         yo = y;
         zo = z;
-        Vec3D start = new Vec3D(x, y, z), end = start.add(xd, yd, zd);
-        AABB sweep = bb.expand(xd, yd, zd);
-        float radius = bbWidth * .5f;
-        float nearest = Float.POSITIVE_INFINITY;
-        Mob victim = null;
-        for (Object candidate : level.getCubes(sweep)) {
-            nearest = Math.min(nearest, impactDistance((AABB) candidate, start, end, radius));
-        }
-        for (Object candidate : level.findEntities(this, sweep.grow(.001f, .001f, .001f))) {
-            if (!(candidate instanceof Mob mob) || mob == owner || mob.removed || mob.health <= 0)
-                continue;
-            float distance = impactDistance(mob.bb, start, end, radius);
-            if (distance < nearest) {
-                nearest = distance;
-                victim = mob;
-            }
-        }
-        if (nearest < Float.POSITIVE_INFINITY) {
-            float fraction = nearest == 0 ? 0 : nearest / start.distance(end);
-            setPos(x + xd * fraction, y + yd * fraction, z + zd * fraction);
-            if (explosive)
+        ProjectileSweep.Impact impact = ProjectileSweep.move(this, owner);
+        if (impact != null) {
+            if (explosive) {
                 detonate();
-            else {
-                if (victim != null)
-                    victim.hurt(owner, 5);
+            } else if (blockId == Block.TNT.id) {
+                PrimedTnt.detonate(this, owner, 4f);
+            } else {
+                if (impact.mob() != null) impact.mob().hurt(owner, 5);
                 shatter();
             }
             return;
         }
-        move(xd, yd, zd);
-        yRot += 22;
         if (++age >= (explosive ? 100 : 60)) {
-            if (explosive)
-                removed = true;
-            else
-                shatter();
+            if (explosive) removed = true;
+            else shatter();
         }
     }
 
@@ -116,13 +93,6 @@ public final class BossThrownBlock extends Entity {
             }
         }
         level.explode(owner, x, y, z, cubeSize() == 2 ? 3f : 2f, false);
-    }
-
-    private float impactDistance(AABB target, Vec3D start, Vec3D end, float radius) {
-        if (bb.intersects(target))
-            return 0;
-        var hit = target.grow(radius, radius, radius).clip(start, end);
-        return hit == null ? Float.POSITIVE_INFINITY : start.distance(hit.vec);
     }
 
     private void shatter() {
@@ -142,9 +112,10 @@ public final class BossThrownBlock extends Entity {
     public void render(TextureManager tm, float partial) {
         GL11.glPushMatrix();
         try {
-            GL11.glTranslatef(xo + (x - xo) * partial, yo + (y - yo) * partial, zo + (z - zo) * partial);
-            GL11.glRotatef(yRot, 1, 1, 0);
-            BlockItemRenderer.renderCube(Block.blocks[blockId], tm, getRenderBrightness(partial), cubeSize(), bbWidth);
+            GL11.glTranslatef(
+                    xo + (x - xo) * partial, yo + (y - yo) * partial, zo + (z - zo) * partial);
+            BlockItemRenderer.renderCube(
+                    Block.blocks[blockId], tm, getRenderBrightness(partial), cubeSize(), bbWidth);
         } finally {
             GL11.glPopMatrix();
         }

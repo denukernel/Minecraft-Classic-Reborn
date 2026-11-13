@@ -123,8 +123,8 @@ public class DroppedItem extends Entity {
     }
 
     @Override
-    public boolean isPickable() { return false; }
-    @Override
-    public boolean isPushable() { return true; }
+    public boolean isPickable() {
+        return false;
+    }
 }
 

@@ -247,6 +247,7 @@ public final class SimpleChunkManager {
             terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT, level);
         }
         if (mode != Mode.FLAT && (level == null || !level.flatBiomes)) {
+            net.classicremastered.minecraft.level.structure.Mineshaft.decorate(c, seed);
             net.classicremastered.minecraft.level.structure.CobblestoneTower.decorate(c, seed);
             if (level != null && c.cobblestoneTower != null) {
                 level.cobblestoneTowers.add(c.cobblestoneTower);

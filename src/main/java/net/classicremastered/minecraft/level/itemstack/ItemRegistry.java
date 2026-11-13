@@ -43,6 +43,8 @@ public final class ItemRegistry {
         Item.ENDER_PEARL = new EnderPearlItem(20);
         Item.SNOWBALL = new SnowballItem(72);
         Item.OAK_SIGN = new SignItem(73);
+        for (StructureLocatorItem.Filter filter : StructureLocatorItem.Filter.values())
+            new StructureLocatorItem(filter);
         Item.RAW_PORKCHOP = new RawMeatItem(225, "Raw Porkchop", "/items/porkchop.png", 2);
         Item.RAW_BEEF = new RawMeatItem(226, "Raw Beef", "/items/beef.png", 3);
         new BoatItem();

@@ -409,6 +409,8 @@ public final class LevelGenerator {
             }
         }
 
+        net.classicremastered.minecraft.level.structure.Mineshaft.decorateFinite(
+                this.blocks, var2, var3, 64, this.random.nextLong());
         Level var65;
         (var65 = new Level()).waterLevel = this.waterLevel;
         var65.setData(var2, 64, var3, this.blocks);

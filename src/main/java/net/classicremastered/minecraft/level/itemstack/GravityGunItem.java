@@ -4,6 +4,9 @@ import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.entity.HeldBlockEntity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.Creeper;
+import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.StairBlock;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
@@ -31,10 +34,7 @@ public final class GravityGunItem extends ToolItem {
     }
 
     public static Vec3D look(Player p) {
-        float yaw = -p.aimYaw(1f) * .017453292f - (float) Math.PI,
-                pitch = -p.xRot * .017453292f,
-                cp = MathHelper.cos(pitch);
-        return new Vec3D(MathHelper.sin(yaw) * cp, MathHelper.sin(pitch), MathHelper.cos(yaw) * cp);
+        return p.aimDirection(1f);
     }
 
     public static Vec3D eye(Player p) {
@@ -82,6 +82,15 @@ public final class GravityGunItem extends ToolItem {
 
     /** Deliberately excludes containers, machines, attached blocks, bedrock and special tiles. */
     public static boolean canGrabBlock(int id) {
+        if (id <= 0 || id >= Block.blocks.length) return false;
+        Block block = Block.blocks[id];
+        if (block == Block.SANDSTONE
+                || block == Block.CUT_SANDSTONE
+                || block == Block.CHISELED_SANDSTONE
+                || block == Block.SMOOTH_SANDSTONE
+                || block == Block.SANDSTONE_SLAB
+                || block instanceof StairBlock && block.getDrop() == Block.SANDSTONE_STAIRS.id)
+            return true;
         return id == 1
                 || id == 2
                 || id == 3
@@ -116,6 +125,22 @@ public final class GravityGunItem extends ToolItem {
         }
         Vec3D start = eye(p), d = look(p);
         MovingObjectPosition wall = pickWall(level, start, d);
+        if (wall != null
+                && level.getCubes(
+                                new net.classicremastered.minecraft.phys.AABB(
+                                        wall.x + .001f,
+                                        wall.y + .001f,
+                                        wall.z + .001f,
+                                        wall.x + .999f,
+                                        wall.y + .999f,
+                                        wall.z + .999f))
+                        .isEmpty()) {
+            wall =
+                    level.clip(
+                            new Vec3D(start.x, start.y, start.z),
+                            start.add(d.x * RANGE, d.y * RANGE, d.z * RANGE),
+                            true);
+        }
         float nearest = wall == null ? RANGE : start.distance(wall.vec);
         MobHit hit = pickMob(p, level, start, d, nearest);
         if (hit != null) nearest = hit.distance();
@@ -127,6 +152,8 @@ public final class GravityGunItem extends ToolItem {
         }
         if (hit != null) {
             Mob target = hit.body();
+            armedMobs.remove(target);
+            thrownBy.remove(target);
             grabbedMobs.put(p, target);
             target.xd = target.yd = target.zd = 0;
             holdDists.put(p, Math.max(2.5f, nearest));
@@ -178,10 +205,11 @@ public final class GravityGunItem extends ToolItem {
         Vec3D d = look(p);
         if (held != null) {
             if (!JockeyToolTarget.validBody(held, level)) return;
-            applyImpulse(held, d, 3.2f);
+            applyImpulse(held, launchDirection(p, held), 3.2f);
+            held.horizontalCollision = held.onGround = false;
             held.markForcedFall(p);
             thrownBy.put(held, p);
-            armedMobs.put(held, 20);
+            armedMobs.put(held, held instanceof Creeper ? 80 : 20);
             return;
         }
         Vec3D start = eye(p);
@@ -193,6 +221,26 @@ public final class GravityGunItem extends ToolItem {
             target.yd = Math.max(.32f, target.yd);
             target.markForcedFall(p);
         }
+    }
+
+    public static Vec3D launchDirection(Player player, Entity projectile) {
+        Vec3D start = new Vec3D(player.x, player.y, player.z);
+        Vec3D aim = look(player);
+        MovingObjectPosition wall = pickWall(player.level, start, aim);
+        float distance = wall == null ? RANGE : start.distance(wall.vec);
+        MobHit target = pickMob(player, player.level, start, aim, distance);
+        if (target != null && target.body() != projectile) distance = target.distance();
+        Vec3D point = start.add(aim.x * distance, aim.y * distance, aim.z * distance);
+        Vec3D direction =
+                point.subtract(
+                        new Vec3D(
+                                projectile.x,
+                                (projectile.bb.y0 + projectile.bb.y1) * .5f,
+                                projectile.z));
+        return direction.x * direction.x + direction.y * direction.y + direction.z * direction.z
+                        > .0001f
+                ? direction.normalize()
+                : aim;
     }
 
     private static boolean canFire(Player p, Level level) {
@@ -216,8 +264,7 @@ public final class GravityGunItem extends ToolItem {
         // Level.clip mutates its start vector.
         return level.clip(
                 new Vec3D(start.x, start.y, start.z),
-                start.add(direction.x * RANGE, direction.y * RANGE, direction.z * RANGE),
-                true);
+                start.add(direction.x * RANGE, direction.y * RANGE, direction.z * RANGE));
     }
 
     private static MobHit pickMob(

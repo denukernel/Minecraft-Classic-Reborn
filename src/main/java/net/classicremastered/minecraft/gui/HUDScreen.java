@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.chat.ChatInputScreen;
 import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
+import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -21,12 +22,10 @@ import org.lwjgl.opengl.GL11;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Random;
 
 public final class HUDScreen extends Screen {
 
     public List<ChatLine> chat = new ArrayList<>();
-    private final Random random = new Random();
     private final Minecraft mc;
     private Long debugBiomeSeed;
     private BiomeLevelGenerator debugBiomes;
@@ -34,11 +33,30 @@ public final class HUDScreen extends Screen {
     public int height;
     public String hoveredPlayer = null;
     public int ticks = 0;
+    private Player heartPlayer;
+    private Level heartLevel;
+    private int observedHealth, displayHealth, healthBlinkUntil, settleHealthAt;
 
     public HUDScreen(Minecraft mc, int w, int h) {
         this.mc = mc;
         this.width = w * 240 / h;
         this.height = h * 240 / h;
+    }
+
+    private void updateHeartDisplay(Player player, int health) {
+        if (player != heartPlayer
+                || player.level != heartLevel
+                || observedHealth == 0 && health > 0) {
+            heartPlayer = player;
+            heartLevel = player.level;
+            displayHealth = health;
+            healthBlinkUntil = settleHealthAt = ticks;
+        } else if (health != observedHealth) {
+            healthBlinkUntil = ticks + (health < observedHealth ? 20 : 10);
+            settleHealthAt = ticks + 20;
+        }
+        if (ticks >= settleHealthAt) displayHealth = health;
+        observedHealth = health;
     }
 
     private void renderDebugOverlay(FontRenderer font, long maxMemory) {
@@ -152,25 +170,25 @@ public final class HUDScreen extends Screen {
             final int U_BUBBLE_FULL = 16, V_BUBBLE_FULL = 18;
             final int U_BUBBLE_PART = 25, V_BUBBLE_PART = 18;
 
-            boolean hurtFlash =
-                    (player.invulnerableTime / 3 % 2 == 1) && player.invulnerableTime >= 10;
             int health = Math.max(0, Math.min(20, player.health)); // 0..20 half-hearts
-            int lastHealth = Math.max(0, Math.min(20, player.lastHealth));
+            updateHeartDisplay(player, health);
+            int blinkTicks = healthBlinkUntil - ticks;
+            boolean hurtFlash = blinkTicks > 0 && blinkTicks / 3 % 2 == 1;
 
             // hearts (10 slots)
             for (int i = 0; i < 10; i++) {
                 int x = this.width / 2 - 91 + i * 8;
-                int y = this.height - 32 + (health <= 4 ? this.random.nextInt(2) : 0);
+                int y = this.height - 32 + (health <= 4 ? (ticks ^ (i * 17 + ticks / 3)) & 1 : 0);
 
                 // empty container
-                this.drawImage(x, y, U_HEART_BG, V_HEART_BG, 9, 9);
+                this.drawImage(x, y, hurtFlash ? U_HEART_BG + 9 : U_HEART_BG, V_HEART_BG, 9, 9);
 
                 // damage flash overlay uses lastHealth
                 if (hurtFlash) {
-                    if ((i * 2 + 1) < lastHealth) {
-                        this.drawImage(x, y, U_HEART_FULL, V_HEART_FULL, 9, 9);
-                    } else if ((i * 2 + 1) == lastHealth) {
-                        this.drawImage(x, y, U_HEART_HALF, V_HEART_HALF, 9, 9);
+                    if ((i * 2 + 1) < displayHealth) {
+                        this.drawImage(x, y, U_HEART_FULL + 18, V_HEART_FULL, 9, 9);
+                    } else if ((i * 2 + 1) == displayHealth) {
+                        this.drawImage(x, y, U_HEART_HALF + 18, V_HEART_HALF, 9, 9);
                     }
                 }
 

@@ -30,6 +30,7 @@ public class PrimedTnt extends Entity {
     // ignore friendly contact briefly
     private transient Entity ownerRef = null;
     private boolean playerIgniter;
+    private boolean impactFuse;
 
     public PrimedTnt(Level level, float x, float y, float z) {
         this(level, x, y, z, null, DEFAULT_FUSE);
@@ -100,6 +101,16 @@ public class PrimedTnt extends Entity {
         this.yo = this.y;
         this.zo = this.z;
 
+        if (impactFuse) {
+            Entity owner = ownerRef != null ? ownerRef : playerIgniter ? level.player : null;
+            if (ProjectileSweep.move(this, owner) != null) {
+                explode();
+            } else {
+                tickFuse();
+            }
+            return;
+        }
+
         // gravity + motion
         this.yd -= gravity;
         this.move(this.xd, this.yd, this.zd);
@@ -124,6 +135,20 @@ public class PrimedTnt extends Entity {
         this.playerIgniter = playerIgniter;
     }
 
+    public void armOnImpact(Entity thrower) {
+        ownerRef = thrower;
+        playerIgniter = thrower instanceof net.classicremastered.minecraft.player.Player;
+        impactFuse = true;
+    }
+
+    public boolean hasImpactFuse() {
+        return impactFuse;
+    }
+
+    public void setImpactFuse(boolean impactFuse) {
+        this.impactFuse = impactFuse;
+    }
+
     public void tickFuse() {
         if (removed) return;
         if (--life <= 0) {
@@ -134,17 +159,22 @@ public class PrimedTnt extends Entity {
     }
 
     private void explode() {
-        if (this.removed) return;
-        this.remove();
-
-        level.playExplosionEffects(x, y, z, explosionPower);
         Entity owner = ownerRef != null ? ownerRef : playerIgniter ? level.player : null;
-        TntExplosion.detonate(level, this, owner, x, y, z, explosionPower);
+        detonate(this, owner, explosionPower);
+    }
+
+    static void detonate(Entity source, Entity owner, float power) {
+        if (source.removed) return;
+        source.remove();
+        Level level = source.level;
+        float x = source.x, y = source.y, z = source.z;
+        level.playExplosionEffects(x, y, z, power);
+        TntExplosion.detonate(level, source, owner, x, y, z, power);
         if (level.particleEngine == null) return;
 
         // debris particles...
         Random random = new Random();
-        float radius = explosionPower;
+        float radius = power;
         for (int i = 0; i < 100; i++) {
             float rx = (float) random.nextGaussian() * radius / 4.0F;
             float ry = (float) random.nextGaussian() * radius / 4.0F;
@@ -154,7 +184,7 @@ public class PrimedTnt extends Entity {
             float vx = rx / len / len;
             float vy = ry / len / len;
             float vz = rz / len / len;
-            this.level.particleEngine.spawnParticle(
+            level.particleEngine.spawnParticle(
                     new TerrainParticle(level, x + rx, y + ry, z + rz, vx, vy, vz, Block.TNT));
         }
     }
@@ -181,9 +211,10 @@ public class PrimedTnt extends Entity {
         GL11.glPushMatrix();
         GL11.glColor4f(brightness, brightness, brightness, 1.0F);
         GL11.glTranslatef(
-                xo + (x - xo) * partial - 0.5F,
-                yo + (y - yo) * partial - 0.5F,
-                zo + (z - zo) * partial - 0.5F);
+                xo + (x - xo) * partial - bbWidth * .5f,
+                yo + (y - yo) * partial - bbHeight * .5f,
+                zo + (z - zo) * partial - bbWidth * .5f);
+        GL11.glScalef(bbWidth, bbHeight, bbWidth);
 
         ShapeRenderer sr = ShapeRenderer.instance;
         Block.TNT.renderPreview(sr);

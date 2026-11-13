@@ -367,6 +367,37 @@ public final class BiomeLevelGenerator {
                 }
             }
         }
+        if (!flat) {
+            for (int cz = 0; cz < size / 16; cz++) {
+                for (int cx = 0; cx < size / 16; cx++) {
+                    SimpleChunk chunk = new SimpleChunk(cx, cz, depth);
+                    int[] tops = new int[256];
+                    for (int z = 0; z < 16; z++) {
+                        int column = (cz * 16 + z) * size + cx * 16;
+                        System.arraycopy(surfaces, column, tops, z * 16, 16);
+                        for (int y = 0; y < depth; y++)
+                            System.arraycopy(
+                                    blocks,
+                                    y * size * size + column,
+                                    chunk.blocks,
+                                    SimpleChunk.idx(0, y, z, depth),
+                                    16);
+                    }
+                    caveGenerator(depth).carveCaves(chunk, cx * 16, cz * 16, tops, sea);
+                    net.classicremastered.minecraft.level.structure.Mineshaft.decorate(chunk, seed);
+                    for (int z = 0; z < 16; z++) {
+                        int column = (cz * 16 + z) * size + cx * 16;
+                        for (int y = 0; y < depth; y++)
+                            System.arraycopy(
+                                    chunk.blocks,
+                                    SimpleChunk.idx(0, y, z, depth),
+                                    blocks,
+                                    y * size * size + column,
+                                    16);
+                    }
+                }
+            }
+        }
         for (int z = 3; z < size - 3; z++) {
             for (int x = 3; x < size - 3; x++) {
                 Biome biome = biomeAt(x, z);
