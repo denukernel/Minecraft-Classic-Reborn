@@ -9,6 +9,10 @@ public final class ZombieBuilderAI extends BasicAttackAI {
         super(true, true);
     }
 
+    public void holdForConstruction() {
+        holdPosition(mob.yRot);
+    }
+
     @Override
     protected void update() {
         super.update();

@@ -6,8 +6,8 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.structure.CobblestoneTower;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 import net.classicremastered.minecraft.player.Player;
@@ -22,6 +22,7 @@ public class ZombieBuilder extends Zombie {
     public static final long serialVersionUID = 0L;
     public boolean poseBreaking, posePlacing;
     private CobblestoneTower.Entrance tower;
+    private boolean leavingTower;
     private transient boolean checkedLegacyTower;
     private static final int TEAR_TICKS = 120;
     private transient CrossbowTurret theftTarget;
@@ -58,15 +59,26 @@ public class ZombieBuilder extends Zombie {
 
     public void assignTower(CobblestoneTower.Entrance entrance) {
         tower = entrance;
+        leavingTower = false;
         checkedLegacyTower = entrance != null;
     }
 
     public boolean isTowerResident() {
-        return tower != null;
+        return tower != null && !leavingTower;
     }
 
     public boolean canFollow(Entity target) {
-        return tower == null || tower.contains(target.x, target.bb.y0, target.z);
+        return !isTowerResident() || tower.contains(target.x, target.bb.y0, target.z);
+    }
+
+    public void leaveTowerFor(Player target) {
+        if (tower != null && !tower.contains(target.x, target.bb.y0, target.z)) {
+            leavingTower = true;
+        }
+    }
+
+    public boolean canBuildTowerExit(int x, int y, int z) {
+        return tower != null && tower.contains(x + .5, y, z + .5);
     }
 
     private static float clamp(float value, float min, float max) {
@@ -83,7 +95,7 @@ public class ZombieBuilder extends Zombie {
 
     @Override
     public void setPos(float x, float y, float z) {
-        if (tower != null) {
+        if (isTowerResident()) {
             x = towerX(x);
             z = towerZ(z);
             y = clamp(y, tower.y() + bbHeight * .5f, tower.y() + 8.5f + bbHeight * .5f);
@@ -93,7 +105,7 @@ public class ZombieBuilder extends Zombie {
 
     @Override
     public void move(float dx, float dy, float dz) {
-        if (tower != null) {
+        if (isTowerResident()) {
             dx = towerX(x + dx) - x;
             dz = towerZ(z + dz) - z;
             dy = clamp(bb.y0 + dy, tower.y(), tower.y() + 8.5f) - bb.y0;
@@ -219,9 +231,9 @@ public class ZombieBuilder extends Zombie {
             tag.putInt("BuilderTowerX", tower.x());
             tag.putInt("BuilderTowerY", tower.y());
             tag.putInt("BuilderTowerZ", tower.z());
+            tag.putBoolean("BuilderLeavingTower", leavingTower);
         }
-        if (!stolenHead)
-            return;
+        if (!stolenHead) return;
         tag.putBoolean("StolenTurretHead", true);
         tag.putInt("StolenTurretAmmo", stolenAmmo);
         tag.putInt("StolenTurretAmmoId", stolenAmmoId);
@@ -234,11 +246,16 @@ public class ZombieBuilder extends Zombie {
     @Override
     public void loadPersistence(CompoundTag tag) {
         super.loadPersistence(tag);
-        if (tag.hasKey("BuilderTowerX") && tag.hasKey("BuilderTowerY") && tag.hasKey("BuilderTowerZ"))
-            assignTower(new CobblestoneTower.Entrance(tag.getInt("BuilderTowerX"),
-                    tag.getInt("BuilderTowerY"), tag.getInt("BuilderTowerZ")));
-        if (tag == null || !tag.getBoolean("StolenTurretHead"))
-            return;
+        if (tag.hasKey("BuilderTowerX")
+                && tag.hasKey("BuilderTowerY")
+                && tag.hasKey("BuilderTowerZ"))
+            assignTower(
+                    new CobblestoneTower.Entrance(
+                            tag.getInt("BuilderTowerX"),
+                            tag.getInt("BuilderTowerY"),
+                            tag.getInt("BuilderTowerZ")));
+        leavingTower = tag.getBoolean("BuilderLeavingTower");
+        if (tag == null || !tag.getBoolean("StolenTurretHead")) return;
         stolenHead = true;
         stolenAmmo = Math.max(0, Math.min(512, tag.getInt("StolenTurretAmmo")));
         stolenAmmoId = tag.getInt("StolenTurretAmmoId");

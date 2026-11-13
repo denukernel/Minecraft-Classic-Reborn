@@ -67,7 +67,8 @@ public class SpawnMobCommand implements Command, AliasedCommand {
                     mob.mount(vehicle);
                     if (mob.riding != vehicle) {
                         finish(
-                                "&cThe rider could not mount here. Check clearance and mount requirements.");
+                                "&cThe rider could not mount here. Check clearance and mount"
+                                    + " requirements.");
                         return -attempted;
                     }
                     level.addEntity(vehicle);
@@ -84,6 +85,7 @@ public class SpawnMobCommand implements Command, AliasedCommand {
             if (mob == null
                     || mob.getRegistryId() < 0
                     || RenderManager.getRenderer(mob) == null
+                            && !(mob instanceof CrossbowTurret)
                             && (mob.modelName == null || mob.modelName.isEmpty())) return null;
             if (mob instanceof CrossbowTurret turret && type.variant() != null) {
                 turret.variant = type.variant();
@@ -218,6 +220,7 @@ public class SpawnMobCommand implements Command, AliasedCommand {
                     case "arrow_shotgun" -> TurretVariant.SHOTGUN;
                     case "bullet" -> TurretVariant.BULLET;
                     case "bullet_shotgun" -> TurretVariant.BULLET_SHOTGUN;
+                    case "machine_gun", "machine_gun_turret" -> TurretVariant.MACHINE_GUN;
                     default -> null;
                 };
         short id = variant == null ? MobRegistry.idOfName(name) : CrossbowTurret.REGISTRY_ID;

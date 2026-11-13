@@ -271,7 +271,13 @@ final class ClientFrameRenderer {
 
                         r2.setLighting(true);
                         Vec3D camVec = r2.getPlayerVector(renderPartial);
-                        lr.level.blockMap.render(camVec, fr, lr.textureManager, renderPartial);
+                        lr.level.blockMap.render(
+                                camVec,
+                                fr,
+                                lr.textureManager,
+                                renderPartial,
+                                camPlayer,
+                                mc.settings);
                         r2.setLighting(false);
                         r2.updateFog(cameraLiquid);
                         if (!fabulous) renderParticles(pm, renderPartial);

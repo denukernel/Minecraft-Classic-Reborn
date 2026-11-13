@@ -6,13 +6,21 @@ public enum TurretVariant {
     HARPOON("Harpoon", "harpoon", 61, 65, 64, 16, 40, 8),
     BRAIN_NANO("Brain Nano", "brain_nano", 62, 66, 64, 16, 40, 0),
     PREDICTABLE("Predictable", "predictable", 63, 48, 256, 16, 20, 4),
-    ROVER("Rover", "rover", 79, 48, 256, 16, 20, 4), BULLET("Bullet", "bullet", 96, 98, 128, 16, 12, 3),
-    BULLET_SHOTGUN("Bullet Shotgun", "bullet_shotgun", 97, 98, 64, 8, 32, 2);
-
+    ROVER("Rover", "rover", 79, 48, 256, 16, 20, 4),
+    BULLET("Bullet", "bullet", 96, 98, 128, 16, 12, 3),
+    BULLET_SHOTGUN("Bullet Shotgun", "bullet_shotgun", 97, 98, 64, 8, 32, 2),
+    MACHINE_GUN("Machine Gun", "machine_gun", 99, 98, 256, 20, 4, 4);
     public final String label, asset;
     public final int item, ammo, capacity, range, reload, damage;
 
-    TurretVariant(String label, String asset, int item, int ammo, int capacity, int range, int reload,
+    TurretVariant(
+            String label,
+            String asset,
+            int item,
+            int ammo,
+            int capacity,
+            int range,
+            int reload,
             int damage) {
         this.label = label;
         this.asset = asset;
@@ -26,16 +34,14 @@ public enum TurretVariant {
 
     public static TurretVariant fromItem(int raw) {
         for (TurretVariant variant : values()) {
-            if (variant.item + 256 == raw)
-                return variant;
+            if (variant.item + 256 == raw) return variant;
         }
         return null;
     }
 
     public static TurretVariant fromSave(String value) {
         for (TurretVariant variant : values()) {
-            if (variant.asset.equals(value))
-                return variant;
+            if (variant.asset.equals(value)) return variant;
         }
         return CROSSBOW;
     }
@@ -45,7 +51,7 @@ public enum TurretVariant {
     }
 
     public boolean usesBullets() {
-        return this == BULLET || this == BULLET_SHOTGUN;
+        return this == BULLET || this == BULLET_SHOTGUN || this == MACHINE_GUN;
     }
 
     public boolean acceptsAmmo(int raw) {
@@ -53,6 +59,7 @@ public enum TurretVariant {
     }
 
     public String texture() {
+        if (this == MACHINE_GUN) return "/turret/bullet.png";
         return this == CROSSBOW ? "/turret/cobblestone_oak.png" : "/turret/" + asset + ".png";
     }
 }

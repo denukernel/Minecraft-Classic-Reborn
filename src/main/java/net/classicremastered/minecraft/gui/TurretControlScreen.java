@@ -1,14 +1,16 @@
 package net.classicremastered.minecraft.gui;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.mob.MobRegistry;
+
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public final class TurretControlScreen extends GuiScreen {
     private static final int VISIBLE_TARGETS = 5;
@@ -19,6 +21,7 @@ public final class TurretControlScreen extends GuiScreen {
     private int tab;
     private int targetOffset;
     private int upgradeOffset;
+    private int targetGroup;
 
     public TurretControlScreen(CrossbowTurret turret) {
         this.turret = turret;
@@ -35,7 +38,7 @@ public final class TurretControlScreen extends GuiScreen {
     }
 
     private int top() {
-        return height / 2 - 101;
+        return height / 2 - 118;
     }
 
     private void refreshButtons() {
@@ -48,19 +51,35 @@ public final class TurretControlScreen extends GuiScreen {
             row(4, 5, "Unload ammunition");
             row(5, 6, "Pack into crate");
         } else if (tab == 1) {
-            for (int i = 0; i < VISIBLE_TARGETS && targetOffset + i < targets.size(); i++) {
-                var target = targets.get(targetOffset + i);
-                row(
-                        10 + i,
-                        i,
-                        (turret.targets(target.getKey()) ? "[x] " : "[ ] ") + target.getValue());
+            String group =
+                    targetGroup == 0
+                            ? "All mobs"
+                            : MobRegistry.TargetGroup.values()[targetGroup - 1].label;
+            row(100, 0, "Group: " + group + " >");
+            buttons.add(new Button(101, left() + 8, top() + 64, 78, 20, "Enable all"));
+            buttons.add(new Button(102, left() + 90, top() + 64, 78, 20, "Disable all"));
+            var filtered = filteredTargets();
+            for (int i = 0; i < VISIBLE_TARGETS && targetOffset + i < filtered.size(); i++) {
+                var target = filtered.get(targetOffset + i);
+                buttons.add(
+                        new Button(
+                                10 + i,
+                                left() + 8,
+                                top() + 86 + i * 21,
+                                160,
+                                20,
+                                (turret.targets(target.getKey()) ? "[x] " : "[ ] ")
+                                        + target.getValue()));
             }
-            buttons.add(new Button(6, left() + 10, top() + 158, 72, 20, "Previous"));
-            buttons.add(new Button(7, left() + 94, top() + 158, 72, 20, "Next"));
+            buttons.add(new Button(6, left() + 10, top() + 198, 72, 20, "Previous"));
+            buttons.add(new Button(7, left() + 94, top() + 198, 72, 20, "Next"));
         } else {
-            for (int i = upgradeOffset; i < Math.min(upgradeOffset + VISIBLE_UPGRADES,
-                    TurretUpgrade.COUNT); i++) {
-                row(20 + i, i - upgradeOffset,
+            for (int i = upgradeOffset;
+                    i < Math.min(upgradeOffset + VISIBLE_UPGRADES, TurretUpgrade.COUNT);
+                    i++) {
+                row(
+                        20 + i,
+                        i - upgradeOffset,
                         (turret.upgraded(i) ? "Remove " : "Install ") + TurretUpgrade.at(i).label);
             }
             buttons.add(new Button(8, left() + 10, top() + 158, 72, 20, "Previous"));
@@ -77,14 +96,7 @@ public final class TurretControlScreen extends GuiScreen {
         drawBox(0, 0, width, height, 0xB0000000);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, minecraft.textureManager.load("/turret/panel.png"));
         GL11.glColor4f(1, 1, 1, 1);
-        GL11.glPushMatrix();
-        try {
-            GL11.glTranslatef(left(), top(), 0);
-            GL11.glScalef(1, .86f, 1);
-            drawImage(0, 0, 0, 0, 176, 236);
-        } finally {
-            GL11.glPopMatrix();
-        }
+        drawImage(left(), top(), 0, 0, 176, 236);
         drawCenteredString(
                 fontRenderer,
                 turret.variant.label + " Turret (T1)",
@@ -101,9 +113,13 @@ public final class TurretControlScreen extends GuiScreen {
             drawCenteredString(
                     fontRenderer,
                     (turret.variant == net.classicremastered.minecraft.mob.TurretVariant.ROVER
-                            ? (turret.ammo == 0 ? "Bolts or bullets "
-                                    : turret.usesBullets() ? "Bullets " : "Bolts ")
-                            : "Ammo ") + turret.ammo + " / " + turret.ammoCapacity(),
+                                    ? (turret.ammo == 0
+                                            ? "Bolts or bullets "
+                                            : turret.usesBullets() ? "Bullets " : "Bolts ")
+                                    : "Ammo ")
+                            + turret.ammo
+                            + " / "
+                            + turret.ammoCapacity(),
                     width / 2,
                     top() + 68,
                     0x303030);
@@ -133,8 +149,16 @@ public final class TurretControlScreen extends GuiScreen {
                         0,
                         Math.min(
                                 targetOffset + direction,
-                                Math.max(0, targets.size() - VISIBLE_TARGETS)));
+                                Math.max(0, filteredTargets().size() - VISIBLE_TARGETS)));
         refreshButtons();
+    }
+
+    private List<Map.Entry<Short, String>> filteredTargets() {
+        if (targetGroup == 0) return targets;
+        var group = MobRegistry.TargetGroup.values()[targetGroup - 1];
+        return targets.stream()
+                .filter(target -> MobRegistry.turretTargetGroup(target.getKey()) == group)
+                .toList();
     }
 
     @Override
@@ -159,11 +183,23 @@ public final class TurretControlScreen extends GuiScreen {
         } else if (id == 6 || id == 7) {
             scroll(id == 6 ? -VISIBLE_TARGETS : VISIBLE_TARGETS);
         } else if (id == 8 || id == 9) {
-            upgradeOffset = Math.max(0,
-                    Math.min(upgradeOffset + (id == 8 ? -VISIBLE_UPGRADES : VISIBLE_UPGRADES),
-                            (TurretUpgrade.COUNT - 1) / VISIBLE_UPGRADES * VISIBLE_UPGRADES));
+            upgradeOffset =
+                    Math.max(
+                            0,
+                            Math.min(
+                                    upgradeOffset
+                                            + (id == 8 ? -VISIBLE_UPGRADES : VISIBLE_UPGRADES),
+                                    (TurretUpgrade.COUNT - 1)
+                                            / VISIBLE_UPGRADES
+                                            * VISIBLE_UPGRADES));
+        } else if (id == 100) {
+            targetGroup = (targetGroup + 1) % (MobRegistry.TargetGroup.values().length + 1);
+            targetOffset = 0;
+        } else if (id == 101 || id == 102) {
+            turret.setTargets(
+                    filteredTargets().stream().map(Map.Entry::getKey).toList(), id == 101);
         } else if (id < 20) {
-            turret.toggleTarget(targets.get(targetOffset + id - 10).getKey());
+            turret.toggleTarget(filteredTargets().get(targetOffset + id - 10).getKey());
         } else {
             int upgrade = id - 20;
             if (!turret.changeUpgrade(minecraft.player, upgrade, !turret.upgraded(upgrade))) {

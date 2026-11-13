@@ -52,13 +52,16 @@ public final class CrossbowTurret extends Mob {
     }
 
     public void toggleTarget(short id) {
+        setTargets(java.util.List.of(id), !targets(id));
+    }
+
+    public void setTargets(java.util.Collection<Short> ids, boolean enabled) {
         if (targets == null) {
             targets = new java.util.HashSet<>(MobRegistry.turretTargets().keySet());
             targets.removeIf(candidate -> !MobRegistry.defaultTurretTarget(candidate));
         }
-        if (!targets.remove(id)) {
-            targets.add(id);
-        }
+        if (enabled) targets.addAll(ids);
+        else targets.removeAll(ids);
     }
 
     public boolean upgraded(int index) {
@@ -223,7 +226,7 @@ public final class CrossbowTurret extends Mob {
                 && mob.health > 0
                 && !mob.removed
                 && !mob.corruptedToDefendPlayer
-                && (MobRegistry.isTurretHostile(mob) || mob instanceof IronGolem)
+                && MobRegistry.turretTargetGroup(MobRegistry.idOf(mob)) != null
                 && (variant != TurretVariant.BRAIN_NANO || DefenderAI.canConvert(mob))
                 && targets(MobRegistry.idOf(mob));
     }

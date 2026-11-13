@@ -81,6 +81,11 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.LUCKY_BLOCK);
         allowedBlocks.add(Block.GRASS);
         allowedBlocks.add(Block.WORKBENCH);
+        allowedBlocks.add(Block.JUKEBOX);
+        allowedBlocks.add(Block.STRUCTURE_ALPHA);
+        allowedBlocks.add(Block.STRUCTURE_BETA);
+        allowedBlocks.add(Block.STRUCTURE_GAMMA);
+        allowedBlocks.add(Block.STRUCTURE_DELTA);
         allowedBlocks.add(Block.OAK_STAIRS);
         allowedBlocks.add(Block.COBBLESTONE_STAIRS);
         allowedBlocks.add(Block.STONE_BRICKS);

@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.GameSettings;
 import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.entity.HeldBlockEntity;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
@@ -10,6 +11,7 @@ import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.Frustrum;
 import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.minecraft.render.entity.EntityShadowRenderer;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -263,11 +265,24 @@ public class BlockMap implements Serializable {
     }
 
     public void render(Vec3D cam, Frustrum fr, TextureManager tex, float partial) {
+        render(cam, fr, tex, partial, null, null);
+    }
+
+    public void render(
+            Vec3D cam,
+            Frustrum fr,
+            TextureManager tex,
+            float partial,
+            Player localPlayer,
+            GameSettings settings) {
         // Render all HeldBlockEntity first, bypassing frustum check and infiniteMode
         // check
         Entity[] entities;
         synchronized (this.all) {
             entities = this.all.toArray(new Entity[0]);
+        }
+        if (settings != null && (settings.mobShadows || settings.playerShadows)) {
+            EntityShadowRenderer.render(entities, localPlayer, cam, fr, tex, settings, partial);
         }
         for (Entity e : entities) {
             if (e instanceof HeldBlockEntity && !e.removed) {

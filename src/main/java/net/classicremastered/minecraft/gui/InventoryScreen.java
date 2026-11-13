@@ -632,8 +632,28 @@ public class InventoryScreen extends CraftingContainerScreen {
 
     @Override
     protected void onMouseRelease(int x, int y, int button) {
-        int target = dragSlotAt(x, y, false);
+        int target = isOutsideInventory(x, y) ? OUTSIDE_SLOT : dragSlotAt(x, y, false);
         if (finishStackDrag(target, button) && hasCarriedStack()) handleInventoryClick(x, y, 0);
+    }
+
+    protected final boolean isOutsideInventory(int x, int y) {
+        return !inside(
+                        x,
+                        y,
+                        panelLeft(),
+                        panelTop(),
+                        creativeInventoryLayout() ? CREATIVE_WIDTH : CRAFTING_PANEL_WIDTH,
+                        creativeInventoryLayout() ? CREATIVE_HEIGHT : CRAFTING_PANEL_HEIGHT)
+                && (creativeInventoryLayout() || !isRecipeBookArea(x, y, panelTop(), 2));
+    }
+
+    protected final void dropCarriedStack(int button) {
+        if (!hasCarriedStack() || button < 0 || button > 1) return;
+        int count = button == 0 ? carriedCnt : 1;
+        if (minecraft.player.dropStack(carriedId, count, carriedCrate)) {
+            carriedCnt -= count;
+            if (carriedCnt == 0) discardCarriedStack();
+        }
     }
 
     private int craftSlotAt(int x, int y, int panelX, int panelY) {
@@ -660,6 +680,10 @@ public class InventoryScreen extends CraftingContainerScreen {
     }
 
     private void handleInventoryClick(int mx, int my, int button) {
+        if (isOutsideInventory(mx, my)) {
+            dropCarriedStack(button);
+            return;
+        }
         int gx = panelLeft(), gy = panelTop();
         if (!creativeInventoryLayout()) {
             if (button == 0 && clickRecipeBookButton(mx, my, gx + BOOK_X, gy + BOOK_Y)) return;

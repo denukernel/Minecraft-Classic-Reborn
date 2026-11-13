@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.gui;
 import net.classicremastered.minecraft.CreativeInventoryBlocks;
 import net.classicremastered.minecraft.level.itemstack.*;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.TurretVariant;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -111,6 +112,11 @@ public final class BlockSelectScreen extends InventoryScreen {
                     b == Block.TNT
                             || b instanceof net.classicremastered.minecraft.level.tile.CircuitBlock
                             || b == Block.CHEST
+                            || b == Block.JUKEBOX
+                            || b == Block.WORKBENCH
+                            || b
+                                    instanceof
+                                    net.classicremastered.minecraft.level.tile.StructureBlock
                             || b == Block.FURNACE
                             || b == Block.BEACON
                             || b == Block.LUCKY_BLOCK;
@@ -123,72 +129,68 @@ public final class BlockSelectScreen extends InventoryScreen {
                     && !ids.contains(b.id)) ids.add(b.id);
         }
         ids.removeIf(
-                id -> Block.blocks[id] instanceof net.classicremastered.minecraft.level.tile.StairBlock stair
-                        && !stair.isInventoryVariant());
+                id ->
+                        Block.blocks[id]
+                                        instanceof
+                                        net.classicremastered.minecraft.level.tile.StairBlock stair
+                                && !stair.isInventoryVariant());
         for (Item item : Item.items)
             if (item != null
                     && item != Item.EMPTY
                     && !Item.isBlockIcon(item.id)
-                    && (item.id < 47 || item.id > 66)
-                    && net.classicremastered.minecraft.level.itemstack.TurretItems.upgradeIndex(
-                                    item.id + 256)
-                            < 0) {
+                    // Packed turrets require saved crate data and are obtained by packing a turret.
+                    && item.id != TurretItems.PACKED) {
+                int raw = item.id + 256;
+                boolean turret = TurretVariant.fromItem(raw) != null;
+                boolean ammo = isTurretAmmo(raw);
+                boolean upgrade = TurretItems.upgradeIndex(raw) >= 0;
+                boolean turretSupply =
+                        item.id == TurretItems.REPAIR
+                                || item.id == TurretItems.CONTROL
+                                || item.id == TurretItems.CRATE
+                                || item.id == TurretItems.HEAD;
                 boolean egg = item instanceof ItemSpawnEgg,
                         gear =
                                 Equipment.GEAR.containsKey(item.id)
                                         || item == Item.MINING_AXE
                                         || item == Item.SHOVEL
                                         || item == Item.BOW
-                                        || item instanceof net.classicremastered.minecraft.level.itemstack.SaddleItem;
+                                        || item
+                                                instanceof
+                                                net.classicremastered.minecraft.level.itemstack
+                                                        .SaddleItem;
                 boolean utility =
                         item instanceof ToolItem && !gear
                                 || item == Item.ENDER_PEARL
                                 || item == Item.OAK_SIGN
-                                || item.id == Item.REDSTONE_DUST_ID;
+                                || item.id == Item.REDSTONE_DUST_ID
+                                || turretSupply;
                 if ((tab == 0
                                 || tab == 7 && egg
                                 || tab == 4 && gear && !egg
                                 || tab == 5 && !egg && !gear
                                 || tab == 6 && utility
-                                || tab == 8 && item instanceof MobWandItem)
-                        && item.name.toLowerCase(Locale.ROOT).contains(q)) ids.add(item.id + 256);
+                                || tab == 8 && item instanceof MobWandItem
+                                || tab == 9 && turret
+                                || tab == 10 && ammo
+                                || tab == 11 && (upgrade || turretSupply))
+                        && item.name.toLowerCase(Locale.ROOT).contains(q)) ids.add(raw);
             }
         return ids;
     }
 
     private List<Integer> entries() {
         int category = INVENTORY_TABS[selectedCatalogTab];
-        List<Integer> ids =
-                category >= TABS.length
-                        ? turretCatalog(category - TABS.length)
-                        : catalog(category == SEARCH_TAB ? 0 : category, searchQuery);
+        List<Integer> ids = catalog(category == SEARCH_TAB ? 0 : category, searchQuery);
         scrollRow = Math.max(0, Math.min(scrollRow, Math.max(0, (ids.size() + 8) / 9 - 5)));
         return ids;
     }
 
-    private List<Integer> turretCatalog(int category) {
-        ItemRegistry.bootstrap();
-        List<Integer> ids = new ArrayList<>();
-        for (int id = 47; id < Item.items.length; id++) {
-            boolean turret = net.classicremastered.minecraft.mob.TurretVariant
-                    .fromItem(id + 256) != null;
-            boolean upgrade = net.classicremastered.minecraft.level.itemstack.TurretItems
-                    .upgradeIndex(id + 256) >= 0;
-            boolean ammo = id == 48 || id >= 64 && id <= 66 || id == 98;
-            if ((!turret && !upgrade && !ammo && (id == 52 || id >= 67 && id <= 69 || id > 71))
-                    || Item.items[id] == null)
-                continue;
-            if ((category == 0 && turret
-                            || category == 1 && ammo
-                            || category == 2 && !turret && !ammo)
-                    && Item.items[id]
-                            .name
-                            .toLowerCase(Locale.ROOT)
-                            .contains(searchQuery.toLowerCase(Locale.ROOT))) {
-                ids.add(id + 256);
-            }
+    private static boolean isTurretAmmo(int raw) {
+        for (TurretVariant variant : TurretVariant.values()) {
+            if (variant.acceptsAmmo(raw)) return true;
         }
-        return ids;
+        return false;
     }
 
     private int entryAt(int x, int y) {
@@ -287,6 +289,10 @@ public final class BlockSelectScreen extends InventoryScreen {
                 return;
             }
             if (discardAt(mx, my)) return;
+        }
+        if (isOutsideInventory(mx, my) && hasCarriedStack()) {
+            dropCarriedStack(button);
+            return;
         }
         if (inventoryView) {
             if (catalogCursor > 0) {
@@ -473,6 +479,12 @@ public final class BlockSelectScreen extends InventoryScreen {
         draggingCatalog = false;
 
         if (discardAt(x, y)) return;
+        if (isOutsideInventory(x, y)
+                && inventoryTabAt(x, y) < 0
+                && (hotbarSource >= 0 || inventorySource >= 0)) {
+            dropCarriedStack(0);
+            return;
+        }
         int target = inventoryView ? inventorySlotAt(x, y) : catalogHotbarSlotAt(x, y);
         if (catalogSource) {
             placeCatalogItem(target);

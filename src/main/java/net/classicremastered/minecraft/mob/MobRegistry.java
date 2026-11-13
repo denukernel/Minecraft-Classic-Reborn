@@ -19,6 +19,16 @@ import java.util.Map;
  */
 public final class MobRegistry {
 
+    public enum TargetGroup {
+        HOSTILE("Hostile mobs"), PASSIVE("Passive mobs"), NEUTRAL("Neutral mobs");
+
+        public final String label;
+
+        TargetGroup(String label) {
+            this.label = label;
+        }
+    }
+
     @FunctionalInterface
     public interface MobFactory {
         Mob create(Level level, float x, float y, float z) throws Exception;
@@ -123,12 +133,7 @@ public final class MobRegistry {
         bootstrapDefaults();
         java.util.Map<Short, String> result = new java.util.TreeMap<>();
         for (Entry entry : byId.values()) {
-            if (Zombie.class.isAssignableFrom(entry.type)
-                    || Creeper.class.isAssignableFrom(entry.type)
-                    || Spider.class.isAssignableFrom(entry.type)
-                    || Enderman.class.isAssignableFrom(entry.type)
-                    || extraTurretTarget(entry.type)
-                    || entry.type == IronGolem.class) {
+            if (turretTargetGroup(entry.id) != null) {
                 result.put(entry.id, displayName(entry.id));
             }
         }
@@ -140,22 +145,38 @@ public final class MobRegistry {
                 || type == LeggedMonster.class
                 || type == LongNeckMan.class
                 || type == ShulkerMan.class
-                || type == StickFigure.class;
+                || type == StickFigure.class
+                || type == Ironmock.class
+                || type == HouseVandalizer.class;
+    }
+
+    private static boolean hostileTurretType(Class<?> type) {
+        return Zombie.class.isAssignableFrom(type)
+                || Creeper.class.isAssignableFrom(type)
+                || Spider.class.isAssignableFrom(type)
+                || Enderman.class.isAssignableFrom(type)
+                || extraTurretTarget(type);
+    }
+
+    public static TargetGroup turretTargetGroup(short id) {
+        Entry entry = byId.get(id);
+        if (entry == null
+                || entry.type == CrossbowTurret.class
+                || Defender.class.isAssignableFrom(entry.type)
+                || net.classicremastered.minecraft.player.Player.class.isAssignableFrom(entry.type)
+                || Bot.class.isAssignableFrom(entry.type)) return null;
+        if (hostileTurretType(entry.type)) return TargetGroup.HOSTILE;
+        if (entry.type == Bee.class || entry.type == IronGolem.class || entry.type == SignMob.class)
+            return TargetGroup.NEUTRAL;
+        return TargetGroup.PASSIVE;
     }
 
     public static boolean defaultTurretTarget(short id) {
-        Entry entry = byId.get(id);
-        return entry != null
-                && (Zombie.class.isAssignableFrom(entry.type)
-                        || Creeper.class.isAssignableFrom(entry.type)
-                        || Spider.class.isAssignableFrom(entry.type)
-                        || Enderman.class.isAssignableFrom(entry.type)
-                        || extraTurretTarget(entry.type));
+        return turretTargetGroup(id) == TargetGroup.HOSTILE;
     }
 
     public static boolean isTurretHostile(Mob mob) {
-        return net.classicremastered.minecraft.level.MobSpawner.isMonster(mob)
-                || extraTurretTarget(mob.getClass());
+        return hostileTurretType(mob.getClass());
     }
 
     /** Get all registered mob names. */

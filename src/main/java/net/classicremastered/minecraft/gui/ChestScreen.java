@@ -157,6 +157,10 @@ public final class ChestScreen extends InventoryScreen {
     @Override
     protected void onMouseClick(int mx, int my, int button) {
         if (button == 0) beginStackDrag(-1);
+        if (isOutsideChest(mx, my)) {
+            dropChestStack(button);
+            return;
+        }
         int slot = slotAt(mx, my);
         if (slot < 0 || button > 1) return;
         boolean shift =
@@ -170,8 +174,27 @@ public final class ChestScreen extends InventoryScreen {
 
     @Override
     protected void onMouseRelease(int x, int y, int button) {
-        int target = slotAt(x, y);
-        if (finishStackDrag(target, button) && carriedCount > 0) clickSlot(target, 0, false);
+        int target = isOutsideChest(x, y) ? OUTSIDE_SLOT : slotAt(x, y);
+        if (finishStackDrag(target, button) && carriedCount > 0) {
+            if (target == OUTSIDE_SLOT) dropChestStack(0);
+            else clickSlot(target, 0, false);
+        }
+    }
+
+    private boolean isOutsideChest(int x, int y) {
+        return !inside(x, y, left(), top(), 176, rows() * 18 + 112);
+    }
+
+    private void dropChestStack(int button) {
+        if (carriedCount <= 0 || button < 0 || button > 1) return;
+        int count = button == 0 ? carriedCount : 1;
+        if (minecraft.player.dropStack(carriedId, count, carriedCrate)) {
+            carriedCount -= count;
+            if (carriedCount == 0) {
+                carriedId = -1;
+                carriedCrate = null;
+            }
+        }
     }
 
     private void clickSlot(int slot, int button, boolean shift) {

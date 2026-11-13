@@ -5,7 +5,20 @@ import org.lwjgl.input.Mouse;
 
 final class SettingsCategoryScreen extends GuiScreen {
     enum Page {
-        VIDEO("Video Settings", 15, 4, 14, 5, 3, 7, 8, 9, 6, 13),
+        VIDEO(
+                "Video Settings",
+                15,
+                4,
+                14,
+                5,
+                3,
+                7,
+                8,
+                9,
+                6,
+                13,
+                GameSettings.MOB_SHADOWS,
+                GameSettings.PLAYER_SHADOWS),
         SOUND("Sound", 0, 1, 12),
         GAMEPLAY("Gameplay", 10, 11, 2, 16, 17);
 

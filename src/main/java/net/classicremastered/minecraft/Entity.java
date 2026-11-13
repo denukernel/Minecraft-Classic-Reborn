@@ -79,9 +79,13 @@ public abstract class Entity implements Serializable {
     private transient boolean wasInWater;
 
     public boolean ignite(int ticks) {
-        if (ticks <= 0 || level == null || !isAliveEntity(this) || isInWater() || isUnderWater()
-                || this instanceof net.classicremastered.minecraft.player.Player && level.creativeMode)
-            return false;
+        if (ticks <= 0
+                || level == null
+                || !isAliveEntity(this)
+                || isInWater()
+                || isUnderWater()
+                || this instanceof net.classicremastered.minecraft.player.Player player
+                        && (level.creativeMode || player.isSpectator())) return false;
         remainingFireTicks = Math.max(remainingFireTicks, ticks);
         return true;
     }
@@ -97,7 +101,11 @@ public abstract class Entity implements Serializable {
     }
 
     private void updateWaterContact(boolean inWater) {
-        if (inWater && waterContactKnown && !wasInWater) {
+        if (inWater
+                && waterContactKnown
+                && !wasInWater
+                && !(this instanceof net.classicremastered.minecraft.player.Player player
+                        && player.isSpectator())) {
             float speed = MathHelper.sqrt(xd * xd + yd * yd + zd * zd);
             level.playSound("liquid/splash", this, MathHelper.clamp(speed * .7f, .2f, 1f), 1f);
         }
@@ -412,7 +420,9 @@ public abstract class Entity implements Serializable {
                             || this instanceof net.classicremastered.minecraft.mob.Zombie undead
                                     && undead.isInWaterOrOnWater();
             updateWaterContact(inWater);
-            if (inWater) {
+            if (inWater
+                    || this instanceof net.classicremastered.minecraft.player.Player player
+                            && player.isSpectator()) {
                 extinguishFire();
                 fireDamageCooldown = 0;
             } else {

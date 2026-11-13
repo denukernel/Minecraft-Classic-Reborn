@@ -95,6 +95,7 @@ public final class Renderer {
 
     public void hurtEffect(float partial) {
         Player pl = this.minecraft.player;
+        if (pl.isSpectator()) return;
         float t = (float) pl.hurtTime - partial;
 
         // ===== Death tilt =====
@@ -104,7 +105,7 @@ public final class Renderer {
         }
 
         // ===== Hurt wobble effect =====
-        if (t >= 0.0F) {
+        if (t > 0.0F && pl.hurtDuration > 0) {
             t = MathHelper.sin((t /= (float) pl.hurtDuration) * t * t * t * (float) Math.PI);
             float dir = pl.hurtDir;
             GL11.glRotatef(-pl.hurtDir, 0.0F, 1.0F, 0.0F);
@@ -128,6 +129,7 @@ public final class Renderer {
 
     public void applyBobbing(float partial) {
         Player p = this.minecraft.player;
+        if (p.isSpectator()) return;
         float walk = p.walkDist - p.walkDistO;
         walk = p.walkDist + walk * partial;
         float bob = p.oBob + (p.bob - p.oBob) * partial;

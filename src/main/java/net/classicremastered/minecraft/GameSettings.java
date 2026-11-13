@@ -11,6 +11,9 @@ import java.util.Iterator;
 import javax.imageio.ImageIO;
 
 public final class GameSettings {
+    public static final int MOB_SHADOWS = 18;
+    public static final int PLAYER_SHADOWS = 19;
+
     public GameSettings(Minecraft minecraft, File minecraftFolder) {
         bindings =
                 new KeyBinding[] {
@@ -28,7 +31,7 @@ public final class GameSettings {
                     descendKey
                 };
 
-        settingCount = 18;
+        settingCount = 20;
 
         this.minecraft = minecraft;
 
@@ -79,6 +82,8 @@ public final class GameSettings {
     public volatile GraphicsMode graphicsMode = GraphicsMode.FANCY;
     public boolean fabulousUnavailable;
     public boolean threeDClouds = true;
+    public boolean mobShadows = true;
+    public boolean playerShadows = true;
 
     public enum ScreenshotType {
         NORMAL("Normal"),
@@ -274,12 +279,16 @@ public final class GameSettings {
 
         if (setting == 16) autoJump = !autoJump;
         if (setting == 17) parsecMode = !parsecMode;
+        if (setting == MOB_SHADOWS) mobShadows = !mobShadows;
+        if (setting == PLAYER_SHADOWS) playerShadows = !playerShadows;
         save();
     }
 
     public String getSetting(int id) {
         if (id == 16) return "Auto-Jump: " + (autoJump ? "ON" : "OFF");
         if (id == 17) return "Parsec Mode: " + (parsecMode ? "ON" : "OFF");
+        if (id == MOB_SHADOWS) return "Mob Shadows: " + (mobShadows ? "ON" : "OFF");
+        if (id == PLAYER_SHADOWS) return "Player Shadows: " + (playerShadows ? "ON" : "OFF");
         if (id == 14) return "3D clouds: " + (threeDClouds ? "ON" : "OFF");
         if (id == 15) {
             return "Graphics: "
@@ -406,6 +415,9 @@ public final class GameSettings {
                                         : ScreenshotType.NORMAL;
                     }
                     if (setting[0].equals("threeDClouds")) threeDClouds = setting[1].equals("true");
+                    if (setting[0].equals("mobShadows")) mobShadows = setting[1].equals("true");
+                    if (setting[0].equals("playerShadows"))
+                        playerShadows = setting[1].equals("true");
                     if (setting[0].equals("allowMobSounds")) {
                         allowMobSounds = setting[1].equals("true");
                     }
@@ -484,6 +496,8 @@ public final class GameSettings {
             writer.println("sound:" + sound);
             writer.println("allowMobSounds:" + allowMobSounds);
             writer.println("threeDClouds:" + threeDClouds);
+            writer.println("mobShadows:" + mobShadows);
+            writer.println("playerShadows:" + playerShadows);
             writer.println("graphicsMode:" + graphicsMode.name());
             writer.println("screenshotType:" + screenshotType.name());
             writer.println("invertYMouse:" + invertMouse);

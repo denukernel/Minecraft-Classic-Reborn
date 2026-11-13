@@ -142,6 +142,19 @@ public class CraftingManager {
                 Block.WOOD.id);
         addRecipe(new ItemStack(352, 1), "iti", " r ", 'i', iron, 't', baseTurret, 'r', redstone);
         addRecipe(new ItemStack(353, 1), "iai", " b ", 'i', iron, 'a', 316, 'b', 352);
+        addRecipe(
+                new ItemStack(
+                        net.classicremastered.minecraft.mob.TurretVariant.MACHINE_GUN.item + 256,
+                        1),
+                "iri",
+                "ibi",
+                "iri",
+                'i',
+                iron,
+                'r',
+                redstone,
+                'b',
+                net.classicremastered.minecraft.mob.TurretVariant.BULLET.item + 256);
         addRecipe(new ItemStack(354, 8), "ici", 'i', iron, 'c', Item.COAL_ID + 256);
         addRecipe(new ItemStack(321, 4), "ii", " s", 'i', iron, 's', Equipment.STICK.id + 256);
         addRecipe(new ItemStack(322, 4), "br", 'b', 304, 'r', redstone);

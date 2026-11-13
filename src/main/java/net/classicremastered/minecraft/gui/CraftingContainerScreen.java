@@ -1,22 +1,25 @@
 package net.classicremastered.minecraft.gui;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import net.classicremastered.minecraft.crafting.CraftingManager;
 import net.classicremastered.minecraft.crafting.Recipe;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.OreMaterials;
 import net.classicremastered.minecraft.player.Inventory;
 import net.classicremastered.minecraft.render.ShapeRenderer;
+
 import org.lwjgl.opengl.GL11;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 abstract class CraftingContainerScreen extends GuiScreen {
     protected static final int CRAFTING_PANEL_WIDTH = 176;
     protected static final int CRAFTING_PANEL_HEIGHT = 166;
     protected static final int CELL = 18;
+    protected static final int OUTSIDE_SLOT = -999;
     private static final int BOOK_WIDTH = 86;
     private static final int RECIPES_PER_PAGE = 24;
     private static final int PAGE_Y = 135;
@@ -37,7 +40,7 @@ abstract class CraftingContainerScreen extends GuiScreen {
         if (button != 0) return false;
         int source = dragSource;
         dragSource = -1;
-        return source >= 0 && target >= 0 && source != target;
+        return source >= 0 && (target >= 0 || target == OUTSIDE_SLOT) && source != target;
     }
 
     @Override

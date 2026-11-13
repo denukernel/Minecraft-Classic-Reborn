@@ -4,8 +4,8 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
-import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.GrapplingHookItem;
+import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.LadderBlock;
 import net.classicremastered.minecraft.mob.Mob;
@@ -267,29 +267,43 @@ public class Player extends Mob {
     }
 
     public void dropSelectedItem(boolean wholeStack) {
-        if (spectator || level == null || inventory == null)
-            return;
+        if (spectator || level == null || inventory == null) return;
 
         int id = inventory.getSelected();
         int available = inventory.getCount(inventory.selected);
         if (id <= 0 || available <= 0) return;
 
+        int count = wholeStack ? available : 1;
+        Entity dropped = createDroppedStack(id, count, inventory.crate(inventory.selected));
+        if (dropped != null && inventory.removeSelected(count)) level.addEntity(dropped);
+    }
+
+    public boolean dropStack(
+            int id, int count, net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
+        Entity dropped = createDroppedStack(id, count, crate);
+        if (dropped == null) return false;
+        level.addEntity(dropped);
+        return true;
+    }
+
+    private Entity createDroppedStack(
+            int id, int count, net.classicremastered.minecraft.level.itemstack.PackedTurret crate) {
+        if (spectator || level == null || id <= 0 || count <= 0) return null;
         Vec3D direction = aimDirection(1);
 
         // Player.y already includes eye height. Spawn inside the player's
         // footprint so the drop cannot start on the other side of a wall.
         float spawnY = y - .3f;
-        int count = wholeStack ? available : 1;
         Entity dropped;
         if (id >= 256) {
             int itemId = id - 256;
-            if (itemId >= Item.items.length || Item.items[itemId] == null) return;
+            if (itemId >= Item.items.length || Item.items[itemId] == null) return null;
             dropped =
                     new net.classicremastered.minecraft.entity.DroppedItem(
                                     level, x, spawnY, z, itemId, count)
-                            .withCrate(inventory.crate(inventory.selected));
+                            .withCrate(crate);
         } else {
-            if (Block.blocks[id] == null) return;
+            if (Block.blocks[id] == null) return null;
             dropped =
                     new net.classicremastered.minecraft.entity.DroppedBlock(
                             level, x, spawnY, z, id, count);
@@ -298,7 +312,7 @@ public class Player extends Mob {
         dropped.xd = direction.x * .3f;
         dropped.yd = direction.y * .3f + .1f;
         dropped.zd = direction.z * .3f;
-        if (inventory.removeSelected(count)) level.addEntity(dropped);
+        return dropped;
     }
 
     /**
@@ -356,9 +370,9 @@ public class Player extends Mob {
     }
 
     public void setSpectator(boolean spectator) {
-        if (this.spectator == spectator)
-            return;
+        if (this.spectator == spectator) return;
         this.spectator = spectator;
+        extinguishFire();
         this.noPhysics = spectator;
         this.xd = this.yd = this.zd = 0;
         this.fallDistance = 0;
@@ -367,10 +381,15 @@ public class Player extends Mob {
             unmount();
             setSneaking(false);
             developerPowers().cancelBlockAim();
-        } else if (level != null
-                && level.getCubes(bb).stream().anyMatch(box -> bb.intersects((AABB) box))) {
-            setPos(level.xSpawn + 0.5F, level.ySpawn, level.zSpawn + 0.5F);
         }
+        bob = oBob = 0;
+        tilt = oTilt = 0;
+        walkDistO = walkDist;
+        ySlideOffset = 0;
+        y = bb.y0 + heightOffset;
+        previousHeightOffset = heightOffset;
+        previousSneakProgress = sneakProgress = sneaking ? 1 : 0;
+        resetInterpolation();
     }
 
     @Override
@@ -389,7 +408,9 @@ public class Player extends Mob {
             autoJumpQueued = false;
             this.input.updateMovement();
             boolean controlsActive = minecraft != null && minecraft.currentScreen == null;
-            fly(controlsActive && this.input.jumping, controlsActive && controlHeld(),
+            fly(
+                    controlsActive && this.input.jumping,
+                    controlsActive && controlHeld(),
                     controlsActive && shiftHeld());
             return;
         }
@@ -621,12 +642,9 @@ public class Player extends Mob {
 
         // --- Vertical control (fixed) ---
         float vertSpeed = accel * 0.55F;
-        if (up && !down)
-            this.yd = lerp(this.yd, vertSpeed, 0.3F);
-        if (down && !up)
-            this.yd = lerp(this.yd, -vertSpeed, 0.3F);
-        if (!up && !down)
-            this.yd *= 0.6F; // hover
+        if (up && !down) this.yd = lerp(this.yd, vertSpeed, 0.3F);
+        if (down && !up) this.yd = lerp(this.yd, -vertSpeed, 0.3F);
+        if (!up && !down) this.yd *= 0.6F; // hover
 
         // --- Move ---
         this.move(this.xd, this.yd, this.zd);
@@ -683,8 +701,7 @@ public class Player extends Mob {
 
     @Override
     public void render(TextureManager var1, float var2) {
-        if (spectator)
-            return;
+        if (spectator) return;
         if (minecraft != null
                 && minecraft.player == this
                 && minecraft.renderer != null
