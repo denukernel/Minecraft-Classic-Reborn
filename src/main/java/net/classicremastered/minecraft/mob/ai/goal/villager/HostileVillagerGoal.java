@@ -46,9 +46,9 @@ public final class HostileVillagerGoal extends MobGoal<VillagerAI> {
             return;
         }
         net.classicremastered.minecraft.mob.Mob target =
-                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearestForPursuit(
                         ai.mob, 40, ai.attackTarget);
-        ai.attackTarget = target;
+        ai.setPursuitTarget(target);
         if (target != null
                 && target.health > 0
                 && !net.classicremastered.minecraft.util.CreativeModeHelper.shouldIgnoreTarget(

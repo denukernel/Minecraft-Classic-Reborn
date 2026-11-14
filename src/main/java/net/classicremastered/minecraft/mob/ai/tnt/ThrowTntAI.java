@@ -78,10 +78,11 @@ public class ThrowTntAI extends BasicAI {
 
     @Override
     public void tick(Level level, Mob mob) {
+        bind(level, mob);
         playerTarget =
-                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearestForPursuit(
                         mob, 32, playerTarget);
-        attackTarget = playerTarget;
+        setPursuitTarget(playerTarget);
         combatActive =
                 playerTarget != null
                         && playerTarget.health > 0
@@ -89,7 +90,10 @@ public class ThrowTntAI extends BasicAI {
                         && !net.classicremastered.minecraft.util.CreativeModeHelper
                                 .shouldIgnoreTarget(playerTarget);
         super.tick(level, mob);
-        if (!combatActive) return;
+        if (!combatActive) {
+            windup = 0;
+            return;
+        }
         if (revengeTicks > 0 && (revengeTarget == null || revengeTarget.removed)) {
             revengeTicks = 0;
             revengeTarget = null;

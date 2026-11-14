@@ -7,6 +7,8 @@ import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
 import net.classicremastered.minecraft.gui.*;
 import net.classicremastered.minecraft.lang.LanguageManager;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.LevelInfiniteFlat;
+import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.LevelIO;
 import net.classicremastered.minecraft.level.generator.LevelGenerator;
 import net.classicremastered.minecraft.level.itemstack.BowItem;
@@ -756,12 +758,14 @@ public final class Minecraft implements Runnable {
 
         loopError.printStackTrace();
 
+        String saveStatus = saveWorldAfterCrash();
         try {
             System.out.println("[Crash] Unhandled Exception Caught! Freezing the client...");
             File logs = new File(Minecraft.mcDir, "crash_log.txt");
             java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(logs, true));
             pw.println("---- Minecraft Classic Crash Report ----");
             pw.println(new java.util.Date());
+            if (saveStatus != null) pw.println(saveStatus);
             loopError.printStackTrace(pw);
             pw.println("----------------------------------------");
             pw.close();
@@ -776,7 +780,9 @@ public final class Minecraft implements Runnable {
         }
 
         try {
-            this.setCurrentScreen(new ErrorScreen("Client error", loopError));
+            ErrorScreen screen = new ErrorScreen("Client error", loopError);
+            screen.setCrashSaveStatus(saveStatus);
+            this.setCurrentScreen(screen);
         } catch (Throwable ignored) {
         }
 
@@ -801,6 +807,33 @@ public final class Minecraft implements Runnable {
             }
         } catch (Throwable ignored) {
         }
+    }
+
+    private String saveWorldAfterCrash() {
+        Level world = this.level;
+        if (world == null || isOnline() || online || world.isNetworkMode()) return null;
+
+        try {
+            try {
+                returnInventoryBeforeSave();
+            } catch (Throwable error) {
+                System.err.println("[Crash] Could not close the inventory before saving: " + error);
+            }
+            File destination = world.saveFile;
+            if (destination == null) {
+                File levels = new File(getMinecraftDir(), "levels");
+                String id = java.util.UUID.randomUUID().toString().substring(0, 8);
+                destination = new File(levels, "Recovered world " + id + ".lvl.gz");
+            }
+            if (levelIo.saveAfterCrash(world, destination)) {
+                String status = "World saved as " + destination.getName();
+                System.out.println("[Crash] " + status);
+                return status;
+            }
+        } catch (Throwable error) {
+            System.err.println("[Crash] Emergency world save failed: " + error);
+        }
+        return "Emergency world save failed.";
     }
 
     boolean wouldCollideWithMob(int x, int y, int z) {
@@ -1183,6 +1216,7 @@ public final class Minecraft implements Runnable {
             var1 = null;
         }
 
+        boolean changingWorld = this.level != var1;
         this.level = var1;
 
         if (var1 != null) {
@@ -1239,6 +1273,10 @@ public final class Minecraft implements Runnable {
         this.player.minecraft = this;
         this.player.input = new InputHandlerImpl(this.settings);
         this.gamemode.apply(this.player);
+
+        if (changingWorld && running && var1 != null && !isOnline() && !var1.isNetworkMode()) {
+            prepareInfiniteTerrain(var1);
+        }
 
         // --- LevelRenderer hard reset ---
         if (this.levelRenderer != null) {
@@ -1322,11 +1360,29 @@ public final class Minecraft implements Runnable {
     }
 
     public boolean saveCurrentLevel() {
-        if (level == null || isOnline() || level.isNetworkMode() || level.saveFile == null) {
+        if (crashLatched
+                || level == null
+                || isOnline()
+                || level.isNetworkMode()
+                || level.saveFile == null) {
             return true;
         }
         returnInventoryBeforeSave();
         return levelIo.save(level, level.saveFile);
+    }
+
+    private void prepareInfiniteTerrain(Level world) {
+        var chunks =
+                world instanceof LevelInfiniteTerrain terrain
+                        ? terrain.chunks()
+                        : world instanceof LevelInfiniteFlat flat ? flat.chunks() : null;
+        if (chunks == null) return;
+
+        progressBar.setTitle("Loading infinite terrain");
+        progressBar.setText("Preparing nearby chunks...");
+        int cx = (int) Math.floor(player.x) >> 4;
+        int cz = (int) Math.floor(player.z) >> 4;
+        chunks.prepareSpawnArea(cx, cz, progressBar::setProgress);
     }
 
     private void returnInventoryBeforeSave() {

@@ -28,17 +28,17 @@ public final class EndermanTargetGoal extends Goal {
     }
 
     @Override
-    public void start() {
-        tick();
-    }
-
-    @Override
     public void tick() {
         net.classicremastered.minecraft.mob.Mob player =
-                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearestForPursuit(
                         ai.mob, 64, ai.attackTarget);
         if (player == null) {
-            ai.clearTarget();
+            ai.setPursuitTarget(null);
+            ai.running = false;
+            ((Enderman) ai.mob).isAttacking = false;
+            ai.farFromTargetTicks = 0;
+            ai.navigation().clear();
+            if (!ai.hasPlayerSearch()) ai.clearTarget();
             return;
         }
         if (!ai.angry
@@ -48,7 +48,7 @@ public final class EndermanTargetGoal extends Goal {
             ai.angry = true;
             ai.navigation().clear();
         }
-        if (ai.angry) ai.attackTarget = player;
+        if (ai.angry) ai.setPursuitTarget(player);
         else ai.clearTarget();
     }
 

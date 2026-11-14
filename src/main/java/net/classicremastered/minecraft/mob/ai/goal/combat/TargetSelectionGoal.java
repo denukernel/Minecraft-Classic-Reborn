@@ -9,6 +9,7 @@ import net.classicremastered.minecraft.mob.Zombie;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.mob.ai.goal.MobGoal;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 import java.util.EnumSet;
@@ -25,12 +26,12 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
         if (ai.mob == null || ai.level == null) return;
         Mob battleTarget = net.classicremastered.minecraft.level.itemstack.MobBattle.target(ai.mob);
         if (battleTarget != null) {
-            ai.attackTarget = battleTarget;
+            ai.setPursuitTarget(battleTarget);
             return;
         }
         if (CombatRules.difficulty(ai.level)
                 == net.classicremastered.minecraft.Difficulty.PEACEFUL) {
-            ai.attackTarget = null;
+            ai.clearPlayerSearch();
             ai.retaliationTicks = 0;
             return;
         }
@@ -43,27 +44,32 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
         if (ai.mob instanceof Zombie && !(ai.mob instanceof Skeleton)) {
             selectZombieTarget();
         } else {
-            if (!ai.hasRetaliationTarget())
+            if (!canRetaliate())
                 ai.attackTarget =
-                        HostileTargets.nearest(ai.mob, ai.getSightRange(), ai.attackTarget);
+                        HostileTargets.nearestForPursuit(
+                                ai.mob, ai.getSightRange(), ai.attackTarget);
         }
-        if (ai.attackTarget == null) {
-            ai.running = false;
-            ai.runMultiplier = 1f;
-            return;
-        }
-        float dx = ai.attackTarget.x - ai.mob.x,
-                dy = ai.attackTarget.y - ai.mob.y,
-                dz = ai.attackTarget.z - ai.mob.z;
         float retain =
                 ai.mob instanceof net.classicremastered.minecraft.mob.Skeleton
                         ? ai.getSightRange()
                         : Math.max(ai.getSightRange(), 32);
-        if (dx * dx + dy * dy + dz * dz > retain * retain) {
+        if (ai.attackTarget != null && distanceSquared(ai.attackTarget) > retain * retain) {
             ai.attackTarget = null;
-            ai.running = false;
-            return;
         }
+        ai.setPursuitTarget(ai.attackTarget);
+        if (ai.attackTarget == null) {
+            ai.retaliationTicks = 0;
+            ai.running = false;
+            ai.runMultiplier = 1f;
+        }
+    }
+
+    private boolean canRetaliate() {
+        return ai.hasRetaliationTarget()
+                && (!(ai.attackTarget instanceof Player)
+                        || distanceSquared(ai.attackTarget)
+                                        <= ai.getSightRange() * ai.getSightRange()
+                                && HostileTargets.canLocate(ai.mob, ai.attackTarget));
     }
 
     private transient Entity progressTarget, stalledTarget;
@@ -86,20 +92,22 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
         if (retryTicks > 0 && --retryTicks == 0) stalledTarget = null;
         // Custom AI subclasses can stop to build, attack at range, or use abilities.
         if (ai.shouldRecoverStalledTargets()) releaseStalledTarget();
-        if (ai.hasRetaliationTarget()
+        if (canRetaliate()
                 && distanceSquared(ai.attackTarget) <= ai.getSightRange() * ai.getSightRange())
             return;
         ai.retaliationTicks = 0;
         float range = ai.getSightRange();
         if (HostileTargets.eligible(ai.attackTarget)
-                && distanceSquared(ai.attackTarget) <= range * range) return;
+                && distanceSquared(ai.attackTarget) <= range * range
+                && HostileTargets.canLocate(ai.mob, ai.attackTarget)) return;
         Entity player = ai.level.getPlayer();
         Entity nearestPlayer = null;
         float playerDistance = range * range;
         if (player != stalledTarget
                 && isAliveEntity(player)
                 && !CreativeModeHelper.shouldIgnoreTarget(player)
-                && distanceSquared(player) <= playerDistance) {
+                && distanceSquared(player) <= playerDistance
+                && HostileTargets.canLocate(ai.mob, player)) {
             nearestPlayer = player;
             playerDistance = distanceSquared(player);
         }
@@ -112,7 +120,7 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
             float distance = distanceSquared(candidate);
             if (HostileTargets.eligible(candidate)
                     && distance <= playerDistance
-                    && !CreativeModeHelper.shouldIgnoreTarget(candidate)) {
+                    && HostileTargets.canLocate(ai.mob, candidate)) {
                 nearestPlayer = candidate;
                 playerDistance = distance;
             } else if (candidate instanceof Villager && distance <= villagerDistance) {

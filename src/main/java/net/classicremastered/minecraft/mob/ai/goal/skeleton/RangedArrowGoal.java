@@ -26,10 +26,13 @@ public final class RangedArrowGoal extends MobGoal<SkeletonArrowAI> {
         Mob player =
                 battleTarget != null
                         ? battleTarget
-                        : net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
-                                ai.mob, 32, ai.attackTarget);
-        ai.attackTarget = player;
-        if (player == null || player.removed || player.health <= 0) return;
+                        : net.classicremastered.minecraft.mob.ai.combat.HostileTargets
+                                .nearestForPursuit(ai.mob, 32, ai.attackTarget);
+        ai.setPursuitTarget(player);
+        if (player == null || player.removed || player.health <= 0) {
+            ai.windup = 0;
+            return;
+        }
 
         // Face the player
         faceSmooth(ai.mob, player.x - ai.mob.x, player.z - ai.mob.z);

@@ -15,6 +15,7 @@ public final class ErrorScreen extends GuiScreen {
     private String title;
     private String text;
     private boolean screenshotTaken = false;
+    private String crashSaveStatus;
     private final String githubUrl =
             "https://github.com/denukernel/Minecraft-Classic-Reborn/issues";
     private GuiScreen parent;
@@ -56,6 +57,10 @@ public final class ErrorScreen extends GuiScreen {
 
     public boolean hasParent() {
         return this.parent != null;
+    }
+
+    public void setCrashSaveStatus(String status) {
+        crashSaveStatus = status;
     }
 
     public final void onOpen() {
@@ -157,6 +162,13 @@ public final class ErrorScreen extends GuiScreen {
             y += 10;
         }
 
+        if (crashSaveStatus != null) {
+            y += 4;
+            for (String line : wrapText(crashSaveStatus, 60)) {
+                drawCenteredString(this.fontRenderer, line, this.width / 2, y, 0xFFFFFF);
+                y += 10;
+            }
+        }
         y += 8;
         drawCenteredString(
                 this.fontRenderer,

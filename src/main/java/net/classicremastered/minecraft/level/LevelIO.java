@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import java.util.function.IntConsumer;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -41,15 +42,36 @@ public final class LevelIO {
     // SAVE
     // ----------------------------------------------------------------------
     public final boolean save(Level level, File file) {
+        return save(level, file, true);
+    }
+
+    public boolean saveAfterCrash(Level level, File file) {
+        return save(level, file, false);
+    }
+
+    private boolean save(Level level, File file, boolean showProgress) {
         Path tmp = null;
+        ProgressBarDisplay display = showProgress ? progressBar : null;
         try {
+            if (display != null) {
+                reportSaveProgress(
+                        () -> {
+                            display.setTitle("Saving level");
+                            display.setText("Writing world data...");
+                            display.setProgress(0);
+                        });
+            }
             Path destination = file.toPath().toAbsolutePath();
             Files.createDirectories(destination.getParent());
             tmp = Files.createTempFile(destination.getParent(), ".level-save-", ".tmp");
 
             try (OutputStream fos = Files.newOutputStream(tmp);
                     GZIPOutputStream gos = new GZIPOutputStream(fos);
-                    DataOutputStream out = new DataOutputStream(gos)) {
+                    DataOutputStream out =
+                            new DataOutputStream(
+                                    display == null
+                                            ? gos
+                                            : new SaveProgressStream(gos, level, display))) {
 
                 if (level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain) {
                     InfiniteLevelNbtCodec.save(level, out);
@@ -58,6 +80,13 @@ public final class LevelIO {
                 }
             }
 
+            if (display != null) {
+                reportSaveProgress(
+                        () -> {
+                            display.setText("Finalizing save...");
+                            display.setProgress(98);
+                        });
+            }
             synchronized (LevelIO.class) {
                 try {
                     Files.move(tmp, destination, StandardCopyOption.ATOMIC_MOVE,
@@ -67,11 +96,11 @@ public final class LevelIO {
                 }
                 level.saveFile = destination.toFile();
             }
+            if (display != null) reportSaveProgress(() -> display.setProgress(100));
             return true;
         } catch (Exception ex) {
             ex.printStackTrace();
-            if (progressBar != null)
-                progressBar.setText("Failed!");
+            if (display != null) reportSaveProgress(() -> display.setText("Save failed"));
             return false;
         } finally {
             if (tmp != null) {
@@ -81,6 +110,65 @@ public final class LevelIO {
                     ex.printStackTrace();
                 }
             }
+        }
+    }
+
+    private static void reportSaveProgress(Runnable update) {
+        try {
+            update.run();
+        } catch (net.classicremastered.minecraft.StopGameException
+                | RuntimeException
+                | LinkageError ignored) {
+            // Closing the game or losing the display must not interrupt a world save.
+        }
+    }
+
+    private static final class SaveProgressStream extends FilterOutputStream {
+        private final long terrainBytes;
+        private final ProgressBarDisplay display;
+        private long written;
+        private int previous;
+
+        SaveProgressStream(OutputStream out, Level level, ProgressBarDisplay display) {
+            super(out);
+            this.display = display;
+            int chunks =
+                    level instanceof LevelInfiniteTerrain terrain
+                            ? terrain.chunks().getAllChunks().size()
+                            : level instanceof LevelInfiniteFlat flat
+                                    ? flat.chunks().getAllChunks().size()
+                                    : 0;
+            terrainBytes =
+                    Math.max(
+                            1L,
+                            Math.max(
+                                    level.blocks == null ? 0 : level.blocks.length,
+                                    (long) chunks * level.depth * 256));
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            out.write(value);
+            advance(1);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            while (length > 0) {
+                int batch = Math.min(length, 64 * 1024);
+                out.write(bytes, offset, batch);
+                advance(batch);
+                offset += batch;
+                length -= batch;
+            }
+        }
+
+        private void advance(int bytes) {
+            written += bytes;
+            int percent = (int) (Math.min(terrainBytes, written) * 95 / terrainBytes);
+            if (percent == previous) return;
+            previous = percent;
+            reportSaveProgress(() -> display.setProgress(percent));
         }
     }
 
@@ -224,6 +312,21 @@ public final class LevelIO {
             progressBar.setTitle("Loading level");
             progressBar.setText("Reading..");
         }
+        IntConsumer chunkProgress =
+                progressBar == null
+                        ? progress -> {}
+                        : new IntConsumer() {
+                            private int previous = -1;
+
+                            @Override
+                            public void accept(int progress) {
+                                if (progress == previous) return;
+                                if (progress == 0)
+                                    progressBar.setText("Restoring infinite terrain...");
+                                progressBar.setProgress(progress);
+                                previous = progress;
+                            }
+                        };
 
         try (GZIPInputStream gis = new GZIPInputStream(inRaw);
              PushbackInputStream pbis = new PushbackInputStream(gis, 1);
@@ -240,7 +343,7 @@ public final class LevelIO {
                 if ("ClassicLevel".equals(name)) {
                     return ClassicLevelNbtCodec.load(root);
                 } else if ("InfiniteLevel".equals(name)) {
-                    return InfiniteLevelNbtCodec.load(root);
+                    return InfiniteLevelNbtCodec.load(root, chunkProgress);
                 } else {
                     throw new IOException("Unknown root tag name: " + name);
                 }
@@ -254,15 +357,16 @@ public final class LevelIO {
                     case VERSION_CLASSIC:
                         return loadClassic(in);
                     case VERSION_INFINITE:
-                        return loadInfiniteFlat(in);
-                    case VERSION_TERRAIN:      return loadInfiniteTerrain(in);
+                        return loadInfiniteFlat(in, chunkProgress);
+                    case VERSION_TERRAIN:
+                        return loadInfiniteTerrain(in, chunkProgress);
                     case VERSION_CLASSIC_NBT:  {
                         CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
                         return ClassicLevelNbtCodec.load(root);
                     }
                     case VERSION_INFINITE_NBT: {
                         CompoundTag root = net.classicremastered.nbt.NBTIO.read(in);
-                        return InfiniteLevelNbtCodec.load(root);
+                            return InfiniteLevelNbtCodec.load(root, chunkProgress);
                     }
                     default: throw new IOException("Unsupported version: " + ver);
                 }
@@ -282,7 +386,8 @@ public final class LevelIO {
         return L;
     }
 
-    private Level loadInfiniteFlat(DataInputStream in) throws IOException {
+    private Level loadInfiniteFlat(DataInputStream in, IntConsumer progress) throws IOException {
+        progress.accept(0);
         long seed = in.readLong();
         int depth = in.readInt();
         LevelInfiniteFlat inf = new LevelInfiniteFlat(seed, depth);
@@ -293,12 +398,15 @@ public final class LevelIO {
             byte[] blocks = new byte[depth * 16 * 16];
             in.readFully(blocks);
             inf.chunks().restoreChunk(key, blocks);
+            progress.accept((int) ((i + 1L) * 95 / n));
         }
         loadInfiniteMetadata(inf, in);
+        progress.accept(100);
         return inf;
     }
 
-    private Level loadInfiniteTerrain(DataInputStream in) throws IOException {
+    private Level loadInfiniteTerrain(DataInputStream in, IntConsumer progress) throws IOException {
+        progress.accept(0);
         long seed = in.readLong();
         int depth = in.readInt();
         LevelInfiniteTerrain inf = new LevelInfiniteTerrain(seed, depth);
@@ -311,6 +419,7 @@ public final class LevelIO {
             byte[] blocks = new byte[depth * 16 * 16];
             in.readFully(blocks);
             inf.chunks().restoreChunk(key, blocks);
+            progress.accept((int) ((i + 1L) * 95 / n));
         }
 
         // ✅ make sure BlockMap exists before adding entities
@@ -322,6 +431,7 @@ public final class LevelIO {
         }
 
         loadInfiniteMetadata(inf, in);
+        progress.accept(100);
         return inf;
     }
 

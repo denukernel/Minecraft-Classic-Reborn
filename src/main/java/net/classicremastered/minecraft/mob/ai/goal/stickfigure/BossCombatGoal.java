@@ -18,9 +18,9 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
     public void tick() {
         StickFigure boss = (StickFigure) ai.mob;
         if (CombatRules.difficulty(ai.level) == Difficulty.PEACEFUL) {
+            ai.clearPlayerSearch();
             ai.movement().cancel();
             ai.powers.cancel(boss);
-            ai.attackTarget = null;
             boss.strikeTicks = 0;
             ai.running = false;
             return;
@@ -60,7 +60,8 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
         }
         ai.defaultAttack();
         if (swimming) {
-            ai.specialMovement = ai.movement().chase(ai, boss, ai.attackTarget);
+            ai.specialMovement =
+                    ai.swimToLastSeenPlayer(boss) || ai.movement().chase(ai, boss, ai.attackTarget);
         } else if (boss.dodgeTicks > 0) {
             ai.xxa = ai.yya = ai.yRotA = 0;
             ai.jumping = false;

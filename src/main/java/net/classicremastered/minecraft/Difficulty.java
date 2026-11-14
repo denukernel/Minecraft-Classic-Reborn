@@ -1,47 +1,39 @@
 package net.classicremastered.minecraft;
 
 public enum Difficulty {
-    PEACEFUL,
-    EASY,
-    NORMAL,
-    HARD, VERY_HARD, EXTREME;
+    PEACEFUL("Peaceful"),
+    EASY("Easy"),
+    NORMAL("Normal"),
+    HARD("Hard"),
+    VERY_HARD("Very Hard"),
+    EXTREME("Extreme");
+
+    private static final Difficulty[] CYCLE = values();
+
+    private final String label;
+
+    Difficulty(String label) {
+        this.label = label;
+    }
 
     public String getLabel() {
-        switch (this) {
-            case PEACEFUL: return "Peaceful";
-            case EASY:     return "Easy";
-            case NORMAL:   return "Normal";
-            case HARD:     return "Hard";
-            case VERY_HARD:
-                return "Very Hard";
-            case EXTREME:
-                return "Extreme";
-            }
-        return "Unknown";
+        return label;
     }
 
     public static Difficulty fromString(String s, Difficulty fallback) {
         if (s == null) return fallback;
         try {
             return Difficulty.valueOf(
-                    s.trim().toUpperCase(java.util.Locale.ROOT).replace(' ', '_').replace('-', '_'));
+                    s.trim()
+                            .toUpperCase(java.util.Locale.ROOT)
+                            .replace(' ', '_')
+                            .replace('-', '_'));
         } catch (IllegalArgumentException ex) {
             return fallback;
         }
     }
 
     public Difficulty next() {
-        switch (this) {
-            case PEACEFUL: return EASY;
-            case EASY:     return NORMAL;
-            case NORMAL:   return HARD;
-            case HARD:
-                return VERY_HARD;
-            case VERY_HARD:
-                return EXTREME;
-            case EXTREME:
-                return PEACEFUL;
-            }
-        return NORMAL;
+        return CYCLE[(ordinal() + 1) % CYCLE.length];
     }
 }

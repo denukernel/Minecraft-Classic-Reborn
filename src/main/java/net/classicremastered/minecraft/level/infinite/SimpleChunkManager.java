@@ -187,6 +187,19 @@ public final class SimpleChunkManager {
         return c;
     }
 
+    public void prepareSpawnArea(int cx, int cz, java.util.function.IntConsumer progress) {
+        int radius = 2;
+        int total = (radius * 2 + 1) * (radius * 2 + 1);
+        int completed = 0;
+        progress.accept(0);
+        for (int dz = -radius; dz <= radius; dz++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                getOrCreate(cx + dx, cz + dz);
+                progress.accept(++completed * 100 / total);
+            }
+        }
+    }
+
     public Collection<SimpleChunk> getLoadedChunksAround(int cx, int cz, int radius) {
         List<SimpleChunk> out = new ArrayList<>();
         for (int dx = -radius; dx <= radius; dx++) {

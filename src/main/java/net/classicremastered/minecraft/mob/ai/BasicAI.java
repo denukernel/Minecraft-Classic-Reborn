@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft.mob.ai;
 
+import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
@@ -12,8 +14,10 @@ import net.classicremastered.minecraft.mob.ai.goal.movement.PlannedStrollGoal;
 import net.classicremastered.minecraft.mob.ai.goal.movement.RandomStrollGoal;
 import net.classicremastered.minecraft.mob.ai.movement.CrowdMotion;
 import net.classicremastered.minecraft.mob.ai.movement.GroundWander;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.path.PathNavigator;
 import net.classicremastered.minecraft.path.Pathfinder;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 import java.util.List;
@@ -22,6 +26,7 @@ import java.util.Random;
 public class BasicAI extends AI {
 
     public static final long serialVersionUID = 0L;
+    private static final int PLAYER_SEARCH_TICKS = 60;
     public Random random = new Random();
     public float xxa;
     public float yya;
@@ -33,6 +38,9 @@ public class BasicAI extends AI {
     public float runSpeed = 0.7F;
     public int noActionTime = 0;
     public Entity attackTarget = null;
+    private transient Player lastSeenPlayer;
+    private transient Vec3D lastSeenPosition;
+    private transient int lastSeenTick;
     public boolean running = false;
     public boolean suppressRandomJump = false;
     public float walkSpeed = 0.10f; // ground
@@ -79,7 +87,8 @@ public class BasicAI extends AI {
         ++this.noActionTime;
         if (CreativeModeHelper.shouldIgnoreTarget(this.attackTarget)) {
             if (selector != null) stopAllGoals();
-            this.attackTarget = null;
+            clearPlayerSearch();
+            holdPosition(mob.yRot);
             return;
         }
         this.level = level;
@@ -115,6 +124,7 @@ public class BasicAI extends AI {
             } else if (selector != null) {
                 selector.stopAll();
             }
+            if (lastSeenPlayer != null && !hasPlayerSearch()) forgetPlayer();
             if (shoreAirborne()) steeredThisTick = true;
             if (!steeredThisTick && navigationAllowed() && !mob.isInWater() && !mob.isInLava()) {
                 if (attackTarget != null && !attackTarget.removed) {
@@ -125,6 +135,22 @@ public class BasicAI extends AI {
                             attackTarget.bb.y0,
                             attackTarget.z,
                             runSpeed * (running ? Math.min(1.4f, runMultiplier) : 1f));
+                } else if (isSearchingForPlayer()) {
+                    mob.yRot = previousYaw;
+                    Vec3D destination = lastSeenPosition;
+                    if (Math.hypot(mob.x - destination.x, mob.z - destination.z) < .75f
+                            && Math.abs(mob.bb.y0 - destination.y) < 1) {
+                        holdPosition(previousYaw);
+                    } else if (mob instanceof net.classicremastered.minecraft.mob.StickFigure
+                            && level.isWater(
+                                    (int) Math.floor(destination.x),
+                                    (int) Math.floor(destination.y),
+                                    (int) Math.floor(destination.z))) {
+                        navigateToWater(
+                                destination.x, destination.y, destination.z, runSpeed * .75f);
+                    } else {
+                        navigateTo(destination.x, destination.y, destination.z, runSpeed * .75f);
+                    }
                 } else if (usesPlannedWandering()) {
                     if (wander == null || wander.level != level)
                         wander = new GroundWander(level, random);
@@ -669,6 +695,50 @@ public class BasicAI extends AI {
         getNavigator().clearGoal();
         ladderStep = null;
         routeDriven = false;
+    }
+
+    public final void setPursuitTarget(Entity target) {
+        if (target == null && lastSeenTick == mob.tickCount - 1 && hasPlayerSearch()) {
+            clearNavigation();
+        }
+        attackTarget = target;
+        if (target instanceof Player player) {
+            lastSeenPlayer = player;
+            lastSeenPosition = new Vec3D(player.x, player.bb.y0, player.z);
+            lastSeenTick = mob.tickCount;
+        } else if (target != null) {
+            forgetPlayer();
+        }
+    }
+
+    public final boolean hasPlayerSearch() {
+        return lastSeenPlayer != null
+                && lastSeenPlayer.level == level
+                && !lastSeenPlayer.removed
+                && lastSeenPlayer.health > 0
+                && !CreativeModeHelper.shouldIgnoreTarget(lastSeenPlayer)
+                && mob.tickCount - lastSeenTick <= PLAYER_SEARCH_TICKS
+                && CombatRules.difficulty(level) != Difficulty.PEACEFUL;
+    }
+
+    public final boolean isSearchingForPlayer() {
+        return attackTarget == null && hasPlayerSearch();
+    }
+
+    protected final Vec3D lastSeenPlayerPosition() {
+        return lastSeenPosition;
+    }
+
+    public final void clearPlayerSearch() {
+        attackTarget = null;
+        forgetPlayer();
+    }
+
+    private void forgetPlayer() {
+        if (lastSeenPlayer == null) return;
+        lastSeenPlayer = null;
+        lastSeenPosition = null;
+        clearNavigation();
     }
 
     private static float climbDelta(float value) {

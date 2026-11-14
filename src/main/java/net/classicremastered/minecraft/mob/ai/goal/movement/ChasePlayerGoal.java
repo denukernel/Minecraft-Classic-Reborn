@@ -13,9 +13,9 @@ public final class ChasePlayerGoal extends MobGoal<PathChaseAI> {
     @Override
     public void tick() {
         net.classicremastered.minecraft.mob.Mob target =
-                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
+                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearestForPursuit(
                         ai.mob, ai.chaseRange, ai.attackTarget);
-        ai.attackTarget = target;
+        ai.setPursuitTarget(target);
         if (target == null
                 || target.removed
                 || target.health <= 0

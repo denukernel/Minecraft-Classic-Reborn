@@ -44,7 +44,7 @@ public void setProgress(int pct) {
     if (!glReady()) return;
 
     long now = System.currentTimeMillis();
-    if (now - this.start >= 0L && now - this.start < 20L) return;
+        if (pct != 0 && pct != 100 && now - this.start >= 0L && now - this.start < 20L) return;
     this.start = now;
 
         final int w = minecraft.guiWidth();
@@ -131,8 +131,12 @@ public void setProgress(int pct) {
     // ---------- helpers ----------
 
     private boolean glReady() {
-        // We consider GL ready only when a context is created and not destroyed
-        return Display.isCreated();
+        if (!Display.isCreated()) return false;
+        try {
+            return Display.isCurrent();
+        } catch (org.lwjgl.LWJGLException ex) {
+            return false;
+        }
     }
 
     private void setupOrtho() {

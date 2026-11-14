@@ -76,13 +76,26 @@ public final class StickFigureAI extends BasicAttackAI {
 
     @Override
     protected void doAttack() {
+        var previousTarget = attackTarget;
+        selectCombatTarget();
+        if (previousTarget != null && attackTarget == null) {
+            var boss = (StickFigure) mob;
+            powers.cancel(boss);
+            movement().cancel();
+        }
         if (combatGoals == null)
             combatGoals = createGoalSelector(new BossCombatGoal(this));
         combatGoals.tick();
     }
 
     public void defaultAttack() {
-        super.doAttack();
+        tickMeleeGoal();
+    }
+
+    public boolean swimToLastSeenPlayer(StickFigure boss) {
+        if (!isSearchingForPlayer()) return false;
+        movement().swimToLastSeenPlayer(this, boss, lastSeenPlayerPosition());
+        return true;
     }
 
     public void combatSound(String sound, float volume, float pitch) {

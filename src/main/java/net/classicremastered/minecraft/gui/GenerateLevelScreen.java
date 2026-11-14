@@ -150,6 +150,9 @@ public final class GenerateLevelScreen extends GuiScreen {
             int size = 128 << sizeIndex;
             Level level;
             if (infinite) {
+                this.minecraft.progressBar.setTitle("Loading infinite terrain");
+                this.minecraft.progressBar.setText("Finding spawn...");
+                this.minecraft.progressBar.setProgress(0);
                 level =
                         flat && !biomes
                                 ? new LevelInfiniteFlat(seed, 64)
@@ -201,7 +204,10 @@ public final class GenerateLevelScreen extends GuiScreen {
         this.minecraft.gamemode.prepareLevel(level);
         this.minecraft.gamemode.apply(level);
 
-        if (receiver != null) receiver.onGenerated(level);
+        if (receiver != null) {
+            receiver.onGenerated(level);
+            return;
+        }
 
         this.minecraft.setLevel(level);
         this.minecraft.setCurrentScreen(null);

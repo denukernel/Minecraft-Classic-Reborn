@@ -87,8 +87,19 @@ public final class StickFigureMovement {
                 return false;
             }
         }
+        int waterBelowTarget = target == null ? -1 : (int) Math.floor(target.bb.y0) - 1;
+        boolean targetAboveWater =
+                target != null
+                        && !target.onGround
+                        && boss.level.isWater(
+                                (int) Math.floor(target.x),
+                                waterBelowTarget,
+                                (int) Math.floor(target.z));
         boolean targetInWater =
-                target != null && (target.touchesWaterSurface() || target.isUnderWater());
+                target != null
+                        && (targetAboveWater
+                                || target.touchesWaterSurface()
+                                || target.isUnderWater());
         if (target != chaseTarget || inWater != swimming || targetInWater != chasingSwimmer) {
             ai.clearNavigation();
             if (!isLeaping()) cancel();
@@ -124,7 +135,8 @@ public final class StickFigureMovement {
         if (inWater) return swim(ai, boss, target, targetInWater);
         if (target == null) return false;
         if (targetInWater) {
-            ai.navigateToWater(target.x, target.bb.y0, target.z, ai.runSpeed);
+            float goalFeet = targetAboveWater ? waterBelowTarget + .5f : target.bb.y0;
+            ai.navigateToWater(target.x, goalFeet, target.z, ai.runSpeed);
             return true;
         }
         float distance = (float) Math.hypot(target.x - boss.x, target.z - boss.z);
@@ -141,8 +153,8 @@ public final class StickFigureMovement {
             steer(ai, boss, x, z, distance < 2 ? .35f : 1f);
             return true;
         }
-        ai.navigateTo(target.x, target.bb.y0, target.z, ai.runSpeed * .75f);
-        if (ai.hasActiveRoute() || waterDetour) {
+        ai.navigateToWater(target.x, target.bb.y0, target.z, ai.runSpeed * .75f);
+        if (ai.hasActiveRoute()) {
             noRouteTicks = 0;
             return false;
         }
@@ -159,6 +171,15 @@ public final class StickFigureMovement {
             shoreTarget = target;
             shoreRepath = 32;
             shorePath = ShoreNavigator.find(boss.level, boss, target, blockedExit);
+            if (target != null && !shorePath.isEmpty()) {
+                ShoreNavigator.Step exit = shorePath.get(shorePath.size() - 1);
+                double distance = Math.hypot(target.x - boss.x, target.z - boss.z);
+                // Keep crossing if the available exit would send us back to the departure bank.
+                if (distance > 8
+                        && Math.hypot(target.x - exit.x(), target.z - exit.z()) >= distance) {
+                    shorePath = List.of();
+                }
+            }
             if (shorePath.isEmpty()) blockedExit = null;
             shoreIndex = 0;
         }
@@ -182,6 +203,21 @@ public final class StickFigureMovement {
                 bankExit = null;
             }
         }
+        return steerInWater(ai, boss, x, z, targetInWater ? target.bb.y0 : null, nearBank);
+    }
+
+    void swimToLastSeenPlayer(StickFigureAI ai, StickFigure boss, Vec3D position) {
+        steerInWater(ai, boss, position.x, position.z, position.y, false);
+    }
+
+    private boolean steerInWater(
+            StickFigureAI ai,
+            StickFigure boss,
+            float x,
+            float z,
+            Float targetFeet,
+            boolean nearBank) {
+        boolean targetInWater = targetFeet != null;
         boolean reachedTarget = shorePath.isEmpty() && Math.hypot(x - boss.x, z - boss.z) < 1.1f;
         steer(ai, boss, x, z, reachedTarget ? 0 : targetInWater ? 1f : .8f);
         ai.jumping = false;
@@ -197,7 +233,7 @@ public final class StickFigureMovement {
         if (!targetInWater && !shorePath.isEmpty() && !nearBank) {
             feet = Math.max(feet, shorePath.get(shoreIndex).feetY());
         }
-        if (targetInWater) feet = Math.min(waterY - .55f, target.bb.y0);
+        if (targetInWater) feet = Math.min(waterY - .55f, targetFeet);
         boss.yd = Math.max(-.15f, Math.min(.19f, (feet - boss.bb.y0) * .18f));
         return true;
     }

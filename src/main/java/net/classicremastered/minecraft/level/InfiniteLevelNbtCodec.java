@@ -7,6 +7,7 @@ import net.classicremastered.nbt.*;
 
 import java.io.*;
 import java.util.Map;
+import java.util.function.IntConsumer;
 
 /** Reads and writes infinite terrain and flat world NBT data. */
 final class InfiniteLevelNbtCodec {
@@ -102,7 +103,8 @@ final class InfiniteLevelNbtCodec {
         net.classicremastered.nbt.NBTIO.write(root, out);
     }
 
-    static Level load(CompoundTag root) throws IOException {
+    static Level load(CompoundTag root, IntConsumer progress) throws IOException {
+        progress.accept(0);
         String type = root.getString("TerrainType");
         long seed = root.getLong("Seed");
         int depth = root.getInt("Depth");
@@ -160,6 +162,7 @@ final class InfiniteLevelNbtCodec {
                 if (chunkTag.hasKey("Loaded"))
                     chunkMgr.tryGet((int) (key >> 32), (int) key).loaded =
                             chunkTag.getBoolean("Loaded");
+                progress.accept((int) ((i + 1L) * 95 / chunks.size()));
             }
         }
 
@@ -220,6 +223,7 @@ final class InfiniteLevelNbtCodec {
         level.updateDayNightColorsSmooth();
 
         net.classicremastered.minecraft.level.structure.CobblestoneTower.load(level, root);
+        progress.accept(100);
         return level;
     }
 }

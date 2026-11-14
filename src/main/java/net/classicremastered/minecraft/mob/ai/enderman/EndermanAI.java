@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft.mob.ai.enderman;
 
+import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
@@ -42,12 +44,6 @@ public final class EndermanAI extends BasicAI {
         super.update();
         if (teleportCooldown > 0) teleportCooldown--;
         if (sunTeleportCooldown > 0) sunTeleportCooldown--;
-        if (!hasPlayer()) {
-            goalSelector().stopAll();
-            clearTarget();
-        } else if (!canTargetPlayer() && angry) {
-            clearTarget();
-        }
     }
 
     public boolean hasPlayer() {
@@ -59,13 +55,16 @@ public final class EndermanAI extends BasicAI {
     }
 
     public boolean canTargetPlayer() {
-        return hasPlayer();
+        return mob instanceof Enderman
+                && level != null
+                && mob.health > 0
+                && CombatRules.difficulty(level) != Difficulty.PEACEFUL;
     }
 
     public void clearTarget() {
         angry = false;
         farFromTargetTicks = 0;
-        attackTarget = null;
+        clearPlayerSearch();
         if (mob instanceof Enderman) ((Enderman) mob).isAttacking = false;
         running = false;
         if (navigation != null) navigation.clear();

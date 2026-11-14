@@ -10,7 +10,6 @@ import net.classicremastered.minecraft.mob.ai.goal.combat.HostileMeleeGoal;
 import net.classicremastered.minecraft.mob.ai.goal.combat.HostileThreats;
 import net.classicremastered.minecraft.mob.ai.goal.combat.MeleeAttackGoal;
 import net.classicremastered.minecraft.mob.ai.goal.combat.TargetSelectionGoal;
-import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 /** Target acquisition and melee combat; shared BasicAI navigation owns route steering. */
@@ -75,6 +74,7 @@ public class BasicAttackAI extends BasicAI {
     public int retaliationTicks;
     private transient GoalSelector combatGoals;
     private transient MeleeAttackGoal melee;
+    private transient TargetSelectionGoal targetSelection;
 
     public final boolean hasRetaliationTarget() {
         return retaliationTicks > 0
@@ -116,10 +116,19 @@ public class BasicAttackAI extends BasicAI {
 
     /** Runs the common targeting and melee goals after optional avoidance. */
     public final void tickCombatGoals() {
+        selectCombatTarget();
+        tickMeleeGoal();
+    }
+
+    protected final void selectCombatTarget() {
+        if (targetSelection == null) targetSelection = new TargetSelectionGoal(this);
+        targetSelection.tick();
+    }
+
+    protected final void tickMeleeGoal() {
         if (combatGoals == null) {
             melee = createMeleeGoal();
-            combatGoals = createGoalSelector(new TargetSelectionGoal(this), melee);
-            // Target selection and movement occupy independent controls.
+            combatGoals = createGoalSelector(melee);
             melee.setFlags(
                     java.util.EnumSet.of(
                             net.classicremastered.minecraft.mob.ai.goal.Goal.Flag.MOVE,
@@ -172,13 +181,6 @@ public class BasicAttackAI extends BasicAI {
     }
 
     public boolean hasLineOfSight(Entity from, Entity to) {
-        if (from == null || to == null || level == null) return false;
-        float fromFeetY = from.bb != null ? from.bb.y0 : from.y - from.heightOffset;
-        float toFeetY = to.bb != null ? to.bb.y0 : to.y - to.heightOffset;
-        float fromEyeY = fromFeetY + (from.bbHeight > 0 ? from.bbHeight * 0.85f : 0.9f);
-        float toMidY = toFeetY + (to.bbHeight > 0 ? to.bbHeight * 0.50f : 0.5f);
-        Vec3D a = new Vec3D(from.x, fromEyeY, from.z);
-        Vec3D b = new Vec3D(to.x, toMidY, to.z);
-        return level.clip(a, b) == null;
+        return HostileTargets.hasLineOfSight(from, to);
     }
 }
