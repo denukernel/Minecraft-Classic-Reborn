@@ -38,6 +38,14 @@ playinus is the sole creator of `FakePlayerClone`, a humanoid that deals light m
 
 sources [`FakePlayerClone.java`](../src/main/java/net/classicremastered/minecraft/mob/FakePlayerClone.java), [`PlayinusBoss.java`](../src/main/java/net/classicremastered/minecraft/mob/PlayinusBoss.java), [`IllusionClone.java`](../src/main/java/net/classicremastered/minecraft/mob/IllusionClone.java), and [`IllusionumBoss.java`](../src/main/java/net/classicremastered/minecraft/mob/IllusionumBoss.java)
 
+### mobs blocked by summon
+
+`/summon` explicitly rejects `bot` and `playerclone`. of the rejected names, `PlayerClone` is the only registered mob. its registry entry creates a `Bot`, and the item registry creates a player clone spawn egg that can spawn the default follow bot in a local world. `/bot spawn` also creates bots.
+
+the guard also rejects `entity`, `mob`, `human`, `humanoid`, `humanoidmob`, `quadrupedmob`, and `player`. those names have no built-in mob registry entries. minetrum, playinus, illusionum, and their clones fail the registry lookup and are reported as unknown by `/summon`.
+
+sources [`SpawnMobCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/SpawnMobCommand.java), [`MobRegistry.java`](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java), [`ItemRegistry.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemRegistry.java), [`ItemSpawnEgg.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemSpawnEgg.java), [`Bot.java`](../src/main/java/net/classicremastered/minecraft/bot/Bot.java), [`BotCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/BotCommand.java)
+
 ## hidden blocks and inventory forms
 
 ### fire stack
