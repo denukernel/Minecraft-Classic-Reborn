@@ -1,6 +1,6 @@
 # minecraft classic reborn unused features
 
-the minecraft classic reborn source contains a throwable zombie bomb, three zombie bosses, a slime model, and several screens and ai routines with no active entry point in the current checkout. the entries below describe what survives in the code. availability in older builds is unverified.
+the minecraft classic reborn source contains unused mobs, item definitions, models, screens, and ai routines. some active world blocks also have inventory forms that are hidden from creative or blocked by `/give`. availability in older builds is unverified.
 
 ## mobs and projectiles
 
@@ -31,6 +31,64 @@ sources [`mob/IllusionumBoss.java`](../src/main/java/net/classicremastered/minec
 all three bosses have checks in the developer power renderer. the mob registry has no entries for them, and the current game source has no calls to their constructors.
 
 sources [`mob/MobRegistry.java`](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java) and [`render/DeveloperPowerRenderer.java`](../src/main/java/net/classicremastered/minecraft/render/DeveloperPowerRenderer.java)
+
+### boss clones
+
+playinus is the sole creator of `FakePlayerClone`, a humanoid that deals light melee damage and despawns after 200 ticks. illusionum is the sole creator of `IllusionClone`, a drifting zombie decoy that expires after 120 ticks. neither clone has its own mob registry entry. their built-in spawn paths depend on the unused bosses.
+
+sources [`FakePlayerClone.java`](../src/main/java/net/classicremastered/minecraft/mob/FakePlayerClone.java), [`PlayinusBoss.java`](../src/main/java/net/classicremastered/minecraft/mob/PlayinusBoss.java), [`IllusionClone.java`](../src/main/java/net/classicremastered/minecraft/mob/IllusionClone.java), and [`IllusionumBoss.java`](../src/main/java/net/classicremastered/minecraft/mob/IllusionumBoss.java)
+
+## hidden blocks and inventory forms
+
+### fire stack
+
+fire exists in the world as block id `50`. it drops no items, the creative catalog and pick block omit it, and `/give 50` is explicitly rejected. flint and steel creates fire directly in the world. an nbt editor can put a fire stack in a local save because the inventory loader accepts a positive count with raw id `50`.
+
+sources [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java), [`FireBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/FireBlock.java), [`GiveCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/GiveCommand.java), [`CreativeInventoryBlocks.java`](../src/main/java/net/classicremastered/minecraft/CreativeInventoryBlocks.java), [`InputManager.java`](../src/main/java/net/classicremastered/minecraft/InputManager.java), [`PlayerNbtCodec.java`](../src/main/java/net/classicremastered/minecraft/level/PlayerNbtCodec.java), and [`Inventory.java`](../src/main/java/net/classicremastered/minecraft/player/Inventory.java)
+
+### liquid block stacks
+
+the same `/give` guard rejects flowing water (`8`) and flowing lava (`10`). the still water (`9`) and still lava (`11`) stacks are also absent from the creative catalog, but the command accepts their numeric ids. buckets place liquids directly in the world.
+
+sources [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java), [`GiveCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/GiveCommand.java), [`CreativeInventoryBlocks.java`](../src/main/java/net/classicremastered/minecraft/CreativeInventoryBlocks.java), and [`BucketItem.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/BucketItem.java)
+
+### redstone and slab states
+
+the creative catalog skips the lit redstone lamp (`73`), piston head (`75`), and double slab (`43`). the game creates these blocks when a lamp is powered, a piston extends, or two slabs merge. all three ids pass the numeric `/give` check.
+
+sources [`CreativeInventoryBlocks.java`](../src/main/java/net/classicremastered/minecraft/CreativeInventoryBlocks.java), [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java), [`RedstoneEngine.java`](../src/main/java/net/classicremastered/minecraft/level/RedstoneEngine.java), [`SlabBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/SlabBlock.java), and [`GiveCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/GiveCommand.java)
+
+### portal block
+
+the portal (`227`) is absent from the creative catalog and can be obtained through `/give 227`. it has a purple tint and no collision box. the player code checks for the portal and teleports the player to the current world spawn when they enter it.
+
+sources [`CreativeInventoryBlocks.java`](../src/main/java/net/classicremastered/minecraft/CreativeInventoryBlocks.java), [`BlockPortal.java`](../src/main/java/net/classicremastered/minecraft/level/tile/BlockPortal.java), [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java), and [`Player.java`](../src/main/java/net/classicremastered/minecraft/player/Player.java)
+
+### jukebox interaction
+
+the jukebox (`212`) is available in creative. it is registered as a plain block, with no jukebox interaction or record playback wired to it.
+
+sources [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java) and [`BlockSelectScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/BlockSelectScreen.java)
+
+## unused item definitions and icons
+
+### original sword
+
+the item registry constructs a generic `SwordItem` at item id `2`. equipment registration replaces the entry at the same id with the iron sword. `/give 258` therefore gives the iron sword. the original sword texture remains in the resources.
+
+sources [`SwordItem.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/SwordItem.java), [`ItemRegistry.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemRegistry.java), [`Equipment.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/Equipment.java), and [`sword.png`](../src/main/resources/items/sword.png)
+
+### block icon entries
+
+the lever, torch, redstone torch, repeater, comparator, and ladder have separate item entries for displaying their icons. the creative catalog hides those entries, while `/give` accepts their raw item ids (`302` for the lever and `330` through `334` for the others). the icon entries do not place blocks when used as inventory stacks.
+
+sources [`Item.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/Item.java), [`ItemRegistry.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemRegistry.java), [`BlockSelectScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/BlockSelectScreen.java), [`GiveCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/GiveCommand.java), and [`InputManager.java`](../src/main/java/net/classicremastered/minecraft/InputManager.java)
+
+### leftover item textures
+
+`physics_test.png` and `egg_null.png` remain in the item resources with no references in the built-in item code. the physics gun uses `physics_gun.png`, and the spawn egg texture lookup uses `unknown.png` as its fallback.
+
+sources [`physics_test.png`](../src/main/resources/items/physics_test.png), [`egg_null.png`](../src/main/resources/items/egg_null.png), [`PhysicsGunItem.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/PhysicsGunItem.java), and [`MobEggColors.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/MobEggColors.java)
 
 ## models and textures
 
