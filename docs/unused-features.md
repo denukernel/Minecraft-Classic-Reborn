@@ -46,6 +46,24 @@ an alternate skeleton model, `NewSkeletonModel`, is present in the source. the m
 
 sources [`model/NewSkeletonModel.java`](../src/main/java/net/classicremastered/minecraft/model/NewSkeletonModel.java) and [`model/ModelManager.java`](../src/main/java/net/classicremastered/minecraft/model/ModelManager.java)
 
+### agent
+
+the unused agent model duplicates the basic body design of ironmock, a registered mob. both models use the same proportions for the head, torso, arms, and legs. ironmock uses its own texture, renders at 1.5 times scale, and adds a two-arm attack animation. the model manager exposes the unused variant under the `agent` key, and no built-in mob uses that key.
+
+sources [`model/AgentModel.java`](../src/main/java/net/classicremastered/minecraft/model/AgentModel.java), [`model/IronmockModel.java`](../src/main/java/net/classicremastered/minecraft/model/IronmockModel.java), [`mob/Ironmock.java`](../src/main/java/net/classicremastered/minecraft/mob/Ironmock.java), [`model/ModelManager.java`](../src/main/java/net/classicremastered/minecraft/model/ModelManager.java), and [`mob/agent.png`](../src/main/resources/mob/agent.png)
+
+### cube item model
+
+`ItemModel` builds a small cube by mapping the same texture atlas tile onto all six faces. no current game code creates an instance of this model.
+
+source [`entity/ItemModel.java`](../src/main/java/net/classicremastered/minecraft/entity/ItemModel.java)
+
+### obj and collada mesh rendering
+
+the source includes readers for wavefront obj and collada dae files. both produce mesh data that `MeshModel` can draw as textured triangles. the built-in model and entity setup does not use either reader or instantiate that renderer.
+
+sources [`model/ObjMesh.java`](../src/main/java/net/classicremastered/minecraft/model/ObjMesh.java), [`model/DaeMesh.java`](../src/main/java/net/classicremastered/minecraft/model/DaeMesh.java), and [`model/MeshModel.java`](../src/main/java/net/classicremastered/minecraft/model/MeshModel.java)
+
 ## interface screens
 
 ### recipe guide
@@ -67,3 +85,15 @@ sources [`gui/SaveLevelScreen.java`](../src/main/java/net/classicremastered/mine
 - **pit finder.** an uncalled helper searches for ledges with a solid landing below and returns a point just past the edge. source [`mob/HazardFinder.java`](../src/main/java/net/classicremastered/minecraft/mob/HazardFinder.java).
 
 - **player steering.** an uncalled helper turns and nudges the player toward a target point. source [`mob/MindControl.java`](../src/main/java/net/classicremastered/minecraft/mob/MindControl.java).
+
+## mod events
+
+the built-in client tick hook calls the mod loader, while its line for posting `TickEvent.Client` to the event bus is commented out. the hook class also defines methods that post chat send and world render events, with no calls from the built-in game code.
+
+sources [`Hooks.java`](../src/main/java/com/mcraft/api/hooks/Hooks.java), [`TickEvent.java`](../src/main/java/com/mcraft/api/event/events/TickEvent.java), and [`Minecraft.java`](../src/main/java/net/classicremastered/minecraft/Minecraft.java)
+
+## online level saving
+
+`LevelIO` still has a `saveOnline` method with parameters for a host, account, level name, and slot id. the method has no callers and only prints a diagnostic message. local world saving is handled through the world selection screen.
+
+sources [`level/LevelIO.java`](../src/main/java/net/classicremastered/minecraft/level/LevelIO.java) and [`gui/SelectLevelScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/SelectLevelScreen.java)
