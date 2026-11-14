@@ -11,7 +11,11 @@ the 2019 minecraft classic 0.34 project experimented with survival, creative, cr
 | 2022 | the remastered repository preserves an august source snapshot. the readme describes an extension of classic 0.30 with a title screen, new items, blocks, and mobs. [2022 readme](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/README.md), [2022 source history](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/commits/main/). |
 | 2026 | classic reborn provides finite and infinite terrain, creative and survival inventories, and a day and night cycle. the comparison below uses the current mod source. [classic reborn readme](../README.md). |
 
-the 2019 findings use the archived wiki, commit dates, and static inspection of five jars. the 2022 findings refer to source. an archived class, texture, or button confirms what was present in the files. its call sites determine whether it had an entry point.
+the 2019 findings use the archived wiki, commit dates, class inventories from all ten jars in the archived tree, and targeted bytecode inspection of the latest `0.34pre2.jar`. the 2022 findings refer to source. an archived class, texture, or button confirms what was present in the files. its call sites determine whether it had an entry point.
+
+### minecraft classic coder pack
+
+the archive contains four source snapshots in `for0.32`, `for0.32_5`, `for0.33`, and `for0.33_04`. these include the old block table, mob code, and cheat screens. the boss and demonic spawn actions below were checked against the later `0.34pre2.jar`. [minecraft classic coder pack.7z](https://github.com/Processmodifyer/0.34/blob/a73202892/minecraft%20classic%20coder%20pack.7z), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
 
 ## survival and creative
 
@@ -39,6 +43,14 @@ the 0.33 jar has a crafting screen, and 0.34 pre-release 2 also contains a craft
 
 **2026 comparison.** reborn keeps workbench crafting with a different recipe list. its torch recipe uses coal and a stick. the booktable has no registered block or recipe, and the separate recipe guide screen has no current menu entry. [2026 recipes](../src/main/java/net/classicremastered/minecraft/crafting/CraftingManager.java), [unused recipe guide](unused-features.md#recipe-guide).
 
+### blocks and items in 0.34 pre-release 2
+
+the jar registers apple, feather, arrow, and bow through the block table at ids `50` through `53`. the workbench, cobweb, and torch occupy `54`, `55`, and `56`. the steve head is registered through `HeadBlock`. the bootstrap passes `59` to its constructor, but the constructor uses `57` when it calls the base block constructor. the `Human` class references that head. [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
+
+the same jar contains `PoisonedAppleItem`, `ExplodingArrow`, and `SiteOpenerBlock` with no references from other game classes. the poisoned apple extends the ordinary apple. the exploding arrow contains a call to the world explosion routine. the site opener has a collision method that moves the mouse cursor and logs a message. these are packaged experiments with no verified acquisition or spawn path. [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
+
+**2022 and 2026 comparison.** the 2022 block registry retains workbench `54`, cobweb `55`, and torch `56`. it registers a redstone block at `59` and redstone ore at `60`, and the source includes a sign item. reborn registers apples, feathers, arrows, and bows as items. its workbench and torch use block ids `228` and `76`, and its redstone block and ore use `71` and `89`. [2022 block registry](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/game/world/tile/Block.java), [2022 sign item](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/game/world/item/SignItem.java), [2026 item registry](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemRegistry.java), [2026 equipment](../src/main/java/net/classicremastered/minecraft/level/itemstack/Equipment.java), [2026 block registry](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java).
+
 ## mobs and seasonal assets
 
 ### crocodile
@@ -54,6 +66,27 @@ the 2019 halloween jar bundles alternate mob textures, including halloween creep
 the 0.34 pre-release 2 jar includes mob, boss, and demonic mob menu classes. the 2022 source verifies action handlers that construct zombie pigmen and humans from the spawn menu and speer, chickens, cows, sheep, and endermen from its submenus. these are source-level menu actions. [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 spawn menu](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/SpawnMobs.java), [first submenu](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/MoreMobs.java), [second submenu](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/MoreMoreMobs.java).
 
 **2026 comparison.** chickens, cows, sheep, and endermen have registry entries. zombie pigman, human, and speer have no corresponding registry entries. reborn uses spawn eggs and commands for manual spawning. [2026 mob registry](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java), [spawn egg registration](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemRegistry.java), [summon command](../src/main/java/net/classicremastered/minecraft/chat/commands/SpawnMobCommand.java).
+
+### boss and demonic mob menus
+
+in `0.34pre2.jar`, the pause menu opens cheats, then spawn mob, then two more mobs pages. the second page opens the bosses and demonic mobs screens. each entry below has bytecode that constructs its mob and adds it to the world. [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
+
+| menu entry | class | behavior or asset confirmed in the jar |
+| --- | --- | --- |
+| giant creeper | `GiantCreeper` | uses `giantcreeper.png`. its ai includes creating an ordinary creeper and triggering an explosion. |
+| lisonio | `Hingno` | uses `enderking.png`. its ai creates angry endermen. |
+| skeleton king | `KingSkeleton` | uses `skeletonking.png`. it fires `NewArrow` projectiles, and its ai creates skeletons. |
+| demonic chicken | `DemonChicken` | uses a dedicated demonic chicken texture and an ai that targets the player. |
+| demonic creeper | `DemonicCreeper` | uses a dedicated demonic creeper texture and an ai with an explosion routine. |
+
+the 2022 source keeps the ordinary spawn submenus and includes a `GiantCreeperModel`. its second submenu only offers sheep and endermen, with no boss or demonic submenu. the five 2019 variants have no entries in the 2026 mob registry. [2022 second spawn submenu](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/MoreMoreMobs.java), [2022 giant creeper model](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/model/GiantCreeperModel.java), [2026 mob registry](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java).
+
+### other 2019 mobs
+
+- **giant and hungelanger.** both classes appear in `031_09.jar`. the coder pack shows that they extend zombie. the giant uses the zombie texture, and hungelanger uses the player texture. the latest 2019 spawn menu has a hungelanger action. [`031_09.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/031_09.jar), [minecraft classic coder pack.7z](https://github.com/Processmodifyer/0.34/blob/a73202892/minecraft%20classic%20coder%20pack.7z), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
+- **headset zombie and pig zombie.** both classes are present by `0.33_02.jar`. the latest 2019 menu calls the headset zombie entry **in control1** and offers pig zombie separately. the 2022 menu still spawns a pig zombie. [`0.33_02.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33_02.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 spawn menu](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/SpawnMobs.java).
+- **printer, wolf, and villager.** the three classes appear in `0.33_04.jar`. the latest 2019 menu creates a printer under the label `mob.Prit.name` and offers wolf on the same page. the 2022 source retains a printer model. reborn registers villagers and has no printer or wolf entry. [`0.33_04.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33_04.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 printer model](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/model/PrinterModel.java), [2026 mob registry](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java).
+- **cutemil and speer.** both classes appear in `0.34pre.jar` and `0.34pre2.jar`. speer has a spawn-menu action in the latest 2019 jar and in the 2022 source. cutemil was confirmed in the archive inventory. [`0.34pre.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 speer menu action](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/MoreMobs.java).
 
 ## 2022 title screen and terrain plans
 
