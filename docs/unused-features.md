@@ -182,6 +182,52 @@ sources [`ResourceDownloadThread.java`](../src/main/java/net/classicremastered/m
 
 sources [`SoundInfo.java`](../src/main/java/net/classicremastered/minecraft/sound/SoundInfo.java) and [`SimpleSoundData.java`](../src/main/java/net/classicremastered/minecraft/sound/SimpleSoundData.java)
 
+### legacy ogg vorbis decoder
+
+the `de/jarnbjo` source tree contains 35 java files for ogg streams, vorbis decoding, and related audio utilities. `SoundReader` is the only game class that imports it, and the game has no caller for that reader. the source also includes a java sound `VorbisAudioFileReader`, with no service registration in the project resources. the active sound manager registers paulscode `CodecJOrbis` for ogg and `CodecWav` for wav.
+
+sources [`VorbisStream.java`](../src/main/java/de/jarnbjo/vorbis/VorbisStream.java), [`VorbisAudioFileReader.java`](../src/main/java/de/jarnbjo/vorbis/VorbisAudioFileReader.java), [`SoundReader.java`](../src/main/java/net/classicremastered/minecraft/sound/SoundReader.java), and [`PaulsCodeSoundManager.java`](../src/main/java/net/classicremastered/minecraft/sound/PaulsCodeSoundManager.java)
+
+## animations and visual effects
+
+### tnt thrower wind-up and release
+
+`TNTThrowerModel` has a two-part right arm animation for winding up and releasing a throw. it only runs when the model receives a positive `attackOffset`. the throw ai sets the mob attack timer, but the tnt thrower uses the fallback mob renderer, which never copies that timer into the model offset. the mob can still throw tnt while its arms use the default ready pose.
+
+sources [`TNTThrowerModel.java`](../src/main/java/net/classicremastered/minecraft/model/TNTThrowerModel.java), [`ThrowTntGoal.java`](../src/main/java/net/classicremastered/minecraft/mob/ai/goal/tnt/ThrowTntGoal.java), [`Mob.java`](../src/main/java/net/classicremastered/minecraft/mob/Mob.java), [`EntityRenderBootstrap.java`](../src/main/java/net/classicremastered/minecraft/render/entity/EntityRenderBootstrap.java), and [`MobRenderer.java`](../src/main/java/net/classicremastered/minecraft/render/entity/MobRenderer.java)
+
+### alternate model motion
+
+the unused slime model animates a gentle idle bounce. the unused alternate skeleton model has a walk cycle that swings the legs and moves the arms around a raised base pose. both motions are defined in the models and have no active mob rendering path.
+
+sources [`ModelSlime.java`](../src/main/java/net/classicremastered/minecraft/model/ModelSlime.java), [`NewSkeletonModel.java`](../src/main/java/net/classicremastered/minecraft/model/NewSkeletonModel.java), and [`ModelManager.java`](../src/main/java/net/classicremastered/minecraft/model/ModelManager.java)
+
+### md3 animation playback
+
+the in-game md3 loader and renderer use vertex positions from frame zero only. the bundled rana mesh, `test2.md3`, contains one frame. the separate md3 studio has a multiframe reader and animation playback for imported files.
+
+sources [`MD3Surface.java`](../src/main/java/net/classicremastered/minecraft/model/MD3Surface.java), [`MD3Renderer.java`](../src/main/java/net/classicremastered/minecraft/model/MD3Renderer.java), [`test2.md3`](../src/main/resources/models/test2.md3), and [`MD3Studio.java`](../src/main/java/net/classicremastered/toolkit/md3studio/MD3Studio.java)
+
+### illusionum hud glitch timer
+
+illusionum increases a `glitchTimer` while vanishing and resets it after its attack flurry. the timer has no reader outside its own update and no hud render path. the boss separately swaps hotbar slots and jitters the camera by changing the player view angles.
+
+source [`IllusionumBoss.java`](../src/main/java/net/classicremastered/minecraft/mob/IllusionumBoss.java)
+
+## particles and projectile effects
+
+### zombie bomb flash and debris
+
+the unused zombie bomb has a white flashing overlay that intensifies near detonation. it spawns smoke while the fuse burns and terrain debris for the blocks it destroys. these specific effects have no active spawn path because the game never creates a zombie bomb.
+
+source [`ZombieBomb.java`](../src/main/java/net/classicremastered/minecraft/entity/ZombieBomb.java)
+
+### particle class usage
+
+all five concrete particle subclasses have gameplay emitters. smoke is used by primed tnt, terrain particles by block breaking, water drops by rain, explosion sprites by blasts, and combat particles by melee feedback. the built-in game creates these subclasses without directly instantiating the generic `Particle` base.
+
+sources [`PrimedTnt.java`](../src/main/java/net/classicremastered/minecraft/entity/PrimedTnt.java), [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java), [`Minecraft.java`](../src/main/java/net/classicremastered/minecraft/Minecraft.java), [`Level.java`](../src/main/java/net/classicremastered/minecraft/level/Level.java), [`PlayerCombat.java`](../src/main/java/net/classicremastered/minecraft/PlayerCombat.java), and [`Particle.java`](../src/main/java/net/classicremastered/minecraft/particle/Particle.java)
+
 ## interface screens
 
 ### recipe guide
