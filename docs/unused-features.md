@@ -70,6 +70,18 @@ the jukebox (`212`) is available in creative. it is registered as a plain block,
 
 sources [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java) and [`BlockSelectScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/BlockSelectScreen.java)
 
+### stair and ladder block states
+
+stairs use block ids `160` through `191` for facing and upside-down placement. only the base oak (`168`), cobblestone (`176`), and stone brick (`184`) ids appear as inventory variants in that range. sandstone stairs use `85` as their inventory id, so all eight sandstone orientation ids are hidden. ladders likewise use hidden ids `97` through `99` for three wall faces and the ordinary ladder id `91` for the fourth. normal placement creates these states and breaking them drops the corresponding inventory variant. numeric `/give` accepts the hidden ids.
+
+sources [`StairBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/StairBlock.java), [`LadderBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/LadderBlock.java), [`Block.java`](../src/main/java/net/classicremastered/minecraft/level/tile/Block.java), [`GameMode.java`](../src/main/java/net/classicremastered/minecraft/gamemode/GameMode.java), [`BlockSelectScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/BlockSelectScreen.java), [`CreativeInventoryBlocks.java`](../src/main/java/net/classicremastered/minecraft/CreativeInventoryBlocks.java), [`GiveCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/GiveCommand.java)
+
+### creative blocks without survival sources
+
+bedrock (`7`) generates in worlds and is selectable in creative. the survival break path prevents players from mining it. the beacon (`222`), jukebox (`212`), lucky block (`229`), and structure alpha through delta (`60` through `63`) also appear in creative. the current generator, recipe, loot, and shop paths provide no first copy of these blocks in ordinary survival. the beacon emits light, the lucky block triggers random outcomes, and the structure blocks have right-click effects. a creative inventory or `/give` can supply them.
+
+sources [`CreativeInventoryBlocks.java`](../src/main/java/net/classicremastered/minecraft/CreativeInventoryBlocks.java), [`InputManager.java`](../src/main/java/net/classicremastered/minecraft/InputManager.java), [`BiomeLevelGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/BiomeLevelGenerator.java), [`BeaconBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/BeaconBlock.java), [`LuckyBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/LuckyBlock.java), [`StructureBlock.java`](../src/main/java/net/classicremastered/minecraft/level/tile/StructureBlock.java), [`CraftingManager.java`](../src/main/java/net/classicremastered/minecraft/crafting/CraftingManager.java), [`ShopScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/ShopScreen.java)
+
 ## unused item definitions and icons
 
 ### original sword
@@ -89,6 +101,24 @@ sources [`Item.java`](../src/main/java/net/classicremastered/minecraft/level/ite
 `physics_test.png` and `egg_null.png` remain in the item resources with no references in the built-in item code. the physics gun uses `physics_gun.png`, and the spawn egg texture lookup uses `unknown.png` as its fallback.
 
 sources [`physics_test.png`](../src/main/resources/items/physics_test.png), [`egg_null.png`](../src/main/resources/items/egg_null.png), [`PhysicsGunItem.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/PhysicsGunItem.java), and [`MobEggColors.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/MobEggColors.java)
+
+### packed turret
+
+the creative catalog hides the packed crossbow turret (`308`). packing a turret into an empty crate creates a usable stack with the turret data attached, including its variant. `/give 308` can create the stack id without attaching that data, so the resulting stack cannot deploy a turret. packing works in survival.
+
+sources [`TurretItems.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/TurretItems.java), [`Inventory.java`](../src/main/java/net/classicremastered/minecraft/player/Inventory.java), [`BlockSelectScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/BlockSelectScreen.java), [`GiveCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/GiveCommand.java)
+
+### legacy shotgun shell
+
+the legacy shotgun shell (`320`) still works as ammo for the arrow shotgun turret, whose default ammo is the ordinary arrow. the shell is registered and available through creative or `/give`. the current recipes, shops, and loot tables provide no survival source for it.
+
+sources [`TurretItems.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/TurretItems.java), [`TurretVariant.java`](../src/main/java/net/classicremastered/minecraft/mob/TurretVariant.java), [`CraftingManager.java`](../src/main/java/net/classicremastered/minecraft/crafting/CraftingManager.java), [`ShopScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/ShopScreen.java), [`VillagerTrades.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/VillagerTrades.java)
+
+### mob wands and utility items
+
+the four mob wands (`336` through `339`), health drink (`272`), damage bottle (`273`), and glass looker (`275`) are functional entries available through creative or `/give`. the current recipes, trades, and loot provide no ordinary survival source for these items. the glass looker zooms while the use button is held through the frame renderer.
+
+sources [`ItemRegistry.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/ItemRegistry.java), [`MobWandItem.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/MobWandItem.java), [`ClientFrameRenderer.java`](../src/main/java/net/classicremastered/minecraft/ClientFrameRenderer.java), [`CraftingManager.java`](../src/main/java/net/classicremastered/minecraft/crafting/CraftingManager.java), [`ShopScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/ShopScreen.java), [`VillagerTrades.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/VillagerTrades.java), [`DesertPyramid.java`](../src/main/java/net/classicremastered/minecraft/level/structure/DesertPyramid.java)
 
 ## models and textures
 
@@ -121,6 +151,36 @@ source [`entity/ItemModel.java`](../src/main/java/net/classicremastered/minecraf
 the source includes readers for wavefront obj and collada dae files. both produce mesh data that `MeshModel` can draw as textured triangles. the built-in model and entity setup does not use either reader or instantiate that renderer.
 
 sources [`model/ObjMesh.java`](../src/main/java/net/classicremastered/minecraft/model/ObjMesh.java), [`model/DaeMesh.java`](../src/main/java/net/classicremastered/minecraft/model/DaeMesh.java), and [`model/MeshModel.java`](../src/main/java/net/classicremastered/minecraft/model/MeshModel.java)
+
+### legacy terrain texture directory
+
+the `terrain/blocks/` directory contains 72 png files with no built-in atlas or direct texture lookup in the current source. examples include `barrier.png`, `unusedtexture.png`, and the old furnace textures under `new_blocks/`. the active atlas reads its tile names from `textures/block/tiles.properties` and loads images from `textures/block/`.
+
+sources [`barrier.png`](../src/main/resources/terrain/blocks/barrier.png), [`unusedtexture.png`](../src/main/resources/terrain/blocks/unusedtexture.png), [`furnace_front_on.png`](../src/main/resources/terrain/blocks/new_blocks/furnace_front_on.png), [`tiles.properties`](../src/main/resources/textures/block/tiles.properties), and [`BlockTextureAtlas.java`](../src/main/java/net/classicremastered/minecraft/render/BlockTextureAtlas.java)
+
+### unmapped classic tiles
+
+fourteen `classic_*.png` files in the active texture directory are omitted from the atlas manifest. their filename numbers are `023`, `024`, `025`, `026`, `031`, `053`, `054`, `055`, `158`, `191`, `200`, `201`, `213`, and `214`. for example, the atlas entry for tile 200 uses `torch.png`.
+
+sources [`classic_023.png`](../src/main/resources/textures/block/classic_023.png), [`classic_200.png`](../src/main/resources/textures/block/classic_200.png), and [`tiles.properties`](../src/main/resources/textures/block/tiles.properties)
+
+### leftover item and entity images
+
+the bundled `mining_axe.png`, `egg_base.png`, `egg_spots.png`, and `turret.png` have no built-in lookups. the iron pickaxe uses `gear/iron_pickaxe.png`, spawn eggs resolve to per-mob images, and the crossbow turret uses `cobblestone_oak.png`.
+
+sources [`mining_axe.png`](../src/main/resources/items/mining_axe.png), [`egg_base.png`](../src/main/resources/items/gear/egg_base.png), [`egg_spots.png`](../src/main/resources/items/gear/egg_spots.png), [`turret.png`](../src/main/resources/turret/turret.png), [`MiningAxeItem.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/MiningAxeItem.java), [`MobEggColors.java`](../src/main/java/net/classicremastered/minecraft/level/itemstack/MobEggColors.java), and [`TurretVariant.java`](../src/main/java/net/classicremastered/minecraft/mob/TurretVariant.java)
+
+## sounds
+
+all 41 bundled sound clips have a registration path and a gameplay sound key. registration removes trailing digits from filenames to form pools. for example, `teleport1.ogg` and `teleport2.ogg` both belong to the enderman teleport pool, and the seven numbered sweep clips share the sword sweep pool. the audio engine picks a clip from the requested pool.
+
+sources [`ResourceDownloadThread.java`](../src/main/java/net/classicremastered/minecraft/ResourceDownloadThread.java), [`PaulsCodeSoundManager.java`](../src/main/java/net/classicremastered/minecraft/sound/PaulsCodeSoundManager.java), [`EndermanTeleportation.java`](../src/main/java/net/classicremastered/minecraft/mob/ai/goal/enderman/EndermanTeleportation.java), and [`PlayerCombat.java`](../src/main/java/net/classicremastered/minecraft/PlayerCombat.java)
+
+### unused audio classes
+
+`SoundInfo` contains sample interpolation code with an empty initialization method. `SimpleSoundData` stores interleaved pcm samples, sample rate, and channel count. no built-in playback or registration path uses either class.
+
+sources [`SoundInfo.java`](../src/main/java/net/classicremastered/minecraft/sound/SoundInfo.java) and [`SimpleSoundData.java`](../src/main/java/net/classicremastered/minecraft/sound/SimpleSoundData.java)
 
 ## interface screens
 
@@ -155,3 +215,43 @@ sources [`Hooks.java`](../src/main/java/com/mcraft/api/hooks/Hooks.java), [`Tick
 `LevelIO` still has a `saveOnline` method with parameters for a host, account, level name, and slot id. the method has no callers and only prints a diagnostic message. local world saving is handled through the world selection screen.
 
 sources [`level/LevelIO.java`](../src/main/java/net/classicremastered/minecraft/level/LevelIO.java) and [`gui/SelectLevelScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/SelectLevelScreen.java)
+
+## world generation and dimensions
+
+### flat debug village
+
+`FlatDebugVillageGenerator` builds a finite flat map 128 blocks wide, 128 blocks long, and 64 blocks high. it sets the spawn near the center and attempts to generate a single house. no built-in code calls `makeDebugVillageLevel`. the regular flat world option has its own generation path.
+
+sources [`FlatDebugVillageGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/FlatDebugVillageGenerator.java), [`GenerateLevelScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/GenerateLevelScreen.java)
+
+### dimension generation
+
+the readme lists dimensions as still in development. the current world creation screen offers finite and infinite worlds with classic or biome terrain and optional flat generation. there is no separate dimension generator in the current game source. the portal block uses the spawn coordinates of the current level.
+
+sources [readme](../README.md), [`GenerateLevelScreen.java`](../src/main/java/net/classicremastered/minecraft/gui/GenerateLevelScreen.java), and [`Player.java`](../src/main/java/net/classicremastered/minecraft/player/Player.java)
+
+## structure generation
+
+### flat village test layout
+
+the [flat debug village generator](#flat-debug-village) attempts to place a single `HouseStructure` near the center of a test map. that specific layout has no built-in entry point. the same house class is used by the structure registry when generating classic finite terrain.
+
+sources [`FlatDebugVillageGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/FlatDebugVillageGenerator.java), [`HouseStructure.java`](../src/main/java/net/classicremastered/minecraft/level/structure/HouseStructure.java), [`StructureRegistry.java`](../src/main/java/net/classicremastered/minecraft/level/structure/StructureRegistry.java), and [`LevelGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/LevelGenerator.java)
+
+### dormant structure registry paths
+
+the desert pyramid is in the weighted structure registry, but the classic finite generator leaves the biome seed unset and the pyramid rejects those sites. the biome generator places pyramids through its own finite and chunk generation code. cobblestone towers also have a registry entry and are explicitly skipped by the weighted picker. they have their own seeded placement routines.
+
+sources [`StructureRegistry.java`](../src/main/java/net/classicremastered/minecraft/level/structure/StructureRegistry.java), [`DesertPyramid.java`](../src/main/java/net/classicremastered/minecraft/level/structure/DesertPyramid.java), [`CobblestoneTower.java`](../src/main/java/net/classicremastered/minecraft/level/structure/CobblestoneTower.java), [`LevelGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/LevelGenerator.java), and [`BiomeLevelGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/BiomeLevelGenerator.java)
+
+mineshafts generate through direct terrain hooks outside the structure registry. the registry-backed locate command has no mineshaft id, even though mineshafts can generate in finite and infinite terrain.
+
+sources [`Mineshaft.java`](../src/main/java/net/classicremastered/minecraft/level/structure/Mineshaft.java), [`LevelGenerator.java`](../src/main/java/net/classicremastered/minecraft/level/generator/LevelGenerator.java), [`SimpleChunkManager.java`](../src/main/java/net/classicremastered/minecraft/level/infinite/SimpleChunkManager.java), and [`LocateStructureCommand.java`](../src/main/java/net/classicremastered/minecraft/chat/commands/LocateStructureCommand.java)
+
+## unused engine classes
+
+- **`PlacementService`.** provides collision checks for block placement against the player and mobs. the active input path calls the checks on `Minecraft`. sources [`PlacementService.java`](../src/main/java/net/classicremastered/minecraft/client/placement/PlacementService.java), [`InputManager.java`](../src/main/java/net/classicremastered/minecraft/InputManager.java), [`Minecraft.java`](../src/main/java/net/classicremastered/minecraft/Minecraft.java).
+- **`ScreenshotService`.** wraps a queued screenshot request and capture. the client calls `Screenshot.take` directly. sources [`ScreenshotService.java`](../src/main/java/net/classicremastered/minecraft/client/screenshot/ScreenshotService.java), [`ClientFrameRenderer.java`](../src/main/java/net/classicremastered/minecraft/ClientFrameRenderer.java).
+- **`ModelPose`.** uses reflection to read entity fields, calculate a model pose, and render it. no built-in renderer calls `poseAndRender`. source [`ModelPose.java`](../src/main/java/net/classicremastered/minecraft/model/ModelPose.java).
+- **`LevelObjectInputStream`.** defines class descriptor handling for a short list of serialized entity classes. the legacy level loader uses the standard `ObjectInputStream`. sources [`LevelObjectInputStream.java`](../src/main/java/net/classicremastered/minecraft/level/LevelObjectInputStream.java), [`LevelIO.java`](../src/main/java/net/classicremastered/minecraft/level/LevelIO.java).
+- **`SoundReader`.** decodes vorbis data into `SoundData`. the built-in audio setup has no call to this reader. sources [`SoundReader.java`](../src/main/java/net/classicremastered/minecraft/sound/SoundReader.java), [`ClientBootstrap.java`](../src/main/java/net/classicremastered/minecraft/ClientBootstrap.java).
