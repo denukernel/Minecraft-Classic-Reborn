@@ -1,6 +1,10 @@
-# minecraft classic features from 2019 to 2022
+# minecraft classic features from 2018 to 2022
 
-the 2019 minecraft classic 0.34 project experimented with survival, creative, crafting, and new mobs. the 2022 minecraft classic remastered source retained several of those ideas. this page compares both with the 2026 minecraft classic reborn checkout. similar features can have different implementations across the projects.
+the project traces back to private minecraft classic source modding in 2018. the public 2019 minecraft classic 0.34 project experimented with survival, creative, crafting, and new mobs. the 2022 minecraft classic remastered source retained several of those ideas. this page compares that history with the 2026 minecraft classic reborn checkout.
+
+## private modding in 2018
+
+according to the project history supplied for this wiki, the developer began testing private modifications to the minecraft classic source in 2018. the old builds were never archived and are now lost. the surviving public record begins with the 2019 repository.
 
 ## what survives from each year
 
@@ -127,5 +131,9 @@ the 2022 title screen opens a finite map size picker with small, normal, and hug
 ## audio code
 
 the 2019 wiki describes a switch to jcraft for additional sound effects. the 2022 source tree includes jorbis, paulscode, and `de/jarnbjo` code alongside its own sound classes. the 2026 game registers paulscode codecs, with the remaining `de/jarnbjo` code referenced by an unused reader. [2019 wiki](https://github.com/Processmodifyer/0.34/blob/a73202892/wiki/wiki.txt), [2022 audio source tree](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/tree/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java), [current sound manager](../src/main/java/net/classicremastered/minecraft/sound/PaulsCodeSoundManager.java), [legacy decoder notes](unused-features.md#legacy-ogg-vorbis-decoder).
+
+### ironmock sound origins
+
+the project history supplied for this wiki dates the sounds associated with ironmock to 2018, when the developer was ten years old. the current ironmock code assigns anvil use to idle, anvil land to hurt, and anvil break to death. the original 2018 sound files are unavailable for comparison. [current ironmock sound assignments](../src/main/java/net/classicremastered/minecraft/mob/Ironmock.java).
 
 for removals and replacements within classic reborn itself, see [removed features](removed-features.md).
