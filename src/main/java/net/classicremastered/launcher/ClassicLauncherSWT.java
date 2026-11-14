@@ -16,6 +16,7 @@ import java.awt.Canvas;
 import java.awt.Frame;
 import java.io.*;
 import java.net.*;
+import java.nio.channels.FileLock;
 import java.nio.file.*;
 import java.util.Properties;
 
@@ -36,24 +37,26 @@ public final class ClassicLauncherSWT {
     private volatile boolean[] askedToQuitRef = null;
     private volatile Shell gameShell = null;
 
-    // Single-instance guard
-    private SingleInstance singleInstance = null;
-
     public static void main(String[] args) {
-        try {
+        try (FileLock launcherLock = ClassicLauncher.claimInstance("launcher.lock")) {
+            if (launcherLock == null) {
+                System.err.println("The Minecraft launcher is already open.");
+                return;
+            }
             LwjglNativesDownloader.setupWindowsNatives();
             JInputBootstrap.setupWindows();
 
             ClassicLauncherSWT app = new ClassicLauncherSWT();
-            app.singleInstance = SingleInstance.claimOrTakeover(app);
             app.run();
         } catch (Throwable t) {
             t.printStackTrace();
-            // Using Swing even in SWT launcher for simpler unified error reporting without needing a Display
-            javax.swing.JOptionPane.showMessageDialog(null,
-                "An error occurred during startup:\n" + t.toString(),
-                "Minecraft Classic - Startup Error",
-                javax.swing.JOptionPane.ERROR_MESSAGE);
+            // Using Swing even in SWT launcher for simpler unified error reporting without needing
+            // a Display
+            javax.swing.JOptionPane.showMessageDialog(
+                    null,
+                    "An error occurred during startup:\n" + t.toString(),
+                    "Minecraft Classic - Startup Error",
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         }
     }
@@ -127,13 +130,12 @@ public final class ClassicLauncherSWT {
                     askedToQuitRef[0] = true;
                 runningMc.requestQuit();
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         try {
             ModLoader.shutdownIfAlive();
-        } catch (Throwable ignored) {}
-        try {
-            if (singleInstance != null) singleInstance.close();
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         System.exit(0);
     }
 
@@ -158,6 +160,25 @@ public final class ClassicLauncherSWT {
     }
 
     private void launchGame(int width, int height, boolean fullscreen) {
+        MessageBox notice = new MessageBox(shell, SWT.OK | SWT.ICON_INFORMATION);
+        FileLock gameLock;
+        try {
+            gameLock = ClassicLauncher.claimInstance("game.lock");
+        } catch (IOException error) {
+            btnPlay.setEnabled(true);
+            notice.setText("Launch failed");
+            notice.setMessage(error.getMessage());
+            notice.open();
+            return;
+        }
+        if (gameLock == null) {
+            btnPlay.setEnabled(true);
+            notice.setText("Game already running");
+            notice.setMessage(ClassicLauncher.GAME_ALREADY_RUNNING_MESSAGE);
+            notice.open();
+            return;
+        }
+
         shell.setVisible(false);
 
         gameShell = new Shell(display);
@@ -173,6 +194,7 @@ public final class ClassicLauncherSWT {
         frame.add(canvas);
 
         final Minecraft mc = new Minecraft(canvas, applet, width, height, fullscreen);
+        canvas.setMinecraft(mc);
         final boolean[] askedToQuit = {false};
 
         runningMc = mc;
@@ -185,38 +207,59 @@ public final class ClassicLauncherSWT {
             }
             System.out.println("[Launcher] mcDir=" + Minecraft.mcDir.getAbsolutePath());
             ModLoader.bootstrap(mc);
-        } catch (Throwable t) { t.printStackTrace(); }
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
 
-        gameShell.addListener(SWT.Close, e -> {
-            askedToQuit[0] = true;
-            mc.requestQuit();
-        });
+        gameShell.addListener(
+                SWT.Close,
+                e -> {
+                    askedToQuit[0] = true;
+                    mc.requestQuit();
+                });
 
         gameShell.pack();
         gameShell.setSize(width + 16, height + 39); // account for borders
         gameShell.open();
 
-        canvas.startThread();
+        Thread gameThread = canvas.startThread();
 
         // Watcher thread
-        new Thread(() -> {
-            while (true) {
-                if (askedToQuit[0] && !mc.running) {
-                    try { mc.shutdown(); } catch (Throwable ignored) {}
-                    try { ModLoader.shutdownIfAlive(); } catch (Throwable ignored) {}
-                    display.asyncExec(() -> {
-                        if (gameShell != null && !gameShell.isDisposed()) gameShell.dispose();
-                        runningMc = null;
-                        askedToQuitRef = null;
-                        btnPlay.setEnabled(true);
-                        shell.setVisible(true);
-                        shell.forceActive();
-                    });
-                    return;
-                }
-                try { Thread.sleep(16); } catch (InterruptedException ignored) {}
-            }
-        }, "Launcher-Watcher").start();
+        new Thread(
+                        () -> {
+                            while (true) {
+                                try {
+                                    gameThread.join();
+                                    break;
+                                } catch (InterruptedException ignored) {
+                                }
+                            }
+                            try {
+                                mc.shutdown();
+                            } catch (Throwable ignored) {
+                            }
+                            try {
+                                ModLoader.shutdownIfAlive();
+                            } catch (Throwable ignored) {
+                            }
+                            display.asyncExec(
+                                    () -> {
+                                        if (gameShell != null && !gameShell.isDisposed())
+                                            gameShell.dispose();
+                                        try {
+                                            gameLock.channel().close();
+                                        } catch (IOException error) {
+                                            error.printStackTrace();
+                                        }
+                                        runningMc = null;
+                                        askedToQuitRef = null;
+                                        btnPlay.setEnabled(true);
+                                        shell.setVisible(true);
+                                        shell.forceActive();
+                                    });
+                        },
+                        "Launcher-Watcher")
+                .start();
     }
 
     private void loadConfig() {
@@ -249,15 +292,20 @@ public final class ClassicLauncherSWT {
         private transient Minecraft minecraft;
         private transient Thread thread;
 
-        void setMinecraft(Minecraft m) { this.minecraft = m; }
-
-        void startThread() {
-            if (thread != null) return;
-            thread = new Thread(minecraft, "Client");
-            thread.start();
+        void setMinecraft(Minecraft m) {
+            this.minecraft = m;
         }
 
-        @Override public synchronized void removeNotify() {
+        Thread startThread() {
+            if (thread == null) {
+                thread = new Thread(minecraft, "Client");
+                thread.start();
+            }
+            return thread;
+        }
+
+        @Override
+        public synchronized void removeNotify() {
             if (thread != null) {
                 try { minecraft.requestQuit(); } catch (Throwable ignored) {}
                 try { thread.join(2000); } catch (InterruptedException ignored) {}
@@ -292,7 +340,8 @@ public final class ClassicLauncherSWT {
             }
             width = parseInt(p.getProperty("width"), width);
             height = parseInt(p.getProperty("height"), height);
-            fullscreen = Boolean.parseBoolean(p.getProperty("fullscreen", String.valueOf(fullscreen)));
+            fullscreen =
+                    Boolean.parseBoolean(p.getProperty("fullscreen", String.valueOf(fullscreen)));
         }
 
         void save() throws IOException {
@@ -310,74 +359,6 @@ public final class ClassicLauncherSWT {
         private static int parseInt(String s, int def) {
             try { return Integer.parseInt(s); }
             catch (Exception e) { return def; }
-        }
-    }
-
-    private static final class SingleInstance {
-        private static final int PORT = 45731;
-        private ServerSocket server;
-
-        static SingleInstance claimOrTakeover(ClassicLauncherSWT app) {
-            SingleInstance si = new SingleInstance();
-            if (si.tryBind(app)) return si;
-            
-            System.out.println("[SingleInstance] Port " + PORT + " is busy. Requesting takeover...");
-            requestTakeover();
-            long deadline = System.currentTimeMillis() + 3000;
-            while (System.currentTimeMillis() < deadline) {
-                try { Thread.sleep(200); } catch (InterruptedException ignored) {}
-                if (si.tryBind(app)) return si;
-            }
-
-            int choice = javax.swing.JOptionPane.showConfirmDialog(null,
-                "Another instance of Minecraft Classic appears to be running, or port " + PORT + " is blocked.\n" +
-                "Do you want to try starting anyway? (This may cause issues if another instance is active)",
-                "Single Instance Warning",
-                javax.swing.JOptionPane.YES_NO_OPTION,
-                javax.swing.JOptionPane.WARNING_MESSAGE);
-            
-            if (choice == javax.swing.JOptionPane.YES_OPTION) {
-                System.out.println("[SingleInstance] Proceeding despite bind failure.");
-                return null; 
-            } else {
-                System.exit(0);
-                return null;
-            }
-        }
-
-        private static void requestTakeover() {
-            try (Socket s = new Socket("127.0.0.1", PORT);
-                 OutputStream out = s.getOutputStream()) {
-                out.write("TAKEOVER\n".getBytes("UTF-8"));
-                out.flush();
-            } catch (IOException ignored) {}
-        }
-
-        private boolean tryBind(ClassicLauncherSWT app) {
-            try {
-                server = new ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1"));
-                new Thread(() -> runServer(app), "SingleInstance-Acceptor").start();
-                return true;
-            } catch (IOException bindFailed) {
-                return false;
-            }
-        }
-
-        private void runServer(ClassicLauncherSWT app) {
-            while (!server.isClosed()) {
-                try (Socket s = server.accept();
-                     BufferedReader r = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
-                    String line = r.readLine();
-                    if (line != null && line.startsWith("TAKEOVER")) {
-                        app.quitLauncher();
-                    }
-                } catch (IOException ignored) {}
-            }
-        }
-
-        void close() {
-            try { if (server != null) server.close(); }
-            catch (IOException ignored) {}
         }
     }
 }

@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
@@ -25,8 +26,14 @@ public final class LevelInfiniteTerrain extends Level {
     }
 
     public LevelInfiniteTerrain(long seed, int depthY, boolean biomesEnabled, boolean flatBiomes) {
+        this(seed, depthY, biomesEnabled, flatBiomes, true);
+    }
+
+    LevelInfiniteTerrain(
+            long seed, int depthY, boolean biomesEnabled, boolean flatBiomes, boolean oceans) {
         super();
         this.flatBiomes = biomesEnabled && flatBiomes;
+        this.oceanBiomes = biomesEnabled && !flatBiomes && oceans;
         this.randomSeed = seed;
         this.biomesEnabled = biomesEnabled;
         this.biomeSeed = biomesEnabled ? seed : null;
@@ -57,7 +64,8 @@ public final class LevelInfiniteTerrain extends Level {
                         depthY,
                         biomesEnabled
                                 ? SimpleChunkManager.Mode.BIOMES
-                                : SimpleChunkManager.Mode.TERRAIN);
+                                : SimpleChunkManager.Mode.TERRAIN,
+                        this.oceanBiomes);
         this.chunks.level = this;
         this.waterLevel = Math.max(1, depthY / 2 - (biomesEnabled ? 2 : 0));
 
@@ -402,29 +410,55 @@ public final class LevelInfiniteTerrain extends Level {
 
     @Override
     public void findSpawn() {
-        if (biomesEnabled) {
+        if (oceanBiomes) {
+            BiomeLevelGenerator biomes = BiomeLevelGenerator.forLevel(this);
+            if (tryBiomeSpawn(0, 0)) return;
+            // Sample height cheaply and generate chunks only where there may be dry land.
+            for (int radius = 8; radius <= 3072; radius += 8) {
+                for (int offset = -radius; offset < radius; offset += 8) {
+                    if (tryOceanWorldSpawn(biomes, offset, -radius)
+                            || tryOceanWorldSpawn(biomes, radius, offset)
+                            || tryOceanWorldSpawn(biomes, -offset, radius)
+                            || tryOceanWorldSpawn(biomes, -radius, -offset)) return;
+                }
+            }
+        } else if (biomesEnabled) {
             for (int z = -32; z <= 32; z += 4) {
                 for (int x = -32; x <= 32; x += 4) {
-                    int y = getHighestTile(x, z);
-                    int ground = getTile(x, y - 1, z);
-                    if (y > waterLevel
-                            && y + 2 < depth
-                            && (ground == Block.GRASS.id || ground == Block.SAND.id)
-                            && getTile(x, y, z) == 0
-                            && getTile(x, y + 1, z) == 0) {
-                        xSpawn = x;
-                        ySpawn = y + 1;
-                        zSpawn = z;
-                        rotSpawn = 0;
-                        return;
-                    }
+                    if (tryBiomeSpawn(x, z)) return;
                 }
             }
         }
         this.xSpawn = 0;
         this.zSpawn = 0;
-        this.ySpawn = Math.min(this.depth - 1, getHighestTile(0, 0));
+        int surface = getHighestTile(0, 0);
+        this.ySpawn =
+                Math.min(this.depth - 1, oceanBiomes ? Math.max(waterLevel + 2, surface) : surface);
         this.rotSpawn = 0f;
+    }
+
+    private boolean tryOceanWorldSpawn(BiomeLevelGenerator biomes, int x, int z) {
+        return biomes.groundHeight(x, z, depth) >= waterLevel && tryBiomeSpawn(x, z);
+    }
+
+    private boolean tryBiomeSpawn(int x, int z) {
+        int y = getHighestTile(x, z);
+        int ground = getTile(x, y - 1, z);
+        if (y <= waterLevel || y + 2 >= depth || getTile(x, y + 1, z) != 0) return false;
+        if (oceanBiomes
+                && ground == Block.SNOW_LAYER.id
+                && getTile(x, y - 2, z) == Block.SNOWY_GRASS.id) {
+            setSpawnPos(x, y + 1, z, 0);
+            return true;
+        }
+        if (ground != Block.GRASS.id
+                && ground != Block.SAND.id
+                && (!oceanBiomes || ground != Block.SNOWY_GRASS.id)) {
+            return false;
+        }
+        if (getTile(x, y, z) != 0) return false;
+        setSpawnPos(x, y + 1, z, 0);
+        return true;
     }
 
     public SimpleChunkManager chunks() {

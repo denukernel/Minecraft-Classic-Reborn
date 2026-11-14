@@ -12,6 +12,8 @@ import net.classicremastered.minecraft.mob.ai.goal.movement.PlannedStrollGoal;
 import net.classicremastered.minecraft.mob.ai.goal.movement.RandomStrollGoal;
 import net.classicremastered.minecraft.mob.ai.movement.CrowdMotion;
 import net.classicremastered.minecraft.mob.ai.movement.GroundWander;
+import net.classicremastered.minecraft.path.PathNavigator;
+import net.classicremastered.minecraft.path.Pathfinder;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 import java.util.List;
@@ -88,6 +90,7 @@ public class BasicAI extends AI {
             --this.attackDelay;
         }
 
+        boolean shelteringInWater = false;
         if (mob.health <= 0) {
             if (selector != null) selector.stopAll();
             this.jumping = false;
@@ -103,7 +106,10 @@ public class BasicAI extends AI {
                 blockedPursuitTarget = null;
             }
             float previousYaw = mob.yRot;
-            if (!escapeFire() && !seekSunlightWater()) {
+            boolean escapingFire = escapeFire();
+            boolean seekingWater = !escapingFire && seekSunlightWater();
+            shelteringInWater = seekingWater && mob.isWetForFire();
+            if (!escapingFire && !seekingWater) {
                 this.update();
                 goalSelector().tick();
             } else if (selector != null) {
@@ -166,14 +172,25 @@ public class BasicAI extends AI {
         }
         if (mob.health > 0
                 && mob.isInWater()
-                && attackTarget != null
-                && !attackTarget.removed
+                && !shelteringInWater
                 && navigationAllowed()
-                && !(mob instanceof net.classicremastered.minecraft.mob.Enderman)) {
+                && usesDefaultSwimSteering()
+                && Pathfinder.supportsSwimming(mob)) {
             // Pursuit rotates toward the target during update. Start from the last
             // swim heading so a shore detour can keep turning away from a wall.
             mob.yRot = tickYaw;
-            steerInWater();
+            if (!Pathfinder.canEnterWater(mob) || mob instanceof Zombie && !level.isDaytime()) {
+                Entity shoreGoal =
+                        attackTarget != null
+                                        && !attackTarget.removed
+                                        && !attackTarget.isWetForFire()
+                                ? attackTarget
+                                : null;
+                if (!steerToShore(shoreGoal)) {
+                    xxa = yya = yRotA = 0;
+                    jumping = mob.yd < .12f;
+                }
+            } else if (attackTarget != null && !attackTarget.removed) steerInWater();
         }
         boolean inWater = mob.isInWater();
         boolean inLava = mob.isInLava();
@@ -216,6 +233,10 @@ public class BasicAI extends AI {
         }
     }
 
+    protected boolean usesDefaultSwimSteering() {
+        return true;
+    }
+
     private transient net.classicremastered.minecraft.path.PathNavigator.Result ladderStep;
 
     private int swimRepath;
@@ -226,14 +247,15 @@ public class BasicAI extends AI {
 
     private boolean shoreAirborne() {
         if (shoreJumpTicks > 0) shoreJumpTicks--;
-        if (shoreTarget != attackTarget
+        if (shorePath == null
                 || shorePath.isEmpty()
-                || attackTarget == null
-                || attackTarget.removed) return false;
+                || shoreTarget != null && (shoreTarget != attackTarget || shoreTarget.removed))
+            return false;
         var exit = shorePath.get(shorePath.size() - 1);
         if (mob.onGround && mob.bb.y0 >= exit.feetY() - .1f) {
             shorePath = java.util.List.of();
             shoreRepath = 0;
+            clearNavigation();
             return false;
         }
         if (shoreJumpTicks == 0 || mob.isInWater() || mob.onGround) return false;
@@ -255,16 +277,15 @@ public class BasicAI extends AI {
         yieldingToCrowd = false;
     }
 
-    private boolean steerToShore() {
-        if (attackTarget.isInWater()
-                || !net.classicremastered.minecraft.path.Pathfinder.supportsSwimming(mob))
-            return false;
-        if (shoreTarget != attackTarget || --shoreRepath <= 0) {
+    private boolean steerToShore(Entity target) {
+        if (target != null && target.isInWater()) return false;
+        if (shorePath == null
+                || shoreTarget != target
+                || shoreJumpTicks == 0 && --shoreRepath <= 0) {
             shorePath =
-                    net.classicremastered.minecraft.path.ShoreNavigator.find(
-                            level, mob, attackTarget);
+                    net.classicremastered.minecraft.path.ShoreNavigator.find(level, mob, target);
             shoreIndex = shorePath.size() > 1 ? 1 : 0;
-            shoreTarget = attackTarget;
+            shoreTarget = target;
             shoreRepath = 20;
         }
         if (shorePath.isEmpty()) return false;
@@ -276,7 +297,7 @@ public class BasicAI extends AI {
         }
         var step = shorePath.get(shoreIndex);
         shoreHeading(step);
-        jumping = true;
+        jumping = mob.yd < .16f;
         var exit = shorePath.get(shorePath.size() - 1);
         float dx = exit.x() - mob.x, dz = exit.z() - mob.z;
         float rise = exit.feetY() - mob.bb.y0;
@@ -303,7 +324,7 @@ public class BasicAI extends AI {
     }
 
     private void steerInWater() {
-        if (steerToShore()) return;
+        if (steerToShore(attackTarget)) return;
         if (--swimRepath <= 0) {
             swimRepath = 10;
             swimX = attackTarget.x;
@@ -409,39 +430,71 @@ public class BasicAI extends AI {
         return true;
     }
 
+    private transient PathNavigator waterRefuge;
+    private transient Level waterRefugeLevel;
+    private transient int waterSearchDelay;
+    private transient Pathfinder.Node waterDestination;
+    private transient boolean usingWaterShelter;
+
     private boolean seekSunlightWater() {
-        if (!(mob instanceof Zombie zombie) || !navigationAllowed() || !zombie.canBurnInSunlight()
-                || net.classicremastered.minecraft.CombatRules
-                        .difficulty(level) != net.classicremastered.minecraft.Difficulty.EXTREME
-                || !level.shouldUndeadBurnAt(zombie) || zombie.isInWaterOrOnWater())
+        if (!(mob instanceof Zombie zombie)
+                || !navigationAllowed()
+                || !Pathfinder.supportsSwimming(zombie)
+                || !zombie.canBurnInSunlight()
+                || net.classicremastered.minecraft.CombatRules.difficulty(level)
+                        != net.classicremastered.minecraft.Difficulty.EXTREME
+                || !level.isDaytime()
+                || level.getDaylightBrightness() < .55f
+                || !(level.shouldUndeadBurnAt(zombie)
+                        || (usingWaterShelter || waterDestination != null)
+                                && zombie.isInWaterOrOnWater())) {
+            waterDestination = null;
+            usingWaterShelter = false;
+            waterSearchDelay = 0;
+            if (waterRefuge != null) waterRefuge.clearGoal();
             return false;
-        float best = 8.5f;
-        float bestYaw = mob.yRot;
-        for (int direction = 0; direction < 16; direction++) {
-            float yaw = direction * 22.5f;
-            double angle = Math.toRadians(yaw);
-            float dx = (float) -Math.sin(angle), dz = (float) Math.cos(angle);
-            for (float distance = .5f; distance < best; distance += .5f) {
-                var step = mob.bb.cloneMove(dx * distance, 0, dz * distance);
-                if (!level.getCubes(step).isEmpty())
-                    break;
-                int x = net.classicremastered.util.MathHelper.floor(mob.x + dx * distance);
-                int y = net.classicremastered.util.MathHelper.floor(mob.bb.y0);
-                int z = net.classicremastered.util.MathHelper.floor(mob.z + dz * distance);
-                if (level.isWater(x, y, z) || level.isWater(x, y - 1, z)) {
-                    best = distance;
-                    bestYaw = yaw;
-                    break;
-                }
-                if (level.getCubes(step.cloneMove(0, -.65f, 0)).isEmpty())
-                    break;
-            }
         }
-        if (best == 8.5f)
+        if (zombie.isInWaterOrOnWater()) {
+            usingWaterShelter = true;
+            holdPosition(mob.yRot);
+            mob.xd *= .5f;
+            mob.zd *= .5f;
+            return true;
+        }
+        if (waterRefuge == null || waterRefugeLevel != level) {
+            waterRefuge = new PathNavigator(level);
+            waterRefugeLevel = level;
+            waterDestination = null;
+            waterSearchDelay = 0;
+        }
+        if (waterDestination != null
+                && !level.isWater(waterDestination.x, waterDestination.y - 1, waterDestination.z)) {
+            waterDestination = null;
+            waterRefuge.clearGoal();
+        }
+        if (waterDestination == null && --waterSearchDelay <= 0) {
+            waterSearchDelay = 20;
+            waterDestination = Pathfinder.findWaterRefuge(level, mob);
+            if (waterDestination == null) waterRefuge.clearGoal();
+        }
+        if (waterDestination == null) return false;
+        float offset = Pathfinder.offset(mob.bbWidth);
+        float x = waterDestination.x + offset, z = waterDestination.z + offset;
+        float dx = x - mob.x, dz = z - mob.z;
+        if (dx * dx + dz * dz < .16f && Math.abs(mob.bb.y0 - waterDestination.feetY) < .5f) {
+            holdPosition((float) Math.toDegrees(Math.atan2(dz, dx)) - 90f);
+            yya = .55f;
+            return true;
+        }
+        var route = waterRefuge.setGoal(x, waterDestination.feetY, z).steerToWaterRefuge(mob);
+        if (waterRefuge.isWaitingForRoute()) {
+            waterDestination = null;
+            waterRefuge.clearGoal();
             return false;
-        holdPosition(bestYaw);
-        yya = 1f;
+        }
+        steeredThisTick = true;
         running = true;
+        applyRoute(route, 1f);
         return true;
     }
 
@@ -473,6 +526,25 @@ public class BasicAI extends AI {
             navigator = new net.classicremastered.minecraft.path.PathNavigator(level);
         }
         return navigator;
+    }
+
+    public final List<net.classicremastered.minecraft.model.Vec3D> debugRoute() {
+        var route = waterDestination != null ? waterRefuge : navigator;
+        if (mob == null) return List.of();
+        if (!mob.isInWater() || waterDestination != null) {
+            if (route == null) return List.of();
+            float offset = Pathfinder.offset(mob.movementClearanceWidth());
+            return route.remainingPath().stream()
+                    .map(
+                            n ->
+                                    new net.classicremastered.minecraft.model.Vec3D(
+                                            n.x + offset, n.feetY, n.z + offset))
+                    .toList();
+        }
+        if (shorePath == null || shorePath.isEmpty()) return List.of();
+        return shorePath.subList(Math.min(shoreIndex, shorePath.size()), shorePath.size()).stream()
+                .map(s -> new net.classicremastered.minecraft.model.Vec3D(s.x(), s.feetY(), s.z()))
+                .toList();
     }
 
     protected final void holdPosition(float yaw) {
@@ -520,6 +592,12 @@ public class BasicAI extends AI {
         blockedPursuit = null;
         blockedPursuitTarget = null;
         return applyRoute(route, speed);
+    }
+
+    /** Follow a route that can enter water for this pursuit. */
+    public final void navigateToWater(float x, float feetY, float z, float speed) {
+        steeredThisTick = true;
+        applyRoute(getNavigator().setGoal(x, feetY, z).steerToWaterRefuge(mob), speed);
     }
 
     /** For specialized AI that applies acceleration after the normal travel step. */

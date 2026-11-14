@@ -25,6 +25,7 @@ final class WorldStateNbtCodec {
         level.redstone().save(root);
         if (level.biomeSeed != null) root.putLong("BiomeSeed", level.biomeSeed);
         if (level.flatBiomes) root.putBoolean("FlatBiomes", true);
+        if (level.oceanBiomes) root.putBoolean("OceanBiomes", true);
         root.putBoolean("DoMobSpawning", level.doMobSpawning);
         root.putBoolean("DoMobLoot", level.doMobLoot);
         root.putBoolean("KeepInventory", level.keepInventory);
@@ -117,6 +118,7 @@ final class WorldStateNbtCodec {
         net.classicremastered.minecraft.level.structure.GeneratedHouse.load(level, root);
         if (root.hasKey("BiomeSeed")) level.biomeSeed = root.getLong("BiomeSeed");
         level.flatBiomes = root.getBoolean("FlatBiomes");
+        level.oceanBiomes = root.getBoolean("OceanBiomes");
         level.redstone().load(root);
         level.doMobSpawning = !root.hasKey("DoMobSpawning") || root.getBoolean("DoMobSpawning");
         level.doMobLoot = !root.hasKey("DoMobLoot") || root.getBoolean("DoMobLoot");

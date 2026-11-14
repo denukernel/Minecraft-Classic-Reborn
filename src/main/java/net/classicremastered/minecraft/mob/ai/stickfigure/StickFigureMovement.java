@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.path.Pathfinder;
@@ -24,24 +25,44 @@ public final class StickFigureMovement {
     private List<Vec3D> leapPath = List.of();
     private List<ShoreNavigator.Step> shorePath = List.of();
     private Entity shoreTarget, chaseTarget;
-    private boolean swimming;
+    private boolean swimming, chasingSwimmer;
     private int noRouteTicks;
     private int shoreIndex;
+    private ShoreNavigator.Step bankExit;
+    private ShoreNavigator.Step blockedExit;
+    private int bankExitTicks;
 
     public boolean isLeaping() {
-        return leapTicks > 0;
+        return leapTicks > 0 || bankExit != null;
+    }
+
+    public boolean isClimbingBank() {
+        return bankExit != null;
+    }
+
+    public List<Vec3D> debugRoute() {
+        if (bankExit != null) return List.of(debugShoreExit());
+        if (leapTicks > 0)
+            return List.copyOf(
+                    leapPath.subList(Math.min(leapAge, leapPath.size()), leapPath.size()));
+        return shorePath.subList(Math.min(shoreIndex, shorePath.size()), shorePath.size()).stream()
+                .map(step -> new Vec3D(step.x(), step.feetY(), step.z()))
+                .toList();
+    }
+
+    public Vec3D debugShoreExit() {
+        var exit =
+                bankExit != null
+                        ? bankExit
+                        : shorePath.isEmpty() ? null : shorePath.get(shorePath.size() - 1);
+        return exit == null ? null : new Vec3D(exit.x(), exit.feetY(), exit.z());
     }
 
     public void tick(StickFigure boss) {
-        if (lastTick >= 0 && boss.tickCount - lastTick > 1)
-            cancel();
+        if (lastTick >= 0 && boss.tickCount - lastTick > 1) cancel();
         lastTick = boss.tickCount;
-        if (leapCooldown > 0)
-            leapCooldown--;
-        if (scanCooldown > 0)
-            scanCooldown--;
-        if (shoreRepath > 0)
-            shoreRepath--;
+        if (leapCooldown > 0) leapCooldown--;
+        if (scanCooldown > 0) scanCooldown--;
     }
 
     public void cancel() {
@@ -49,25 +70,39 @@ public final class StickFigureMovement {
         leapPath = List.of();
         shorePath = List.of();
         shoreTarget = null;
+        shoreRepath = 0;
+        bankExit = null;
+        blockedExit = null;
     }
 
     public boolean chase(StickFigureAI ai, StickFigure boss, Entity target) {
+        boolean inWater = boss.isInWater();
         if (target == null
                 || target.removed
                 || target.level != boss.level
                 || CreativeModeHelper.shouldIgnoreTarget(target)) {
-            cancel();
-            return false;
+            target = null;
+            if (!inWater && !isLeaping()) {
+                cancel();
+                return false;
+            }
         }
-        boolean inWater = boss.isInWater();
-        if (target != chaseTarget || inWater != swimming) {
+        boolean targetInWater =
+                target != null && (target.touchesWaterSurface() || target.isUnderWater());
+        if (target != chaseTarget || inWater != swimming || targetInWater != chasingSwimmer) {
             ai.clearNavigation();
-            cancel();
+            if (!isLeaping()) cancel();
             chaseTarget = target;
             swimming = inWater;
+            chasingSwimmer = targetInWater;
             noRouteTicks = 0;
         }
-        if (isLeaping()) {
+        if (bankExit != null) {
+            if (climbBank(ai, boss)) return true;
+            bankExit = null;
+            shoreRepath = 0;
+        }
+        if (leapTicks > 0) {
             if ((leapAge > 1 && (boss.onGround || boss.horizontalCollision)) || --leapTicks <= 0) {
                 boss.fallDistance = 0;
                 cancel();
@@ -86,13 +121,20 @@ public final class StickFigureMovement {
                 return true;
             }
         }
-        if (boss.isInWater())
-            return swim(ai, boss, target);
+        if (inWater) return swim(ai, boss, target, targetInWater);
+        if (target == null) return false;
+        if (targetInWater) {
+            ai.navigateToWater(target.x, target.bb.y0, target.z, ai.runSpeed);
+            return true;
+        }
         float distance = (float) Math.hypot(target.x - boss.x, target.z - boss.z);
         float lead = Math.min(6, distance / .5f);
         float x = target.x + Math.max(-2, Math.min(2, target.xd * lead));
         float z = target.z + Math.max(-2, Math.min(2, target.zd * lead));
-        if (Math.abs(target.bb.y0 - boss.bb.y0) < 1.25f
+        boolean waterDetour =
+                Pathfinder.waterBetween(boss.level, boss, target.x, target.bb.y0, target.z);
+        if (!waterDetour
+                && Math.abs(target.bb.y0 - boss.bb.y0) < 1.25f
                 && Pathfinder.canWalkStraight(boss.level, boss, x, boss.bb.y0, z)) {
             ai.clearNavigation();
             noRouteTicks = 0;
@@ -100,56 +142,91 @@ public final class StickFigureMovement {
             return true;
         }
         ai.navigateTo(target.x, target.bb.y0, target.z, ai.runSpeed * .75f);
-        if (ai.hasActiveRoute()) {
+        if (ai.hasActiveRoute() || waterDetour) {
             noRouteTicks = 0;
             return false;
         }
         if (++noRouteTicks >= 12 && boss.onGround && leapCooldown == 0 && scanCooldown == 0) {
             scanCooldown = 8;
-            if (findLeap(ai, boss, target.x, target.bb.y0, target.z))
-                return true;
+            if (findLeap(ai, boss, target.x, target.bb.y0, target.z)) return true;
         }
         return false;
     }
 
-    private boolean swim(StickFigureAI ai, StickFigure boss, Entity target) {
-        if (target != shoreTarget || shoreRepath == 0) {
+    private boolean swim(StickFigureAI ai, StickFigure boss, Entity target, boolean targetInWater) {
+        if (shoreRepath > 0) shoreRepath--;
+        if (!targetInWater && (target != shoreTarget || shoreRepath == 0)) {
             shoreTarget = target;
-            shoreRepath = 16;
-            shorePath = target.isInWater() ? List.of() : ShoreNavigator.find(boss.level, boss, target);
-            shoreIndex = shorePath.size() > 1 ? 1 : 0;
+            shoreRepath = 32;
+            shorePath = ShoreNavigator.find(boss.level, boss, target, blockedExit);
+            if (shorePath.isEmpty()) blockedExit = null;
+            shoreIndex = 0;
         }
-        float x = target.x, z = target.z;
+        float x = target == null ? boss.x : target.x, z = target == null ? boss.z : target.z;
+        boolean nearBank = false;
         if (!shorePath.isEmpty()) {
             while (shoreIndex < shorePath.size() - 1) {
                 ShoreNavigator.Step step = shorePath.get(shoreIndex);
-                if (Math.hypot(step.x() - boss.x, step.z() - boss.z) > .6f)
-                    break;
+                if (Math.hypot(step.x() - boss.x, step.z() - boss.z) > .6f) break;
                 shoreIndex++;
+                shoreRepath = 32;
             }
             ShoreNavigator.Step step = shorePath.get(shoreIndex);
             x = step.x();
             z = step.z();
-            if (shoreIndex == shorePath.size() - 1
-                    && leapCooldown == 0
-                    && scanCooldown == 0
-                    && Math.hypot(x - boss.x, z - boss.z) < 3) {
-                scanCooldown = 8;
-                if (launch(ai, boss, x, step.feetY(), z))
-                    return true;
+            nearBank = shoreIndex == shorePath.size() - 1 && Math.hypot(x - boss.x, z - boss.z) < 2;
+            if (nearBank && leapCooldown == 0) {
+                bankExit = step;
+                bankExitTicks = 30;
+                if (climbBank(ai, boss)) return true;
+                bankExit = null;
             }
         }
-        boolean reachedTarget = shorePath.isEmpty() && Math.hypot(x - boss.x, z - boss.z) < 1.4f;
-        steer(ai, boss, x, z, reachedTarget ? 0 : .8f);
+        boolean reachedTarget = shorePath.isEmpty() && Math.hypot(x - boss.x, z - boss.z) < 1.1f;
+        steer(ai, boss, x, z, reachedTarget ? 0 : targetInWater ? 1f : .8f);
         ai.jumping = false;
-        int surface = (int) Math.floor(boss.bb.y0);
+        int surface = (int) Math.floor(boss.bb.y0 - .02f);
         int bx = (int) Math.floor(boss.x), bz = (int) Math.floor(boss.z);
-        while (surface < boss.level.depth - 1 && boss.level.isWater(bx, surface, bz))
-            surface++;
-        float feet = surface - .85f;
-        if (target.isInWater())
-            feet = Math.min(feet, target.bb.y0);
-        boss.yd = Math.max(-.12f, Math.min(.14f, boss.yd * .5f + (feet - boss.bb.y0) * .1f + .025f));
+        while (surface < boss.level.depth - 1 && boss.level.isWater(bx, surface + 1, bz)) surface++;
+        float waterY =
+                boss.level.isWater(bx, surface, bz)
+                        ? LiquidBlock.waterSurfaceAt(
+                                boss.level, bx, surface, bz, boss.x - bx, boss.z - bz)
+                        : boss.bb.y0 + 1.25f;
+        float feet = waterY - (nearBank || shorePath.isEmpty() || boss.onGround ? .3f : .85f);
+        if (!targetInWater && !shorePath.isEmpty() && !nearBank) {
+            feet = Math.max(feet, shorePath.get(shoreIndex).feetY());
+        }
+        if (targetInWater) feet = Math.min(waterY - .55f, target.bb.y0);
+        boss.yd = Math.max(-.15f, Math.min(.19f, (feet - boss.bb.y0) * .18f));
+        return true;
+    }
+
+    private boolean climbBank(StickFigureAI ai, StickFigure boss) {
+        float dx = bankExit.x() - boss.x, dz = bankExit.z() - boss.z;
+        float distance = (float) Math.hypot(dx, dz);
+        float rise = bankExit.feetY() - boss.bb.y0;
+        if (distance < .15f && boss.onGround && !boss.isInWater()) return false;
+        if (--bankExitTicks <= 0
+                || !landingClear(boss, bankExit.x(), bankExit.feetY(), bankExit.z())) {
+            blockedExit = bankExit;
+            leapCooldown = 8;
+            return false;
+        }
+        ai.xxa = ai.yya = ai.yRotA = 0;
+        ai.jumping = false;
+        face(boss, dx, dz, 24);
+        if (rise > -.06f && distance > .15f) {
+            boss.xd = boss.zd = 0;
+            boss.yd = Math.min(.42f, rise + .09f);
+        } else if (distance > .15f) {
+            float step = Math.min(.23f, distance) / distance;
+            boss.xd = dx * step;
+            boss.zd = dz * step;
+            boss.yd = 0;
+        } else {
+            boss.xd = boss.zd = 0;
+        }
         return true;
     }
 
@@ -256,12 +333,13 @@ public final class StickFigureMovement {
 
     private static boolean landingClear(StickFigure boss, float x, float feet, float z) {
         AABB box = body(boss, x, feet, z);
+        box.y1 = feet + StickFigure.STANDING_HEIGHT - .002f;
         int support = boss.level.getTile(
                 (int) Math.floor(x), (int) Math.floor(feet - .01f), (int) Math.floor(z));
         return clear(boss.level, box)
                 && support != Block.CACTUS.id
                 && support != Block.FIRE.id
-                && !boss.level.containsLiquid(box.cloneMove(0, -.1f, 0), LiquidType.WATER)
+                && !boss.level.isWater((int) Math.floor(x), (int) Math.floor(feet - .01f), (int) Math.floor(z))
                 && !boss.level
                         .getCubes(
                                 new AABB(x - .15f, feet - .08f, z - .15f, x + .15f, feet, z + .15f))
@@ -270,43 +348,40 @@ public final class StickFigureMovement {
 
     private static List<Vec3D> plan(StickFigure boss, float x, float feet, float z) {
         float distance = (float) Math.hypot(x - boss.x, z - boss.z);
-        if (distance < .5f || distance > 8 || feet - boss.bb.y0 > 4.1f)
-            return null;
-        for (int duration : new int[]{16, 20, 24}) {
-            if (distance / duration > .5f)
-                continue;
+        if (distance < .5f || distance > 8 || feet - boss.bb.y0 > 4.1f) return null;
+        boolean leavingWater = boss.isInWater();
+        for (int duration : new int[] {16, 20, 24}) {
+            if (distance / duration > .5f) continue;
             float low = .15f, high = 1.15f;
             for (int i = 0; i < 16; i++) {
                 float speed = (low + high) * .5f;
                 List<Vec3D> arc = arc(boss, x, z, duration, speed);
-                if (arc.get(duration).y < feet + .02f)
-                    low = speed;
-                else
-                    high = speed;
+                if (arc.get(duration).y < feet + .02f) low = speed;
+                else high = speed;
             }
             List<Vec3D> arc = arc(boss, x, z, duration, (low + high) * .5f);
             if (Math.abs(arc.get(duration).y - feet) > .06f
-                    || arc.get(duration - 1).y <= arc.get(duration).y)
-                continue;
+                    || arc.get(duration - 1).y <= arc.get(duration).y) continue;
             boolean valid = true;
             for (int i = 1; i < arc.size() && valid; i++) {
                 Vec3D from = arc.get(i - 1), to = arc.get(i);
                 for (int sample = 1; sample <= 4; sample++) {
                     float t = sample / 4f;
-                    if (!clear(
-                            boss.level,
+                    AABB sampleBody =
                             body(
                                     boss,
                                     from.x + (to.x - from.x) * t,
                                     from.y + (to.y - from.y) * t,
-                                    from.z + (to.z - from.z) * t))) {
+                                    from.z + (to.z - from.z) * t);
+                    if (!clear(boss.level, sampleBody)
+                            || !leavingWater
+                                    && boss.level.containsLiquid(sampleBody, LiquidType.WATER)) {
                         valid = false;
                         break;
                     }
                 }
             }
-            if (valid)
-                return arc;
+            if (valid) return arc;
         }
         return null;
     }

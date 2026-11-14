@@ -126,7 +126,8 @@ final class InfiniteLevelNbtCodec {
                             seed,
                             depth,
                             "Biomes".equalsIgnoreCase(type),
-                            root.getBoolean("FlatBiomes"));
+                            root.getBoolean("FlatBiomes"),
+                            root.getBoolean("OceanBiomes"));
         }
 
         level.setTime(root.getInt("TimeOfDay"));

@@ -67,6 +67,7 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.BOOKSHELF);
         allowedBlocks.add(Block.TNT);
         allowedBlocks.add(Block.OBSIDIAN);
+        allowedBlocks.add(Block.MAGMA);
         allowedBlocks.add(Block.BEDROCK);
 
         // --- New custom blocks in creative inventory ---

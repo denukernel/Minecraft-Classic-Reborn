@@ -32,6 +32,26 @@ public final class Pathfinder {
                 && !(mob instanceof net.classicremastered.minecraft.mob.CrossbowTurret);
     }
 
+    public static boolean canEnterWater(Mob mob) {
+        return supportsSwimming(mob)
+                && mob instanceof net.classicremastered.minecraft.mob.Zombie zombie
+                && !(mob instanceof net.classicremastered.minecraft.mob.Skeleton)
+                && zombie.canBurnInSunlight();
+    }
+
+    public static boolean waterBetween(Level level, Mob mob, float x, float feetY, float z) {
+        float dx = x - mob.x, dz = z - mob.z;
+        int samples = Math.max(1, (int) Math.ceil(Math.hypot(dx, dz) * 2));
+        for (int i = 1; i <= samples; i++) {
+            float t = (float) i / samples;
+            int bx = (int) Math.floor(mob.x + dx * t);
+            int by = (int) Math.floor(mob.bb.y0 + (feetY - mob.bb.y0) * t);
+            int bz = (int) Math.floor(mob.z + dz * t);
+            if (level.isWater(bx, by, bz) || level.isWater(bx, by - 1, bz)) return true;
+        }
+        return false;
+    }
+
     public static final class Node {
 
         public final int x, y, z;
@@ -100,7 +120,8 @@ public final class Pathfinder {
                 ty,
                 tz,
                 maxNodes,
-                SEARCH_RADIUS);
+                SEARCH_RADIUS,
+                false);
     }
 
     public static List<Node> findPath(Level level, Mob mob, int tx, int ty, int tz, int maxNodes) {
@@ -114,9 +135,47 @@ public final class Pathfinder {
 
     public static List<Node> findChasePath(
             Level level, Mob mob, float x, float feetY, float z, int maxNodes) {
-        GroundClearance ground = new GroundClearance(level, mob);
+        return findChasePath(new GroundClearance(level, mob), mob, x, feetY, z, maxNodes);
+    }
+
+    static List<Node> findChasePath(
+            GroundClearance ground, Mob mob, float x, float feetY, float z, int maxNodes) {
+        if (ground.needsDryApproach(x, feetY, z)) {
+            return findPath(
+                    ground,
+                    mob,
+                    cell(x, ground.width),
+                    feetY,
+                    cell(z, ground.width),
+                    maxNodes,
+                    true);
+        }
         Node goal = ground.chaseGoal(x, feetY, z);
         return goal == null ? null : findPath(ground, mob, goal.x, goal.feetY, goal.z, maxNodes);
+    }
+
+    public static Node findWaterRefuge(Level level, Mob mob) {
+        GroundClearance ground = new GroundClearance(level, mob, null, true);
+        int sx = cell(mob.x, ground.width), sz = cell(mob.z, ground.width);
+        int sy = (int) Math.floor(mob.bb.y0);
+        List<Node> candidates = new ArrayList<>();
+        for (int x = sx - 16; x <= sx + 16; x++) {
+            for (int z = sz - 16; z <= sz + 16; z++) {
+                for (int y = Math.min(level.depth - 2, sy + 2); y >= Math.max(0, sy - 8); y--) {
+                    if (ground.waterLanding(x, y + 1, z)) {
+                        candidates.add(new Node(x, y + 1, z, null));
+                        break;
+                    }
+                }
+            }
+        }
+        candidates.sort(Comparator.comparingDouble(n -> heuristic(n.x, n.feetY, n.z, sx, sy, sz)));
+        for (int i = 0; i < Math.min(candidates.size(), 8); i++) {
+            Node candidate = candidates.get(i);
+            if (findPath(ground, mob, candidate.x, candidate.feetY, candidate.z, 384) != null)
+                return candidate;
+        }
+        return null;
     }
 
     public static List<Node> findPathWithRemovableFire(
@@ -128,13 +187,23 @@ public final class Pathfinder {
             int maxNodes,
             java.util.function.Predicate<net.classicremastered.minecraft.level.RedstoneEngine.Pos>
                     removableFire) {
-        GroundClearance ground = new GroundClearance(level, mob, removableFire);
-        Node goal = ground.chaseGoal(x, feetY, z);
-        return goal == null ? null : findPath(ground, mob, goal.x, goal.feetY, goal.z, maxNodes);
+        return findChasePath(
+                new GroundClearance(level, mob, removableFire), mob, x, feetY, z, maxNodes);
     }
 
     static List<Node> findPath(
             GroundClearance ground, Mob mob, int tx, float ty, int tz, int maxNodes) {
+        return findPath(ground, mob, tx, ty, tz, maxNodes, false);
+    }
+
+    private static List<Node> findPath(
+            GroundClearance ground,
+            Mob mob,
+            int tx,
+            float ty,
+            int tz,
+            int maxNodes,
+            boolean dryApproach) {
         int sx = cell(mob.x, ground.width), sz = cell(mob.z, ground.width);
         float sy = Math.round(mob.bb.y0 * 2f) / 2f;
         if (Math.abs(mob.bb.y0 - sy) < 0.12f
@@ -145,7 +214,7 @@ public final class Pathfinder {
                         mob.z,
                         sx + ground.offset,
                         sz + ground.offset)) {
-            return search(ground, sx, sy, sz, tx, ty, tz, maxNodes, SEARCH_RADIUS);
+            return search(ground, sx, sy, sz, tx, ty, tz, maxNodes, SEARCH_RADIUS, dryApproach);
         }
         Node start = null;
         float best = Float.POSITIVE_INFINITY;
@@ -175,7 +244,16 @@ public final class Pathfinder {
         return start == null
                 ? null
                 : search(
-                        ground, start.x, start.feetY, start.z, tx, ty, tz, maxNodes, SEARCH_RADIUS);
+                        ground,
+                        start.x,
+                        start.feetY,
+                        start.z,
+                        tx,
+                        ty,
+                        tz,
+                        maxNodes,
+                        SEARCH_RADIUS,
+                        dryApproach);
     }
 
     private static float heuristic(int x, float y, int z, int tx, float ty, int tz) {
@@ -198,10 +276,11 @@ public final class Pathfinder {
             float ty,
             int tz,
             int budget,
-            int radius) {
+            int radius,
+            boolean dryApproach) {
         if (!ground.standable(sx, sy, sz)) return null;
         boolean distant = Math.max(Math.abs(tx - sx), Math.abs(tz - sz)) > radius;
-        if (!distant && !ground.standable(tx, ty, tz)) return null;
+        if (!distant && !dryApproach && !ground.standable(tx, ty, tz)) return null;
         PriorityQueue<Entry> open =
                 new PriorityQueue<>(
                         Comparator.comparingDouble(Entry::score).thenComparingLong(Entry::order));
@@ -277,6 +356,6 @@ public final class Pathfinder {
         }
         // Distant goals can use a bounded route segment; enclosed local goals stop
         // safely.
-        return distant && best != start ? result(best) : null;
+        return dryApproach || distant && best != start ? result(best) : null;
     }
 }

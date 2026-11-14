@@ -25,7 +25,7 @@ public final class GenerateLevelScreen extends GuiScreen {
     private boolean creative = false;
 
     private boolean infinite;
-    private boolean biomes;
+    private boolean biomes = true;
 
     private String seedString = "";
     private GuiTextField seedField;

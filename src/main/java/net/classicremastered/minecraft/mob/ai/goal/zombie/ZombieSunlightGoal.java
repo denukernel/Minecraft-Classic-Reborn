@@ -17,28 +17,24 @@ public final class ZombieSunlightGoal extends Goal {
     }
 
     @Override
-    public void tick() { // --- Sunlight burning (skip if variant is sun-immune; also don't burn in/onto
+    public void
+            tick() { // --- Sunlight burning (skip if variant is sun-immune; also don't burn in/onto
         // water) ---
         if (zombie.canBurnInSunlight()
                 && zombie.level.shouldUndeadBurnAt(zombie)
                 && !zombie.isInWaterOrOnWater()) {
-            // Spawn nice fire & smoke particles as a visual sun-burn illusion
+            // The attached fire overlay follows the zombie and cuts off on water contact.
             if (zombie.level.particleEngine != null) {
                 if (zombie.level.random.nextInt(4) == 0) {
                     float px = zombie.x + (zombie.level.random.nextFloat() - 0.5f) * zombie.bbWidth;
-                    float py = zombie.y - zombie.heightOffset + zombie.level.random.nextFloat() * zombie.bbHeight;
+                    float py =
+                            zombie.y
+                                    - zombie.heightOffset
+                                    + zombie.level.random.nextFloat() * zombie.bbHeight;
                     float pz = zombie.z + (zombie.level.random.nextFloat() - 0.5f) * zombie.bbWidth;
                     zombie.level.particleEngine.spawnParticle(
-                            new net.classicremastered.minecraft.particle.SmokeParticle(zombie.level, px, py, pz));
-                }
-                if (zombie.level.random.nextInt(3) == 0) {
-                    float px = zombie.x + (zombie.level.random.nextFloat() - 0.5f) * zombie.bbWidth;
-                    float py = zombie.y - zombie.heightOffset + zombie.level.random.nextFloat() * zombie.bbHeight;
-                    float pz = zombie.z + (zombie.level.random.nextFloat() - 0.5f) * zombie.bbWidth;
-                    zombie.level.particleEngine
-                            .spawnParticle(
-                                    new net.classicremastered.minecraft.particle.TerrainParticle(zombie.level, px,
-                                            py, pz, 0f, 0f, 0f, net.classicremastered.minecraft.level.tile.Block.FIRE));
+                            new net.classicremastered.minecraft.particle.SmokeParticle(
+                                    zombie.level, px, py, pz));
                 }
             }
 

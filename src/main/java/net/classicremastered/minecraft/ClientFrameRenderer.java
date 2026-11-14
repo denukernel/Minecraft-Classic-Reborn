@@ -452,6 +452,10 @@ final class ClientFrameRenderer {
                         if (mc.debugHitboxes) {
                             EntityHitboxRenderer.render(mc, camVec, fr, renderPartial);
                         }
+                        if (mc.debugPaths) {
+                            net.classicremastered.minecraft.render.MobPathDebugRenderer.render(
+                                    mc.level, camVec, renderPartial);
+                        }
                         ClientWeatherRenderer.render(r2, renderPartial);
                         net.classicremastered.minecraft.render.DeveloperPowerRenderer.render(
                                 mc, renderPartial);
@@ -513,18 +517,19 @@ final class ClientFrameRenderer {
     }
 
     private static void renderParticles(ParticleManager manager, float partial) {
-        if (manager.particles[0].isEmpty()
-                && manager.particles[1].isEmpty()
-                && manager.particles[ParticleManager.COMBAT_PASS].isEmpty()) return;
+        boolean hasParticles = false;
+        for (var particles : manager.particles) hasParticles |= !particles.isEmpty();
+        if (!hasParticles) return;
         PARTICLE_VIEW.clear();
         GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, PARTICLE_VIEW);
         Vec3D right = new Vec3D(PARTICLE_VIEW.get(0), PARTICLE_VIEW.get(4), PARTICLE_VIEW.get(8));
         Vec3D up = new Vec3D(PARTICLE_VIEW.get(1), PARTICLE_VIEW.get(5), PARTICLE_VIEW.get(9));
-        GL11.glPushAttrib(GL11.GL_ENABLE_BIT);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT);
         try {
             GL11.glDisable(GL11.GL_CULL_FACE);
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             GL11.glEnable(GL11.GL_ALPHA_TEST);
+            GL11.glAlphaFunc(GL11.GL_GREATER, .1f);
             for (int pass = 0; pass < manager.particles.length; pass++) {
                 var particles = manager.particles[pass];
                 if (particles.isEmpty()) continue;
@@ -532,6 +537,8 @@ final class ClientFrameRenderer {
                         switch (pass) {
                             case 0 -> "/particles.png";
                             case ParticleManager.COMBAT_PASS -> "/textures/particle/combat.png";
+                            case ParticleManager.EXPLOSION_PASS ->
+                                    "/textures/particle/explosion.png";
                             default -> BlockTextureAtlas.RESOURCE;
                         };
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, manager.textureManager.load(texture));

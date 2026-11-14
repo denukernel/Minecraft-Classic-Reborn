@@ -12,7 +12,8 @@ import net.classicremastered.minecraft.render.TextureManager;
 public final class ParticleManager {
 
     public static final int COMBAT_PASS = 2;
-    public List[] particles = new List[3];
+    public static final int EXPLOSION_PASS = 3;
+    public List[] particles = new List[4];
     public TextureManager textureManager;
 
     public ParticleManager(Level var1, TextureManager var2) {

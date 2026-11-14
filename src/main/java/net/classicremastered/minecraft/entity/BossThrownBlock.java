@@ -54,6 +54,7 @@ public final class BossThrownBlock extends Entity {
     public void tick() {
         if (removed) return;
         boolean explosive = owner instanceof StickFigure;
+        boolean large = explosive && cubeSize() == 2;
         if (explosive) {
             // Center collision on the rendered cube, including projectiles loaded from older saves.
             if (heightOffset != bbHeight * .5f) {
@@ -65,21 +66,36 @@ public final class BossThrownBlock extends Entity {
         xo = x;
         yo = y;
         zo = z;
-        ProjectileSweep.Impact impact = ProjectileSweep.move(this, owner);
+        ProjectileSweep.Impact impact =
+                large ? ProjectileSweep.moveAgainstBlocks(this) : ProjectileSweep.move(this, owner);
         if (impact != null) {
-            Mob target = impact.mob();
-            boolean dodged =
-                    target instanceof net.classicremastered.minecraft.mob.Enderman enderman
-                            && enderman.tryEvadeProjectile();
             if (explosive) {
-                detonate();
+                detonate(large ? impact.blockContact() : new Vec3D(x, y, z));
             } else if (blockId == Block.TNT.id) {
                 PrimedTnt.detonate(this, owner, 4f);
             } else {
+                Mob target = impact.mob();
+                boolean dodged =
+                        target instanceof net.classicremastered.minecraft.mob.Enderman enderman
+                                && enderman.tryEvadeProjectile();
                 if (target != null && !dodged) target.hurt(owner, 5);
                 shatter();
             }
             return;
+        }
+        if (explosive && level.particleEngine != null) {
+            float spread = bbWidth * .7f;
+            var random = java.util.concurrent.ThreadLocalRandom.current();
+            for (int i = 0; i < cubeSize(); i++) {
+                level.particleEngine.spawnParticle(
+                        new SmokeParticle(
+                                        level,
+                                        (xo + x) * .5f + (random.nextFloat() - .5f) * spread,
+                                        (yo + y) * .5f + (random.nextFloat() - .5f) * spread,
+                                        (zo + z) * .5f + (random.nextFloat() - .5f) * spread,
+                                        .025f)
+                                .scale(1.5f + cubeSize() * .5f));
+            }
         }
         if (++age >= (explosive ? 100 : 60)) {
             if (explosive) removed = true;
@@ -87,23 +103,24 @@ public final class BossThrownBlock extends Entity {
         }
     }
 
-    private void detonate() {
+    private void detonate(Vec3D contact) {
         removed = true;
-        level.playSound("random/explode", this, 1f, cubeSize() == 2 ? .8f : 1.2f);
+        float power = cubeSize() == 2 ? 5f : 2f;
+        level.playExplosionEffects(
+                contact.x, contact.y, contact.z, power, 1f, cubeSize() == 2 ? .8f : 1.2f);
         if (level.particleEngine != null) {
-            Block.blocks[blockId].spawnBreakParticles(level, (int) Math.floor(x), (int) Math.floor(y),
-                    (int) Math.floor(z), level.particleEngine);
-            for (int i = 0; i < 16; i++) {
-                level.particleEngine.spawnParticle(new SmokeParticle(level, x + level.random.nextFloat() - .5f,
-                        y + level.random.nextFloat() - .5f, z + level.random.nextFloat() - .5f));
-            }
+            Block.blocks[blockId].spawnBreakParticles(
+                    level,
+                    (int) Math.floor(contact.x),
+                    (int) Math.floor(contact.y),
+                    (int) Math.floor(contact.z),
+                    level.particleEngine);
         }
-        level.explode(owner, x, y, z, cubeSize() == 2 ? 3f : 2f, false);
+        level.explode(owner, contact.x, contact.y, contact.z, power, false);
     }
 
     private void shatter() {
-        if (removed)
-            return;
+        if (removed) return;
         removed = true;
         if (level.particleEngine != null)
             Block.blocks[blockId].spawnBreakParticles(level, (int) Math.floor(x), (int) Math.floor(y),

@@ -121,6 +121,7 @@ public final class Minecraft implements Runnable {
     public static File mcDir;
     public PaulsCodeSoundManager soundPC;
     public boolean debugHitboxes = false;
+    public boolean debugPaths;
 
     public Minecraft(Canvas var1, MinecraftApplet var2, int var3, int var4, boolean var5) {
         this.levelIo = new LevelIO(this.progressBar);

@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.MobSpawner;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ToolItem;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Player;
 
@@ -123,20 +124,19 @@ public final class SurvivalGameMode extends GameMode {
     public void breakBlock(int x, int y, int z) {
         int block = minecraft.level.getTile(x, y, z);
         if (block == 0) return;
-        if (block != Block.SNOW_BLOCK.id || holdingShovel()) {
+        if ((block != Block.SNOW_BLOCK.id || holdingTool(ToolItem.Kind.SHOVEL))
+                && (block != Block.MAGMA.id || holdingTool(ToolItem.Kind.PICKAXE))) {
             Block.blocks[block].onBreak(minecraft.level, x, y, z);
         }
         super.breakBlock(x, y, z);
     }
 
-    private boolean holdingShovel() {
+    private boolean holdingTool(ToolItem.Kind kind) {
         int selected = minecraft.player.inventory.getSelected();
         return selected >= 256
                 && selected - 256 < Item.items.length
-                && Item.items[selected - 256]
-                        instanceof net.classicremastered.minecraft.level.itemstack.ToolItem tool
-                && tool.kind()
-                        == net.classicremastered.minecraft.level.itemstack.ToolItem.Kind.SHOVEL;
+                && Item.items[selected - 256] instanceof ToolItem tool
+                && tool.kind() == kind;
     }
 
     @Override

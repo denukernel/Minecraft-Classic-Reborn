@@ -88,6 +88,9 @@ public final class StructureLocatorItem extends Item {
             }
         }
         if (level.biomeSeed != null && (filter == Filter.ALL || filter == Filter.PYRAMID)) {
+            var biomes =
+                    net.classicremastered.minecraft.level.generator.BiomeLevelGenerator.forLevel(
+                            level);
             int cx = Math.floorDiv((int) Math.floor(x), 64),
                     cz = Math.floorDiv((int) Math.floor(z), 64);
             for (int dz = -20; dz <= 20; dz++) {
@@ -98,7 +101,8 @@ public final class StructureLocatorItem extends Item {
                                     level.depth,
                                     cx + dx,
                                     cz + dz,
-                                    level.flatBiomes);
+                                    level.flatBiomes,
+                                    biomes);
                     if (site == null
                             || !(level instanceof LevelInfiniteTerrain)
                                     && (!level.isInBounds(site.x(), site.y(), site.z())

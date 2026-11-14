@@ -29,7 +29,10 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
             ai.specialMovement = ai.movement().chase(ai, boss, ai.attackTarget);
             if (ai.specialMovement) return;
         }
-        if (ai.powers.tick(boss, ai.attackTarget, ai.random)) {
+        boolean swimming = boss.isInWater();
+        if (swimming) {
+            if (ai.powers.blocksNavigation()) ai.powers.cancel(boss);
+        } else if (ai.powers.tick(boss, ai.attackTarget, ai.random)) {
             ai.movement().cancel();
             ai.xxa = ai.yya = ai.yRotA = 0;
             ai.jumping = ai.running = false;
@@ -52,30 +55,32 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
                 && ai.hasLineOfSight(ai.mob, ai.attackTarget)) {
             int before = ai.attackTarget instanceof Mob victim ? victim.health : 0;
             ai.attackTarget.hurt(ai.mob, boss.kicking ? 7 : 5);
-            if (ai.attackTarget instanceof Mob victim && victim.health >= before) {
-                ai.defaultAttack();
-                return;
-            }
-            ai.hitThisStrike = true;
-            ai.combatSound(
-                    boss.kicking ? "mob/irongolem/hit" : "damage/hurtflesh",
-                    .9f,
-                    boss.kicking ? .8f : 1.15f);
-            float dx = ai.attackTarget.x - ai.mob.x,
-                    dz = ai.attackTarget.z - ai.mob.z,
-                    len = (float) Math.sqrt(dx * dx + dz * dz);
-            if (len > .01f) {
-                float force = boss.kicking ? .55f : .2f;
-                ai.attackTarget.xd += dx / len * force;
-                ai.attackTarget.zd += dz / len * force;
-            }
+            if (!(ai.attackTarget instanceof Mob victim) || victim.health < before)
+                finishStrike(boss);
         }
         ai.defaultAttack();
-        if (boss.dodgeTicks > 0) {
+        if (swimming) {
+            ai.specialMovement = ai.movement().chase(ai, boss, ai.attackTarget);
+        } else if (boss.dodgeTicks > 0) {
             ai.xxa = ai.yya = ai.yRotA = 0;
             ai.jumping = false;
-        } else if ((boss.strikeTicks == 0 || boss.isInWater()) && ai.attackTarget != null) {
+        } else if (boss.strikeTicks == 0 && ai.attackTarget != null) {
             ai.specialMovement = ai.movement().chase(ai, boss, ai.attackTarget);
+        }
+    }
+
+    private void finishStrike(StickFigure boss) {
+        ai.hitThisStrike = true;
+        ai.combatSound(
+                boss.kicking ? "mob/irongolem/hit" : "damage/hurtflesh",
+                .9f,
+                boss.kicking ? .8f : 1.15f);
+        float dx = ai.attackTarget.x - boss.x, dz = ai.attackTarget.z - boss.z;
+        float distance = (float) Math.hypot(dx, dz);
+        if (distance > .01f) {
+            float force = boss.kicking ? .55f : .2f;
+            ai.attackTarget.xd += dx / distance * force;
+            ai.attackTarget.zd += dz / distance * force;
         }
     }
 }

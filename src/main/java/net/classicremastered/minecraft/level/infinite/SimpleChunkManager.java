@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.level.infinite;
 
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.tile.Block;
 
 import java.util.*;
@@ -18,7 +19,7 @@ public final class SimpleChunkManager {
     private final int height;
     private final long seed;
     private final InfiniteTerrainGenerator terrain;
-    private final net.classicremastered.minecraft.level.generator.BiomeLevelGenerator biomes;
+    private final BiomeLevelGenerator biomes;
     private final Mode mode;
     public Level level;
 
@@ -60,15 +61,15 @@ public final class SimpleChunkManager {
     private static int farlandsDamageCounter = 0;
 
     public SimpleChunkManager(long seed, int height, Mode mode) {
+        this(seed, height, mode, true);
+    }
+
+    public SimpleChunkManager(long seed, int height, Mode mode, boolean oceans) {
         this.seed = seed;
         this.height = height;
         this.mode = mode;
         this.terrain = mode == Mode.BIOMES ? null : new InfiniteTerrainGenerator(seed, height);
-        this.biomes =
-                mode == Mode.BIOMES
-                        ? new net.classicremastered.minecraft.level.generator.BiomeLevelGenerator(
-                                seed)
-                        : null;
+        this.biomes = mode == Mode.BIOMES ? new BiomeLevelGenerator(seed, oceans) : null;
     }
 
     private static long key(int cx, int cz) {

@@ -27,15 +27,20 @@ public final class DesertPyramid implements Structure {
     }
 
     public static Site site(long seed, int depth, int cellX, int cellZ, boolean flat) {
+        return site(seed, depth, cellX, cellZ, flat, new BiomeLevelGenerator(seed));
+    }
+
+    public static Site site(
+            long seed, int depth, int cellX, int cellZ, boolean flat, BiomeLevelGenerator biomes) {
         Random random =
                 new Random(seed ^ cellX * 341873128712L ^ cellZ * 132897987541L ^ 0xDE5E47L);
         int x = cellX * 64 + 8 + random.nextInt(24), z = cellZ * 64 + 8 + random.nextInt(24);
         if (random.nextInt(3) != 0) return null;
-        BiomeLevelGenerator biomes = new BiomeLevelGenerator(seed);
         int low = Integer.MAX_VALUE, high = 0;
         for (int dx = 0; dx <= 20; dx += 10)
             for (int dz = 0; dz <= 20; dz += 10) {
-                if (biomes.biomeAt(x + dx, z + dz) != BiomeLevelGenerator.Biome.DESERT) return null;
+                if (biomes.biomeAt(x + dx, z + dz, flat) != BiomeLevelGenerator.Biome.DESERT)
+                    return null;
                 int y = flat ? 34 : biomes.groundHeight(x + dx, z + dz, depth);
                 low = Math.min(low, y);
                 high = Math.max(high, y);
@@ -155,13 +160,19 @@ public final class DesertPyramid implements Structure {
     }
 
     public static void decorateChunk(SimpleChunk chunk, long seed, boolean flat) {
+        decorateChunk(chunk, seed, flat, new BiomeLevelGenerator(seed));
+    }
+
+    public static void decorateChunk(
+            SimpleChunk chunk, long seed, boolean flat, BiomeLevelGenerator biomes) {
         Site site =
                 site(
                         seed,
                         chunk.height,
                         Math.floorDiv(chunk.cx, 4),
                         Math.floorDiv(chunk.cz, 4),
-                        flat);
+                        flat,
+                        biomes);
         if (site == null) return;
         for (int z = 0; z < 16; z++)
             for (int x = 0; x < 16; x++)
@@ -179,9 +190,10 @@ public final class DesertPyramid implements Structure {
     }
 
     public static void placeInFinite(Level level, long seed) {
+        BiomeLevelGenerator biomes = BiomeLevelGenerator.forLevel(level);
         for (int cz = 0; cz * 64 < level.height; cz++)
             for (int cx = 0; cx * 64 < level.width; cx++) {
-                Site site = site(seed, level.depth, cx, cz, level.flatBiomes);
+                Site site = site(seed, level.depth, cx, cz, level.flatBiomes, biomes);
                 if (site != null && site.x + 20 < level.width && site.z + 20 < level.height)
                     new DesertPyramid()
                             .generate(level, site.x, site.y + 1, site.z, new Random(seed));
@@ -191,12 +203,12 @@ public final class DesertPyramid implements Structure {
     @Override
     public boolean canPlace(Level level, int x, int y, int z) {
         if (level.biomeSeed == null || y < 14 || y + 14 >= level.depth) return false;
-        BiomeLevelGenerator biomes = new BiomeLevelGenerator(level.biomeSeed);
+        BiomeLevelGenerator biomes = BiomeLevelGenerator.forLevel(level);
         for (int dx = 0; dx <= 20; dx += 10)
             for (int dz = 0; dz <= 20; dz += 10)
                 if (!level.isInBounds(x + dx, y, z + dz)
-                        || biomes.biomeAt(x + dx, z + dz) != BiomeLevelGenerator.Biome.DESERT)
-                    return false;
+                        || biomes.biomeAt(x + dx, z + dz, level.flatBiomes)
+                                != BiomeLevelGenerator.Biome.DESERT) return false;
         return true;
     }
 
@@ -223,7 +235,8 @@ public final class DesertPyramid implements Structure {
                         level.depth,
                         Math.floorDiv(pos.x(), 64),
                         Math.floorDiv(pos.z(), 64),
-                        level.flatBiomes);
+                        level.flatBiomes,
+                        BiomeLevelGenerator.forLevel(level));
         if (site == null
                 || blockAt(pos.x() - site.x, pos.y() - site.y, pos.z() - site.z) != Block.CHEST.id)
             return;

@@ -37,11 +37,15 @@ final class GroundClearance {
     }
 
     GroundClearance(Level level, Mob mob, Predicate<Pos> removableFire) {
+        this(level, mob, removableFire, Pathfinder.canEnterWater(mob));
+    }
+
+    GroundClearance(Level level, Mob mob, Predicate<Pos> removableFire, boolean swimming) {
         this(
                 level,
                 mob.movementClearanceWidth(),
                 mob.movementClearanceHeight(),
-                Pathfinder.supportsSwimming(mob),
+                swimming,
                 Pathfinder.dropLimit(mob),
                 nearbyTurrets(level, mob),
                 Pathfinder.supportsLadders(mob),
@@ -159,6 +163,12 @@ final class GroundClearance {
             return false;
         return bodyClear(x + offset, nextY, z + offset)
                 && bodyClear(x + offset, (nextY + y) * .5f, z + offset);
+    }
+
+    boolean needsDryApproach(float x, float feet, float z) {
+        if (swimming) return false;
+        int bx = (int) Math.floor(x), by = (int) Math.floor(feet), bz = (int) Math.floor(z);
+        return level.isWater(bx, by, bz) || level.isWater(bx, by - 1, bz);
     }
 
     Pathfinder.Node chaseGoal(float x, float feet, float z) {
@@ -321,6 +331,7 @@ final class GroundClearance {
     boolean waterLanding(int x, float y, int z) {
         return swimming
                 && y == Math.floor(y)
+                && level.isInBounds(x, (int) y - 1, z)
                 && level.isWater(x, (int) y - 1, z)
                 && !level.isWater(x, (int) y, z)
                 && supportedAt(x + offset, y, z + offset);

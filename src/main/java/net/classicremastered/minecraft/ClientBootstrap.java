@@ -13,6 +13,7 @@ import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.render.*;
 import net.classicremastered.minecraft.render.texture.TextureFireFX;
 import net.classicremastered.minecraft.render.texture.TextureLavaFX;
+import net.classicremastered.minecraft.render.texture.TextureMagmaFX;
 import net.classicremastered.minecraft.render.texture.TextureWaterFX;
 import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
 
@@ -240,6 +241,7 @@ final class ClientBootstrap {
         mc.textureManager.applyBlockTextures(); // stitch per-block tiles
 
         mc.textureManager.registerAnimation(new TextureLavaFX());
+        mc.textureManager.registerAnimation(new TextureMagmaFX());
         mc.textureManager.registerAnimation(new TextureWaterFX());
         mc.textureManager.registerAnimation(new TextureFireFX(Block.FIRE.textureId));
         mc.fontRenderer = new FontRenderer(mc.settings, "/default.png", mc.textureManager);

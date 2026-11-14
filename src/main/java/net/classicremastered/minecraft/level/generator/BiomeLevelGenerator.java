@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.level.generator;
 
 import net.classicremastered.minecraft.level.GeneratedOccupant;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.structure.DesertPyramid;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -21,7 +22,9 @@ public final class BiomeLevelGenerator {
         SNOWY_PLAINS,
         SNOWY_FOREST,
         BEACH,
-        SNOWY_BEACH;
+        SNOWY_BEACH,
+        OCEAN,
+        DEEP_OCEAN;
 
         boolean snowy() {
             return this == SNOWY_PLAINS || this == SNOWY_FOREST;
@@ -40,11 +43,36 @@ public final class BiomeLevelGenerator {
         }
     }
 
+    private static final double OCEAN_EDGE = -0.19;
+    private static final double DEEP_OCEAN_EDGE = -0.455;
+
     private final long seed;
+    private final boolean oceans;
+    private final int finiteSize;
+    private final double coastDirectionX;
+    private final double coastDirectionZ;
     private volatile net.classicremastered.minecraft.level.infinite.InfiniteTerrainGenerator caves;
 
     public BiomeLevelGenerator(long seed) {
+        this(seed, true);
+    }
+
+    public BiomeLevelGenerator(long seed, boolean oceans) {
+        this(seed, oceans, 0);
+    }
+
+    private BiomeLevelGenerator(long seed, boolean oceans, int finiteSize) {
         this.seed = seed;
+        this.oceans = oceans;
+        this.finiteSize = finiteSize;
+        double angle = Math.PI * sample(0, 0, 149);
+        coastDirectionX = Math.cos(angle);
+        coastDirectionZ = Math.sin(angle);
+    }
+
+    public static BiomeLevelGenerator forLevel(Level level) {
+        int size = level instanceof LevelInfiniteTerrain ? 0 : level.width;
+        return new BiomeLevelGenerator(level.biomeSeed, level.oceanBiomes, size);
     }
 
     private net.classicremastered.minecraft.level.infinite.InfiniteTerrainGenerator caveGenerator(
@@ -63,6 +91,15 @@ public final class BiomeLevelGenerator {
     }
 
     public Biome biomeAt(int x, int z) {
+        return biomeAt(x, z, false);
+    }
+
+    public Biome biomeAt(int x, int z, boolean flat) {
+        if (oceans && !flat) {
+            double continentalness = continentalness(x, z);
+            if (continentalness < DEEP_OCEAN_EDGE) return Biome.DEEP_OCEAN;
+            if (continentalness < OCEAN_EDGE) return Biome.OCEAN;
+        }
         double temperature = noise(x / 44.0, z / 44.0, 17);
         double moisture = noise(x / 38.0, z / 38.0, 41);
         if (temperature > 0.24 && moisture < 0.12) return Biome.DESERT;
@@ -74,7 +111,7 @@ public final class BiomeLevelGenerator {
     }
 
     public Biome surfaceBiomeAt(int x, int z, int depth, boolean flat) {
-        Biome biome = biomeAt(x, z);
+        Biome biome = biomeAt(x, z, flat);
         int top = flat ? 34 : groundHeight(x, z, depth);
         int sea = Math.max(1, depth / 2 - 2);
         if (biome != Biome.DESERT && top >= sea && hasSandSurface(biome, top, sea)) {
@@ -87,19 +124,50 @@ public final class BiomeLevelGenerator {
         return biome == Biome.DESERT || top <= sea + 1;
     }
 
+    private double continentalness(int x, int z) {
+        if (finiteSize > 0) {
+            // Fit a stretch of coastline and some inland terrain inside the bounded map.
+            double nx = (double) x / finiteSize - 0.5;
+            double nz = (double) z / finiteSize - 0.5;
+            return 0.22
+                    + 2.8 * (nx * coastDirectionX + nz * coastDirectionZ)
+                    + 0.28 * noise(nx * 5, nz * 5, 151);
+        }
+        return 0.82 * noise(x / 384.0, z / 384.0, 151) + 0.18 * noise(x / 144.0, z / 144.0, 157);
+    }
+
     private int surfaceHeight(int x, int z) {
         double hills = Math.max(0, noise(x / 52.0, z / 52.0, 93) - 0.15) * 18;
         double lowlands =
                 Math.max(0, noise(x / 38.0, z / 38.0, 41) - 0.2)
                         * Math.max(0, -noise(x / 44.0, z / 44.0, 17))
                         * 18;
-        return (int)
-                Math.round(
-                        34
-                                + noise(x / 32.0, z / 32.0, 7) * 6
-                                + noise(x / 12.0, z / 12.0, 11) * 2
-                                + hills
-                                - lowlands);
+        double inland =
+                34
+                        + noise(x / 32.0, z / 32.0, 7) * 6
+                        + noise(x / 12.0, z / 12.0, 11) * 2
+                        + hills
+                        - lowlands;
+        if (!oceans) return (int) Math.round(inland);
+
+        double continentalness = continentalness(x, z);
+        if (continentalness < OCEAN_EDGE) {
+            double shelf =
+                    Math.min(1, (OCEAN_EDGE - continentalness) / (OCEAN_EDGE - DEEP_OCEAN_EDGE));
+            double basin = Math.min(1, Math.max(0, (DEEP_OCEAN_EDGE - continentalness) / 0.4));
+            double relief = noise(x / 24.0, z / 24.0, 163) * 2;
+            return (int) Math.round(29 - shelf * (12 + relief) - basin * 6);
+        }
+        double inlandBlend = Math.min(1, (continentalness - OCEAN_EDGE) / 0.19);
+        return (int) Math.round(29 + (inland - 29) * inlandBlend);
+    }
+
+    private int surfaceBlock(Biome biome, int top, int sea, int y) {
+        if (biome == Biome.DEEP_OCEAN || biome == Biome.OCEAN && top <= sea - 6) {
+            return Block.GRAVEL.id;
+        }
+        if (hasSandSurface(biome, top, sea)) return Block.SAND.id;
+        return y == top ? grassId(biome) : Block.DIRT.id;
     }
 
     private int oreBlock(int y, Random random) {
@@ -127,7 +195,7 @@ public final class BiomeLevelGenerator {
                 int gx = worldX + x, gz = worldZ + z;
                 int top = flat ? 34 : groundHeight(gx, gz, chunk.height);
                 tops[x + z * SimpleChunk.SIZE] = top;
-                Biome biome = biomeAt(gx, gz);
+                Biome biome = biomeAt(gx, gz, flat);
                 Random random = new Random(seed ^ gx * 341873128712L ^ gz * 132897987541L);
                 for (int y = 0; y < chunk.height; y++) {
                     int id = 0;
@@ -135,8 +203,7 @@ public final class BiomeLevelGenerator {
                     else if (y > top && y <= sea) id = Block.STATIONARY_WATER.id;
                     else if (y <= top) {
                         if (y < top - 3) id = oreBlock(y, random);
-                        else if (hasSandSurface(biome, top, sea)) id = Block.SAND.id;
-                        else id = y == top ? grassId(biome) : Block.DIRT.id;
+                        else id = surfaceBlock(biome, top, sea, y);
                     }
                     chunk.blocks[SimpleChunk.idx(x, y, z, chunk.height)] = (byte) id;
                 }
@@ -147,7 +214,7 @@ public final class BiomeLevelGenerator {
         for (int z = worldZ - 2; z < worldZ + SimpleChunk.SIZE + 2; z++) {
             for (int x = worldX - 2; x < worldX + SimpleChunk.SIZE + 2; x++) {
                 if (Math.floorMod(x, 4) != 1 || Math.floorMod(z, 4) != 1) continue;
-                Biome biome = biomeAt(x, z);
+                Biome biome = biomeAt(x, z, flat);
                 int top = flat ? 34 : groundHeight(x, z, chunk.height);
                 int chance = biome.treeChance();
                 Random random = new Random(seed ^ x * 341873128712L ^ z * 132897987541L ^ 71);
@@ -170,7 +237,7 @@ public final class BiomeLevelGenerator {
                     GeneratedOccupant.offer(chunk.generatedOccupants, seed, true, x, top + 1, z);
             }
         }
-        DesertPyramid.decorateChunk(chunk, seed, flat);
+        DesertPyramid.decorateChunk(chunk, seed, flat, this);
         ReadBlock read =
                 (x, y, z) ->
                         chunk.blocks[SimpleChunk.idx(x - worldX, y, z - worldZ, chunk.height)]
@@ -189,7 +256,7 @@ public final class BiomeLevelGenerator {
                 chunk.generatedOccupants,
                 read,
                 write);
-        coverVegetationAndSnow(worldX, worldZ, 16, chunk.height, read, write);
+        coverVegetationAndSnow(worldX, worldZ, 16, chunk.height, flat, read, write);
         chunk.meshed = false;
     }
 
@@ -208,10 +275,16 @@ public final class BiomeLevelGenerator {
     }
 
     private void coverVegetationAndSnow(
-            int minX, int minZ, int size, int depth, ReadBlock read, WriteBlock write) {
+            int minX,
+            int minZ,
+            int size,
+            int depth,
+            boolean flat,
+            ReadBlock read,
+            WriteBlock write) {
         for (int z = minZ; z < minZ + size; z++) {
             for (int x = minX; x < minX + size; x++) {
-                Biome biome = biomeAt(x, z);
+                Biome biome = biomeAt(x, z, flat);
                 if (!biome.snowy() && biome != Biome.PLAINS && biome != Biome.FOREST)
                     continue;
                 for (int y = depth - 1; y >= 1; y--) {
@@ -250,7 +323,7 @@ public final class BiomeLevelGenerator {
         int sea = depth / 2 - 2;
         for (int cz = Math.floorDiv(minZ, 64); cz <= Math.floorDiv(maxZ - 1, 64); cz++) {
             for (int cx = Math.floorDiv(minX, 64); cx <= Math.floorDiv(maxX - 1, 64); cx++) {
-                var pyramid = DesertPyramid.site(seed, depth, cx, cz, flat);
+                var pyramid = DesertPyramid.site(seed, depth, cx, cz, flat, this);
                 Random random =
                         new Random(seed ^ cx * 341873128712L ^ cz * 132897987541L ^ 0x484F555345L);
                 int x = cx * 64 + 4 + random.nextInt(48), z = cz * 64 + 4 + random.nextInt(48);
@@ -261,7 +334,7 @@ public final class BiomeLevelGenerator {
                         int y = flat ? 34 : groundHeight(x + dx, z + dz, depth);
                         low = Math.min(low, y);
                         high = Math.max(high, y);
-                        Biome biome = biomeAt(x + dx, z + dz);
+                        Biome biome = biomeAt(x + dx, z + dz, flat);
                         dry &= biome == Biome.PLAINS || biome == Biome.FOREST;
                     }
                 if (!dry
@@ -311,14 +384,15 @@ public final class BiomeLevelGenerator {
                         || z >= maxZ - 1
                         || y <= sea
                         || y + height >= depth
-                        || biomeAt(x, z) != Biome.DESERT
+                        || biomeAt(x, z, flat) != Biome.DESERT
                         || nearPyramid(
                                 DesertPyramid.site(
                                         seed,
                                         depth,
                                         Math.floorDiv(x, 64),
                                         Math.floorDiv(z, 64),
-                                        flat),
+                                        flat,
+                                        this),
                                 x,
                                 z,
                                 0)
@@ -356,6 +430,11 @@ public final class BiomeLevelGenerator {
     }
 
     public Level generate(String creator, int size, boolean flat) {
+        return new BiomeLevelGenerator(seed, oceans && !flat, size)
+                .generateFinite(creator, size, flat);
+    }
+
+    private Level generateFinite(String creator, int size, boolean flat) {
         int depth = 64;
         int sea = 30;
         List<GeneratedOccupant> occupants = new ArrayList<>();
@@ -364,18 +443,14 @@ public final class BiomeLevelGenerator {
         Random random = new Random(seed ^ 0x5DEECE66DL);
         for (int z = 0; z < size; z++) {
             for (int x = 0; x < size; x++) {
-                Biome biome = biomeAt(x, z);
-                int top = flat ? 34 : surfaceHeight(x, z);
+                Biome biome = biomeAt(x, z, flat);
+                int top = flat ? 34 : groundHeight(x, z, depth);
                 surfaces[z * size + x] = top;
                 for (int y = 0; y <= Math.max(top, sea); y++) {
                     int id = Block.STONE.id;
                     if (y == 0) id = Block.BEDROCK.id;
                     else if (y > top) id = Block.STATIONARY_WATER.id;
-                    else if (y >= top - 3)
-                        id =
-                                hasSandSurface(biome, top, sea)
-                                        ? Block.SAND.id
-                                        : y == top ? grassId(biome) : Block.DIRT.id;
+                    else if (y >= top - 3) id = surfaceBlock(biome, top, sea, y);
                     else {
                         id = oreBlock(y, random);
                     }
@@ -416,7 +491,7 @@ public final class BiomeLevelGenerator {
         }
         for (int z = 3; z < size - 3; z++) {
             for (int x = 3; x < size - 3; x++) {
-                Biome biome = biomeAt(x, z);
+                Biome biome = biomeAt(x, z, flat);
                 int top = surfaces[z * size + x];
                 int chance = biome.treeChance();
                 if (top > sea + 1 && biome != Biome.DESERT && random.nextInt(chance) == 0) {
@@ -431,6 +506,7 @@ public final class BiomeLevelGenerator {
         level.name = "Biomes";
         level.biomeSeed = seed;
         level.flatBiomes = flat;
+        level.oceanBiomes = oceans;
         DesertPyramid.placeInFinite(level, seed);
         decorateSurface(
                 0, 0, size, size, depth, flat, occupants, level::getTile, level::setTileNoUpdate);
@@ -438,29 +514,37 @@ public final class BiomeLevelGenerator {
             net.classicremastered.minecraft.level.structure.CobblestoneTower.placeFinite(
                     level, seed);
         }
-        coverVegetationAndSnow(0, 0, size, depth, level::getTile, level::setTileNoUpdate);
+        coverVegetationAndSnow(0, 0, size, depth, flat, level::getTile, level::setTileNoUpdate);
         for (var occupant : occupants) occupant.spawn(level);
         level.creator = creator;
         level.createTime = System.currentTimeMillis();
         // Choose a reproducible dry spawn with enough headroom, away from tree canopies.
-        for (int z = size / 4; z < size * 3 / 4; z++) {
-            for (int x = size / 4; x < size * 3 / 4; x++) {
-                int top = surfaces[z * size + x];
+        if (!chooseSpawn(level, surfaces, sea, size / 4, size * 3 / 4)
+                && oceans
+                && !chooseSpawn(level, surfaces, sea, 0, size)) {
+            level.setSpawnPos(size / 2, sea + 2, size / 2, 0);
+        }
+        return level;
+    }
+
+    private boolean chooseSpawn(Level level, int[] surfaces, int sea, int start, int end) {
+        for (int z = start; z < end; z++) {
+            for (int x = start; x < end; x++) {
+                int top = surfaces[z * level.width + x];
                 if (top > sea
+                        && level.getTile(x, top, z) != 0
                         && (level.getTile(x, top + 1, z) == 0
                                 || level.getTile(x, top + 1, z) == Block.SNOW_LAYER.id
                                 || level.getTile(x, top + 1, z) == Block.SHORT_GRASS.id
                                 || level.getTile(x, top + 1, z) == Block.DANDELION.id
                                 || level.getTile(x, top + 1, z) == Block.ROSE.id)
                         && level.getTile(x, top + 2, z) == 0) {
-                    level.xSpawn = x;
-                    level.ySpawn = top + 2;
-                    level.zSpawn = z;
-                    return level;
+                    level.setSpawnPos(x, top + 2, z, level.rotSpawn);
+                    return true;
                 }
             }
         }
-        return level;
+        return false;
     }
 
     private void plantTree(

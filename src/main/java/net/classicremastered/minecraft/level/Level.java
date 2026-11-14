@@ -10,6 +10,7 @@ import net.classicremastered.minecraft.mob.Creeper;
 import net.classicremastered.minecraft.mob.IronGolem;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.particle.ExplosionParticle;
 import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.particle.SmokeParticle;
 import net.classicremastered.minecraft.phys.AABB;
@@ -52,6 +53,7 @@ public class Level implements Serializable {
     private transient RedstoneEngine redstoneEngine;
     public Long biomeSeed;
     public boolean flatBiomes;
+    public boolean oceanBiomes;
 
     public RedstoneEngine redstone() {
         if (redstoneEngine == null) redstoneEngine = new RedstoneEngine(this);
@@ -87,7 +89,10 @@ public class Level implements Serializable {
     public transient boolean spectatorMode;
     public int waterLevel;
     public int skyColor; // --- Day/Night cycle ---
-    private static final int DAY_TIME_PER_TICK = 6;
+    // 24,000 world time units in 19,200 game ticks (16 minutes at 20 TPS).
+    private static final int DAY_TIME_QUARTERS_PER_TICK = 5;
+    private transient int dayTimeQuarter;
+    private transient int lastDayTimeQuarter;
     public int dayLength = 24000; // world time units per full day
     public int timeOfDay = 2000; // 8:00 AM start
     public boolean doMobSpawning = true;
@@ -205,8 +210,10 @@ public class Level implements Serializable {
 
     public float getCelestialAngle(float partial) {
         float advance =
-                doDayNightCycle ? DAY_TIME_PER_TICK * Math.max(0f, Math.min(1f, partial)) : 0;
-        return celestialAngleAt(timeOfDay + advance);
+                doDayNightCycle
+                        ? DAY_TIME_QUARTERS_PER_TICK * Math.max(0f, Math.min(1f, partial))
+                        : 0;
+        return celestialAngleAt(timeOfDay + (dayTimeQuarter + advance) * .25f);
     }
 
     private float celestialAngleAt(float time) {
@@ -1185,7 +1192,12 @@ public class Level implements Serializable {
     // Level.java
     public void tickTime() {
         lastTimeOfDay = timeOfDay;
-        if (doDayNightCycle) timeOfDay = (timeOfDay + DAY_TIME_PER_TICK) % dayLength;
+        lastDayTimeQuarter = dayTimeQuarter;
+        if (doDayNightCycle) {
+            dayTimeQuarter += DAY_TIME_QUARTERS_PER_TICK;
+            timeOfDay = (timeOfDay + dayTimeQuarter / 4) % dayLength;
+            dayTimeQuarter %= 4;
+        }
     }
 
     /** Shared by finite and infinite world tick implementations. */
@@ -1209,15 +1221,20 @@ public class Level implements Serializable {
         this.renderPartial = partial < 0 ? 0 : (partial > 1 ? 1 : partial);
     }
 
-    private float lerpWrapped(int a, int b, float t, int mod) {
-        int d = b - a;
+    private float lerpWrapped(float a, float b, float t, int mod) {
+        float d = b - a;
         if (d < -mod / 2) d += mod;
         if (d > mod / 2) d -= mod;
         return ((a + d * t) % mod + mod) % mod;
     }
 
     public float getCelestialAngleSmooth() { // 0..1
-        float t = lerpWrapped(lastTimeOfDay, timeOfDay, renderPartial, dayLength);
+        float t =
+                lerpWrapped(
+                        lastTimeOfDay + lastDayTimeQuarter * .25f,
+                        timeOfDay + dayTimeQuarter * .25f,
+                        renderPartial,
+                        dayLength);
         return celestialAngleAt(t);
     }
 
@@ -2164,9 +2181,15 @@ public class Level implements Serializable {
     }
 
     public void playExplosionEffects(float x, float y, float z, float power) {
-        playSound("random/explode", x, y, z, 1.0F, 1.0F);
+        playExplosionEffects(x, y, z, power, 1f, 1f);
+    }
+
+    public void playExplosionEffects(
+            float x, float y, float z, float power, float volume, float pitch) {
+        playSound("random/explode", x, y, z, volume, pitch);
         if (particleEngine == null) return;
 
+        particleEngine.spawnParticle(new ExplosionParticle(this, x, y + .35f, z, power));
         Random smokeRandom = ThreadLocalRandom.current();
         for (int i = 0; i < 32; i++) {
             float dx = (smokeRandom.nextFloat() - .5f) * power * .8f;
@@ -2263,6 +2286,7 @@ public class Level implements Serializable {
 
     public void setTime(int time) {
         this.timeOfDay = Math.floorMod(time, dayLength);
+        this.dayTimeQuarter = this.lastDayTimeQuarter = 0;
         // A time jump is immediate, rather than an interpolation across the old day.
         this.lastTimeOfDay = this.timeOfDay;
         updateDayNightColorsSmooth();

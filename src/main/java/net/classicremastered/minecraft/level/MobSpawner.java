@@ -152,7 +152,7 @@ public final class MobSpawner {
         if (level == null || level.isNetworkMode() || !level.doMobSpawning) return 0;
         MobRegistry.bootstrapDefaults();
         BiomeLevelGenerator biomes =
-                level.biomeSeed == null ? null : new BiomeLevelGenerator(level.biomeSeed);
+                level.biomeSeed == null ? null : BiomeLevelGenerator.forLevel(level);
         allowHostiles &= near != null && monsterCap() > 0;
         float centerX = near == null ? level.xSpawn : near.x,
                 centerY = near == null ? level.ySpawn : near.y,
@@ -246,7 +246,7 @@ public final class MobSpawner {
                         variant = SkeletonTrap.REGISTRY_ID;
                 }
                 if (id == 1) {
-                    var biome = biomes == null ? null : biomes.biomeAt(sx, sz);
+                    var biome = biomes == null ? null : biomes.biomeAt(sx, sz, level.flatBiomes);
                     variant = zombieVariant(biome, sx, sy, sz);
                 }
                 Mob mob = MobRegistry.create(variant, level, sx + .5f, sy, sz + .5f);

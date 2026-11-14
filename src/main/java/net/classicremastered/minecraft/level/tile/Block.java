@@ -138,6 +138,7 @@ public class Block {
     public static final Block BOOKSHELF;
     public static final Block MOSSY_COBBLESTONE;
     public static final Block OBSIDIAN;
+    public static final Block MAGMA;
     public static final Block FIRE;
     public static final Block JUKEBOX;
     public static final Block PORTAL;
@@ -611,6 +612,7 @@ public class Block {
                 || this == SLAB
                 || this == DOUBLE_SLAB
                 || this == OBSIDIAN
+                || this == MAGMA
                 || this == GOLD_BLOCK
                 || this == IRON_BLOCK
                 || this == DIAMOND_BLOCK_NEW
@@ -823,5 +825,6 @@ public class Block {
         var1 = var10000;
         var10000.explodes = false;
         OBSIDIAN = var1;
+        MAGMA = new MagmaBlock(100, 191);
     }
 }

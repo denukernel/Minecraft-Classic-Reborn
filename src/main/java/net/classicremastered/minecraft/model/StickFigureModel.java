@@ -122,8 +122,9 @@ public final class StickFigureModel extends Model {
         leftShin.pitch = leftShin.yaw = leftShin.roll = 0;
         float movement = Math.max(0, Math.min(1, amount));
         swimBlend =
-                previousSwimAmount
-                        + (swimAmount - previousSwimAmount) * (age - (float) Math.floor(age));
+                throwTicks >= 0 || holdingPhysicsGun
+                        ? 0
+                        : blend(previousSwimAmount, swimAmount, age - (float) Math.floor(age));
         float cycle = swing * .9f;
         boolean rushing = combatPhase == StickFigurePowers.Phase.RUSH;
         float stride = (float) Math.cos(cycle) * (rushing ? 1.4f : 1.15f) * movement;
@@ -145,17 +146,15 @@ public final class StickFigureModel extends Model {
         rightShin.pitch = (.2f + Math.max(0, -stride) * .9f) * movement;
         leftShin.pitch = (.2f + Math.max(0, stride) * .9f) * movement;
         if (swimBlend > 0) {
-            float stroke = age * .24f;
-            head.pitch = blend(head.pitch, -.85f, swimBlend);
-            // A bounded stroke prevents angle wrapping from snapping during transitions.
-            rightArm.pitch =
-                    blend(rightArm.pitch, -1.5f + (float) Math.sin(stroke) * 1.2f, swimBlend);
-            leftArm.pitch =
-                    blend(leftArm.pitch, -1.5f - (float) Math.sin(stroke) * 1.2f, swimBlend);
-            rightArm.roll = blend(rightArm.roll, .3f, swimBlend);
-            leftArm.roll = blend(leftArm.roll, -.3f, swimBlend);
-            rightForearm.pitch = blend(rightForearm.pitch, -.45f, swimBlend);
-            leftForearm.pitch = blend(leftForearm.pitch, -.45f, swimBlend);
+            float stroke = age * .29f;
+            float pull = (1 - (float) Math.cos(stroke)) * .5f;
+            head.pitch = blend(head.pitch, -1.1f, swimBlend);
+            rightArm.pitch = blend(rightArm.pitch, -2.8f + 2.3f * pull, swimBlend);
+            leftArm.pitch = blend(leftArm.pitch, -2.8f + 2.3f * (1 - pull), swimBlend);
+            rightArm.roll = blend(rightArm.roll, .18f + .34f * pull, swimBlend);
+            leftArm.roll = blend(leftArm.roll, -.18f - .34f * (1 - pull), swimBlend);
+            rightForearm.pitch = blend(rightForearm.pitch, -.2f - .75f * pull, swimBlend);
+            leftForearm.pitch = blend(leftForearm.pitch, -.2f - .75f * (1 - pull), swimBlend);
             float kick = (float) Math.sin(stroke * 2) * .35f;
             rightLeg.pitch = blend(rightLeg.pitch, kick, swimBlend);
             leftLeg.pitch = blend(leftLeg.pitch, -kick, swimBlend);
@@ -279,10 +278,12 @@ public final class StickFigureModel extends Model {
             GL11.glTranslatef(0, GROUND_Y * scale - runBounce, 0);
             GL11.glRotatef(runLean, 1, 0, 0);
             GL11.glTranslatef(0, -GROUND_Y * scale, 0);
-            if (swimBlend > 0 && throwTicks < 0 && !holdingPhysicsGun) {
-                org.lwjgl.opengl.GL11.glTranslatef(0, 16 * scale, 0);
-                org.lwjgl.opengl.GL11.glRotatef(-65 * swimBlend, 1, 0, 0);
-                org.lwjgl.opengl.GL11.glTranslatef(0, -16 * scale, 0);
+            if (swimBlend > 0) {
+                GL11.glTranslatef(0, 16 * scale + .6f * swimBlend, 0);
+                // Model Y points down and the face points toward negative Z.
+                GL11.glRotatef(82 * swimBlend, 1, 0, 0);
+                GL11.glRotatef(8 * (float) Math.sin(age * .29f) * swimBlend, 0, 1, 0);
+                GL11.glTranslatef(0, -16 * scale, 0);
             }
             head.render(scale);
             body.render(scale);

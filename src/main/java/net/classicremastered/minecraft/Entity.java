@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.entity.BoatEntity;
 import net.classicremastered.minecraft.level.BlockMap;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.Tile$SoundType;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
@@ -82,8 +83,7 @@ public abstract class Entity implements Serializable {
         if (ticks <= 0
                 || level == null
                 || !isAliveEntity(this)
-                || isInWater()
-                || isUnderWater()
+                || isWetForFire()
                 || this instanceof net.classicremastered.minecraft.player.Player player
                         && (level.creativeMode || player.isSpectator())) return false;
         remainingFireTicks = Math.max(remainingFireTicks, ticks);
@@ -419,11 +419,7 @@ public abstract class Entity implements Serializable {
                 hurt(null, 1, "cactus");
                 cactusDamageCooldown = 10;
             }
-            boolean inWater =
-                    isInWater()
-                            || isUnderWater()
-                            || this instanceof net.classicremastered.minecraft.mob.Zombie undead
-                                    && undead.isInWaterOrOnWater();
+            boolean inWater = isWetForFire();
             updateWaterContact(inWater);
             if (inWater
                     || this instanceof net.classicremastered.minecraft.player.Player player
@@ -759,6 +755,32 @@ public abstract class Entity implements Serializable {
 
     public boolean isInWater() {
         return this.level.containsLiquid(this.bb.grow(0.0F, -0.4F, 0.0F), LiquidType.WATER);
+    }
+
+    public final boolean touchesWaterSurface() {
+        if (level == null) return false;
+        int y = MathHelper.floor(bb.y0 - .02f);
+        for (int x = MathHelper.floor(bb.x0); x <= MathHelper.floor(bb.x1 - .001f); x++) {
+            for (int z = MathHelper.floor(bb.z0); z <= MathHelper.floor(bb.z1 - .001f); z++) {
+                if (!level.isWater(x, y, z)) continue;
+                float minX = Math.max(bb.x0 - x, 0), maxX = Math.min(bb.x1 - x, 1);
+                float minZ = Math.max(bb.z0 - z, 0), maxZ = Math.min(bb.z1 - z, 1);
+                for (int cornerX = 0; cornerX <= 1; cornerX++) {
+                    float sampleX = cornerX == 0 ? minX : maxX;
+                    for (int cornerZ = 0; cornerZ <= 1; cornerZ++) {
+                        float sampleZ = cornerZ == 0 ? minZ : maxZ;
+                        if (bb.y0
+                                <= LiquidBlock.waterSurfaceAt(level, x, y, z, sampleX, sampleZ)
+                                        + .02f) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public final boolean isWetForFire() {
+        return level != null && (isInWater() || isUnderWater() || touchesWaterSurface());
     }
 
     public boolean isUnderWater() {

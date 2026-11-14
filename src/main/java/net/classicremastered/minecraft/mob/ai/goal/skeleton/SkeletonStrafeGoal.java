@@ -15,17 +15,18 @@ public final class SkeletonStrafeGoal extends MobGoal<SkeletonAI> {
 
         if (ai.attackTarget == null
                 || ai.attackTarget.removed
+                || ai.mob.isInWater()
                 || !ai.groundNavigationAllowed()
-                || !ai.hasLineOfSight(ai.mob, ai.attackTarget))
-            return;
+                || !ai.hasLineOfSight(ai.mob, ai.attackTarget)) return;
         float dx = ai.attackTarget.x - ai.mob.x, dz = ai.attackTarget.z - ai.mob.z;
         float distance = (float) Math.hypot(dx, dz);
-        if (distance > 20 || Math.abs(ai.attackTarget.bb.y0 - ai.mob.bb.y0) > 5)
+        if (distance > 20 || Math.abs(ai.attackTarget.bb.y0 - ai.mob.bb.y0) > 5) return;
+        if (Pathfinder.waterBetween(
+                ai.level, ai.mob, ai.attackTarget.x, ai.attackTarget.bb.y0, ai.attackTarget.z))
             return;
         float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90;
         float turn = yaw - ai.mob.yRot;
-        while (turn > 180)
-            turn -= 360;
+        while (turn > 180) turn -= 360;
         while (turn < -180)
             turn += 360;
         ai.mob.yRot += Math.max(-15, Math.min(15, turn));

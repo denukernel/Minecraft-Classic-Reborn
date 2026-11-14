@@ -61,6 +61,10 @@ public final class PathNavigator {
         return List.copyOf(path);
     }
 
+    public List<Pathfinder.Node> remainingPath() {
+        return List.copyOf(path.subList(Math.min(index, path.size()), path.size()));
+    }
+
     private void advance(Mob mob, GroundClearance ground) {
         float reach =
                 Math.max(
@@ -75,6 +79,14 @@ public final class PathNavigator {
     }
 
     public Result steer(Mob mob) {
+        return steer(mob, Pathfinder.canEnterWater(mob));
+    }
+
+    public Result steerToWaterRefuge(Mob mob) {
+        return steer(mob, true);
+    }
+
+    private Result steer(Mob mob, boolean swimming) {
         if (!hasGoal || mob.bb == null) return Result.idle();
         float mx = mob.x - lastX, mz = mob.z - lastZ;
         if (knownPosition && (mx * mx + mz * mz > 9 || Math.abs(mob.bb.y0 - lastY) > 2)) {
@@ -88,7 +100,7 @@ public final class PathNavigator {
         lastY = mob.bb.y0;
         lastZ = mob.z;
         knownPosition = true;
-        GroundClearance ground = new GroundClearance(level, mob);
+        GroundClearance ground = new GroundClearance(level, mob, null, swimming);
         float feet = mob.bb.y0;
         if (aligning) {
             float lane = alignZAxis ? Math.abs(mob.z - alignZ) : Math.abs(mob.x - alignX);
@@ -106,7 +118,8 @@ public final class PathNavigator {
             return toward(mob, gx, gy, gz);
         replanTicks--;
         advance(mob, ground);
-        if (index >= path.size() && !path.isEmpty()) replanTicks = 0;
+        if (index >= path.size() && !path.isEmpty() && !ground.needsDryApproach(gx, gy, gz))
+            replanTicks = 0;
         boolean invalid =
                 index < path.size()
                         && !ground.standable(
@@ -128,11 +141,7 @@ public final class PathNavigator {
             plannedX = gx;
             plannedY = gy;
             plannedZ = gz;
-            Pathfinder.Node goal = ground.chaseGoal(gx, gy, gz);
-            List<Pathfinder.Node> planned =
-                    goal == null
-                            ? null
-                            : Pathfinder.findPath(ground, mob, goal.x, goal.feetY, goal.z, 1024);
+            List<Pathfinder.Node> planned = Pathfinder.findChasePath(ground, mob, gx, gy, gz, 1024);
             if (planned != null) {
                 path = planned;
                 index = 0;

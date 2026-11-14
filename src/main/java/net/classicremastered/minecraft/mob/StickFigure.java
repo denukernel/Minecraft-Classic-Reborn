@@ -4,6 +4,8 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
 
 public final class StickFigure extends Mob {
+    public static final float STANDING_HEIGHT = 2f;
+    private static final float SWIMMING_HEIGHT = .7f;
 
     private static final long serialVersionUID = -2256304914053217799L;
     public static final short REGISTRY_ID = 64;
@@ -12,8 +14,8 @@ public final class StickFigure extends Mob {
     public boolean kicking;
     public int dodgeTicks;
     private transient float swimAmount, previousSwimAmount;
-    private transient int swimDryTicks;
-    private transient java.util.WeakHashMap<net.classicremastered.minecraft.entity.Arrow, Boolean> arrowDecisions = new java.util.WeakHashMap<>();
+    private transient java.util.WeakHashMap<net.classicremastered.minecraft.entity.Arrow, Boolean>
+            arrowDecisions = new java.util.WeakHashMap<>();
 
     public boolean isEnraged() {
         return health > 0 && health <= MAX_HEALTH / 4;
@@ -88,7 +90,7 @@ public final class StickFigure extends Mob {
         super(level);
         modelName = "stickfigure";
         textureName = "/mob/stick-figure.png";
-        setSize(.65f, 2f);
+        setSize(.65f, STANDING_HEIGHT);
         heightOffset = 1f;
         bobStrength = 0;
         health = lastHealth = MAX_HEALTH;
@@ -101,33 +103,60 @@ public final class StickFigure extends Mob {
     }
 
     @Override
+    public void setPos(float x, float y, float z) {
+        super.setPos(x, y, z);
+        if (bbHeight == SWIMMING_HEIGHT) {
+            // Keep the standing position anchor used by saves while shrinking from the top.
+            bb.move(0, (SWIMMING_HEIGHT - STANDING_HEIGHT) * .5f, 0);
+        }
+    }
+
+    @Override
+    public boolean isInWater() {
+        return touchesWaterSurface();
+    }
+
+    private void updateSwimBounds() {
+        boolean climbing =
+                ai instanceof StickFigureAI special && special.movement().isClimbingBank();
+        boolean swimming = isInWater() || climbing && bbHeight == SWIMMING_HEIGHT && !onGround;
+        float height = health > 0 && swimming ? SWIMMING_HEIGHT : STANDING_HEIGHT;
+        if (bbHeight == height) return;
+        if (height == STANDING_HEIGHT) {
+            var standing =
+                    new net.classicremastered.minecraft.phys.AABB(
+                            bb.x0, bb.y0, bb.z0, bb.x1, bb.y0 + height, bb.z1);
+            for (Object box : level.getCubes(standing)) {
+                if (standing.intersects((net.classicremastered.minecraft.phys.AABB) box)) return;
+            }
+        }
+        setSize(bbWidth, height);
+        bb.y1 = bb.y0 + height;
+    }
+
+    @Override
     public void tick() {
+        updateSwimBounds();
         previousSwimAmount = swimAmount;
         if (ai instanceof StickFigureAI special
                 && level.player instanceof net.classicremastered.minecraft.player.Player player
-                && net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.getGrabbed(player) == this)
-            special.powers.beginPhysicsGun(this, player);
-        if (dodgeTicks > 0)
-            dodgeTicks--;
+                && net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.getGrabbed(player)
+                        == this) special.powers.beginPhysicsGun(this, player);
+        if (dodgeTicks > 0) dodgeTicks--;
         if (ai instanceof StickFigureAI special
                 && (health <= 0
                         || removed
                         || net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.isHeld(
                                 this)
-                        || net.classicremastered.minecraft.level.itemstack.GravityGunItem.grabbedMobs
-                                .containsValue(this)))
-            special.powers.cancel(this);
-        if (strikeTicks > 0)
-            strikeTicks--;
+                        || net.classicremastered.minecraft.level.itemstack.GravityGunItem
+                                .grabbedMobs
+                                .containsValue(this))) special.powers.cancel(this);
+        if (strikeTicks > 0) strikeTicks--;
         super.tick();
-        if (isInWater())
-            swimDryTicks = 6;
-        else if (swimDryTicks > 0)
-            swimDryTicks--;
-        float target = swimDryTicks > 0 && (!onGround || isInWater()) ? 1 : 0;
-        swimAmount += Math.max(-.12f, Math.min(.12f, target - swimAmount));
-        if (health <= 0 && ai instanceof StickFigureAI special)
-            special.powers.cancel(this);
+        updateSwimBounds();
+        float target = health > 0 && bbHeight == SWIMMING_HEIGHT ? 1 : 0;
+        swimAmount += Math.max(-.2f, Math.min(.16f, target - swimAmount));
+        if (health <= 0 && ai instanceof StickFigureAI special) special.powers.cancel(this);
     }
 
     public static StickFigure nearestBoss(

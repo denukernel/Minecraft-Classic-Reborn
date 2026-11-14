@@ -28,7 +28,7 @@ public final class HUDScreen extends Screen {
 
     public List<ChatLine> chat = new ArrayList<>();
     private final Minecraft mc;
-    private Long debugBiomeSeed;
+    private net.classicremastered.minecraft.level.Level debugBiomeLevel;
     private BiomeLevelGenerator debugBiomes;
     public int width;
     public int height;
@@ -107,9 +107,9 @@ public final class HUDScreen extends Screen {
                                         + (mc.level.doDayNightCycle ? " (3x)" : " (paused)"),
                                 "Mode: " + mode + " / " + mc.settings.difficulty.getLabel()));
         if (mc.level.biomeSeed != null) {
-            if (!mc.level.biomeSeed.equals(debugBiomeSeed)) {
-                debugBiomeSeed = mc.level.biomeSeed;
-                debugBiomes = new BiomeLevelGenerator(debugBiomeSeed);
+            if (mc.level != debugBiomeLevel) {
+                debugBiomeLevel = mc.level;
+                debugBiomes = BiomeLevelGenerator.forLevel(mc.level);
             }
             world.add(
                     "Biome: "
@@ -117,10 +117,16 @@ public final class HUDScreen extends Screen {
                                     .surfaceBiomeAt(x, z, mc.level.depth, mc.level.flatBiomes)
                                     .name()
                                     .toLowerCase(Locale.ROOT));
+        } else {
+            debugBiomeLevel = null;
+            debugBiomes = null;
         }
         world.add("");
         world.add("F3 + N: Toggle spectator");
         world.add("F3 + B: Toggle entity hitboxes");
+        world.add("F3 + P: Toggle mob paths");
+        if (mc.debugPaths)
+            world.add("Cyan: route | Yellow: next | Red: target | Green: shore exit");
 
         Runtime runtime = Runtime.getRuntime();
         long max = runtime.maxMemory();

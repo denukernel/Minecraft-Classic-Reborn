@@ -38,6 +38,11 @@ public final class StickFigureAI extends BasicAttackAI {
         return true;
     }
 
+    @Override
+    protected boolean usesDefaultSwimSteering() {
+        return false;
+    }
+
     public boolean hitThisStrike, playedSwing;
 
     public StickFigureAI() {

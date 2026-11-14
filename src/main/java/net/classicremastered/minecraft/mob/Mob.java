@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.mob;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.ai.AI;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.model.MD3Cache;
@@ -12,6 +13,7 @@ import net.classicremastered.minecraft.model.Model;
 import net.classicremastered.minecraft.model.ModelManager;
 import net.classicremastered.minecraft.model.SkeletonModel;
 import net.classicremastered.minecraft.player.DeathMessages;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.minecraft.render.entity.BabyZombieRenderer;
@@ -302,7 +304,7 @@ public abstract class Mob extends Entity {
         // ===== Normal living logic =====
 
         // fluids / damage
-        if (this.isUnderWater()) {
+        if (!(this instanceof StickFigure || this instanceof Skeleton) && this.isUnderWater()) {
             if (this.airSupply > 0) {
                 --this.airSupply;
             }
@@ -322,6 +324,16 @@ public abstract class Mob extends Entity {
             forcedFallAttacker = null;
         }
         if (this.isInLava()) this.hurt(null, 10, "lava");
+        if (onGround
+                && riding == null
+                && !(this instanceof Player player && player.isSneaking())
+                && level.getTile(
+                                MathHelper.floor(x),
+                                MathHelper.floor(bb.y0 - .01f),
+                                MathHelper.floor(z))
+                        == Block.MAGMA.id) {
+            this.hurt(null, 1, "hot floor");
+        }
 
         this.animStepO = this.animStep;
         this.yBodyRotO = this.yBodyRot;
@@ -337,6 +349,8 @@ public abstract class Mob extends Entity {
             this.aiStep();
             net.classicremastered.minecraft.mob.ai.MobRiding.findJockeyMount(this);
         }
+
+        if (remainingFireTicks > 0 && isWetForFire()) extinguishFire();
 
         // Walk/run animation bookkeeping
         float dx = this.x - this.xo, dz = this.z - this.zo;
@@ -525,9 +539,7 @@ public abstract class Mob extends Entity {
                 anchorY + this.renderOffset,
                 this.zo + (this.z - this.zo) * partial);
 
-        boolean showFireOverlay =
-                this.remainingFireTicks > 0
-                        && (!(this instanceof Zombie undead) || !undead.isInWaterOrOnWater());
+        boolean showFireOverlay = remainingFireTicks > 0 && !isWetForFire();
         if (!showFireOverlay && this instanceof Zombie) {
             Zombie z = (Zombie) this;
             if (z.canBurnInSunlight()

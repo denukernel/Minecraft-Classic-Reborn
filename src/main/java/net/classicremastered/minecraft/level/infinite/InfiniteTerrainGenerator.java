@@ -155,6 +155,15 @@ public final class InfiniteTerrainGenerator {
                         }
                     }
                 }
+                for (int y = 2; y < Math.min(8, dirtTop - cover); y++) {
+                    int floor = SimpleChunk.idx(lx, y, lz, height);
+                    int above = SimpleChunk.idx(lx, y + 1, lz, height);
+                    if ((c.blocks[floor] & 255) == Block.STONE.id
+                            && (c.blocks[above] & 255) == Block.STATIONARY_LAVA.id
+                            && nCave.compute(gx * .12, y * .12, gz * .12) > .12) {
+                        c.blocks[floor] = (byte) Block.MAGMA.id;
+                    }
+                }
             }
         }
     }

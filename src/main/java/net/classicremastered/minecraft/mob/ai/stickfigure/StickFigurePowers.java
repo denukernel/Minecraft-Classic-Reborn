@@ -130,13 +130,17 @@ public final class StickFigurePowers implements java.io.Serializable {
     }
 
     private static boolean canThrowAt(StickFigure boss, Entity target) {
-        if (target == null
-                || target.removed
-                || target.level != boss.level
-                || target instanceof Mob mob && mob.health <= 0
-                || CreativeModeHelper.shouldIgnoreTarget(target)) return false;
+        if (!validThrowTarget(boss, target)) return false;
         float distance = boss.distanceTo(target);
         return distance > MIN_THROW_RANGE && distance < MAX_THROW_RANGE && visible(boss, target);
+    }
+
+    private static boolean validThrowTarget(StickFigure boss, Entity target) {
+        return target != null
+                && !target.removed
+                && target.level == boss.level
+                && (!(target instanceof Mob mob) || mob.health > 0)
+                && !CreativeModeHelper.shouldIgnoreTarget(target);
     }
 
     private static void faceThrow(StickFigure boss, float dx, float dz) {
@@ -314,7 +318,7 @@ public final class StickFigurePowers implements java.io.Serializable {
         }
         if (phase == Phase.THROW) {
             if (phaseTicks < THROW_RELEASE_TICK) {
-                if ((heldBlock == null && pendingMob == null) || !canThrowAt(boss, target)) {
+                if ((heldBlock == null && pendingMob == null) || !validThrowTarget(boss, target)) {
                     throwCooldown = 20;
                     cancel(boss);
                     return false;
@@ -323,12 +327,23 @@ public final class StickFigurePowers implements java.io.Serializable {
             }
             phaseTicks++;
             if (phaseTicks == THROW_RELEASE_TICK) {
-                if (heldBlock != null) releaseBlock(boss, target, heldBlock);
-                else {
+                boolean released = heldBlock != null && releaseBlock(boss, target, heldBlock);
+                if (heldBlock == null) {
                     Mob passive =
                             canThrowMob(boss, pendingMob) ? pendingMob : findThrowableMob(boss);
-                    if (passive != null) launchMob(boss, target, passive);
-                    else releaseBlock(boss, target, findBlock(boss, 1));
+                    if (passive != null) {
+                        launchMob(boss, target, passive);
+                        released = true;
+                    }
+                }
+                if (!released && heldBlock != null && heldBlock.size() > 1) {
+                    released = releaseBlock(boss, target, findBlock(boss, heldBlock.size()));
+                }
+                if (!released) released = releaseBlock(boss, target, findBlock(boss, 1));
+                if (!released) {
+                    throwCooldown = 20;
+                    cancel(boss);
+                    return false;
                 }
                 heldBlock = null;
                 pendingMob = null;
@@ -641,8 +656,9 @@ public final class StickFigurePowers implements java.io.Serializable {
                 dy = target.bb.y0 + target.bbHeight * .5f - py,
                 dz = target.z - pz,
                 length = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (length < .01f)
-            return false;
+        if (length < .01f) return false;
+        float flightTicks = length / 1.35f;
+        float launchY = dy / flightTicks + BossFireball.GRAVITY * (flightTicks + 1f) * .5f;
         boss.level.addEntity(
                 new BossFireball(
                         boss.level,
@@ -650,7 +666,7 @@ public final class StickFigurePowers implements java.io.Serializable {
                         px,
                         py,
                         pz,
-                        new Vec3D(dx / length * .65f, dy / length * .65f, dz / length * .65f)));
+                        new Vec3D(dx / flightTicks, launchY, dz / flightTicks)));
         sound(boss, "random/bow", .55f);
         return true;
     }
@@ -776,7 +792,8 @@ public final class StickFigurePowers implements java.io.Serializable {
         float offsetX = distance == 0 ? 0 : dx * grip.z / distance;
         float offsetZ = distance == 0 ? 0 : dz * grip.z / distance;
         float x = boss.x + offsetX, z = boss.z + offsetZ;
-        float dy = (target.bb.y0 + target.bb.y1) * .5f - y;
+        float targetY = target.bb.y0 + (size == 2 ? size * .5f : target.bbHeight * .5f);
+        float dy = targetY - y;
         // Gravity is applied before each movement step.
         Vec3D velocity = new Vec3D(
                 (dx - offsetX) / time,

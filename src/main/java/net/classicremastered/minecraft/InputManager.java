@@ -491,11 +491,14 @@ public class InputManager {
         if (down
                 && debugKeyHeld
                 && Keyboard.isKeyDown(Keyboard.KEY_F3)
-                && (key == Keyboard.KEY_N || key == Keyboard.KEY_B)) {
+                && (key == Keyboard.KEY_N || key == Keyboard.KEY_B || key == Keyboard.KEY_P)) {
             if (!Keyboard.isRepeatEvent()) {
                 debugShortcutUsed = true;
                 if (key == Keyboard.KEY_N) {
                     mc.toggleSpectatorMode();
+                } else if (key == Keyboard.KEY_P) {
+                    mc.debugPaths = !mc.debugPaths;
+                    mc.hud.addChat(mc.debugPaths ? "&eMob paths shown." : "&eMob paths hidden.");
                 } else {
                     mc.debugHitboxes = !mc.debugHitboxes;
                     mc.hud.addChat(mc.debugHitboxes ? "&eHitboxes shown." : "&eHitboxes hidden.");

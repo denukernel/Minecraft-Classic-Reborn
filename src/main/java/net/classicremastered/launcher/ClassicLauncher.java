@@ -10,36 +10,52 @@ import net.classicremastered.util.LwjglNativesDownloader;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.MalformedURLException;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.URL;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.Properties;
 
 import javax.swing.*;
 
 public final class ClassicLauncher {
+    private static final int GAME_ALREADY_RUNNING = 2;
+    static final String GAME_ALREADY_RUNNING_MESSAGE =
+            "Minecraft Classic Reborn is already running.";
+
+    // Keep the lock for the lifetime of this launcher or game process.
+    private static FileLock instanceLock;
+
     public static void main(String[] args) {
         try {
             if (args.length == 0
                     && LauncherUpdater.handOff(resolveMcDir().toPath().resolve("updates"))) {
                 return;
             }
+            boolean game = args.length == 1 && "--game".equals(args[0]);
+            instanceLock = claimInstance(game ? "game.lock" : "launcher.lock");
+            if (instanceLock == null) {
+                System.err.println(
+                        game
+                                ? GAME_ALREADY_RUNNING_MESSAGE
+                                : "The Minecraft launcher is already open.");
+                if (game) System.exit(GAME_ALREADY_RUNNING);
+                return;
+            }
+
             LwjglNativesDownloader.setupWindowsNatives();
             JInputBootstrap.setupWindows();
             ClassicLauncher app = new ClassicLauncher();
 
-            if (args.length == 1 && "--game".equals(args[0])) {
+            if (game) {
                 SwingUtilities.invokeAndWait(
                         () -> {
                             app.loadConfig();
@@ -59,9 +75,6 @@ public final class ClassicLauncher {
                                     },
                                     "Launcher-Shutdown"));
 
-            // Claim single instance (or ask existing to close, then become primary)
-            app.singleInstance = SingleInstance.claimOrTakeover(app);
-
             SwingUtilities.invokeLater(app::show);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -71,6 +84,22 @@ public final class ClassicLauncher {
                     "Minecraft Classic - Startup Error",
                     JOptionPane.ERROR_MESSAGE);
             System.exit(1);
+        }
+    }
+
+    static FileLock claimInstance(String fileName) throws IOException {
+        Path directory = Files.createDirectories(resolveMcDir().toPath());
+        FileChannel channel =
+                FileChannel.open(
+                        directory.resolve(fileName),
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE);
+        FileLock lock = null;
+        try {
+            lock = channel.tryLock();
+            return lock;
+        } finally {
+            if (lock == null) channel.close();
         }
     }
 
@@ -318,10 +347,6 @@ public final class ClassicLauncher {
                     // ensure modloader shutdown if alive
                     try {
                         ModLoader.shutdownIfAlive();
-                    } catch (Throwable ignored) {
-                    }
-                    try {
-                        if (singleInstance != null) singleInstance.close();
                     } catch (Throwable ignored) {
                     }
                     System.exit(0);
@@ -727,7 +752,14 @@ public final class ClassicLauncher {
                 frame.setVisible(true);
                 frame.toFront();
                 try {
-                    if (get() != 0) {
+                    int exitCode = get();
+                    if (exitCode == GAME_ALREADY_RUNNING) {
+                        JOptionPane.showMessageDialog(
+                                frame,
+                                GAME_ALREADY_RUNNING_MESSAGE,
+                                "Game already running",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    } else if (exitCode != 0) {
                         JOptionPane.showMessageDialog(
                                 frame,
                                 "The game exited with an error. Try a lower memory setting.\n"
@@ -833,10 +865,6 @@ public final class ClassicLauncher {
                                     }
                                     try {
                                         win.dispose();
-                                    } catch (Throwable ignored) {
-                                    }
-                                    try {
-                                        if (singleInstance != null) singleInstance.close();
                                     } catch (Throwable ignored) {
                                     }
                                     return;
@@ -970,146 +998,11 @@ public final class ClassicLauncher {
         }
     }
 
-    // ================= Single-instance support =================
-    private static final class SingleInstance {
-        private static final int PORT = 45731; // any free localhost port, keep stable
-        private ServerSocket server;
-        private Thread acceptor;
-
-        /** Try to become primary; if already running, request that instance to quit. */
-        static SingleInstance claimOrTakeover(ClassicLauncher app) {
-            SingleInstance si = new SingleInstance();
-            if (si.tryBind(app)) {
-                // We are the primary now.
-                return si;
-            }
-            // Another instance is running → request it to close, then wait and retry.
-            System.out.println(
-                    "[SingleInstance] Port " + PORT + " is busy. Requesting takeover...");
-            requestTakeover();
-            long deadline = System.currentTimeMillis() + 3000; // 3s
-            while (System.currentTimeMillis() < deadline) {
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException ignored) {
-                }
-                if (si.tryBind(app)) return si;
-            }
-
-            // If we still didn't get it, it might be a real port conflict or the other instance is
-            // hanging.
-            int choice =
-                    JOptionPane.showConfirmDialog(
-                            null,
-                            "Another instance of Minecraft Classic appears to be running, or port "
-                                    + PORT
-                                    + " is blocked.\n"
-                                    + "Do you want to try starting anyway? (This may cause issues"
-                                    + " if another instance is active)",
-                            "Single Instance Warning",
-                            JOptionPane.YES_NO_OPTION,
-                            JOptionPane.WARNING_MESSAGE);
-
-            if (choice == JOptionPane.YES_OPTION) {
-                System.out.println("[SingleInstance] Proceeding despite bind failure.");
-                return null;
-            } else {
-                System.exit(0);
-                return null;
-            }
-        }
-
-        /** Ask the running instance to close itself. */
-        private static void requestTakeover() {
-            try (Socket s = new Socket("127.0.0.1", PORT);
-                    OutputStream out = s.getOutputStream()) {
-                out.write("TAKEOVER\n".getBytes("UTF-8"));
-                out.flush();
-            } catch (IOException ignored) {
-                // No listener — maybe it closed in the meantime; new bind will succeed.
-            }
-        }
-
-        /** Try binding the control port; on success, start acceptor that listens for TAKEOVER. */
-        private boolean tryBind(ClassicLauncher app) {
-            try {
-                server = new ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1"));
-                acceptor = new Thread(() -> runServer(app), "SingleInstance-Acceptor");
-                acceptor.setDaemon(true);
-                acceptor.start();
-                return true;
-            } catch (IOException bindFailed) {
-                return false;
-            }
-        }
-
-        private void runServer(ClassicLauncher app) {
-            while (!server.isClosed()) {
-                try (Socket s = server.accept();
-                        BufferedReader r =
-                                new BufferedReader(
-                                        new InputStreamReader(s.getInputStream(), "UTF-8"))) {
-                    String line = r.readLine();
-                    if (line != null && line.startsWith("TAKEOVER")) {
-                        // Politely shut down current launcher + game, then exit process.
-                        app.forceCloseFromExternalRequest();
-                    }
-                } catch (IOException ignored) {
-                }
-            }
-        }
-
-        void close() {
-            try {
-                if (server != null) server.close();
-            } catch (IOException ignored) {
-            }
-        }
-    }
-
-    /** Called by SingleInstance server thread when another instance asks to TAKEOVER. */
-    void forceCloseFromExternalRequest() {
-        SwingUtilities.invokeLater(
-                () -> {
-                    try {
-                        if (runningMc != null) {
-                            if (askedToQuitRef != null) askedToQuitRef[0] = true;
-                            try {
-                                runningMc.requestQuit();
-                            } catch (Throwable ignored) {
-                            }
-                        }
-                        if (gameWindow != null) {
-                            try {
-                                gameWindow.dispose();
-                            } catch (Throwable ignored) {
-                            }
-                            gameWindow = null;
-                        }
-                        try {
-                            frame.dispose();
-                        } catch (Throwable ignored) {
-                        }
-                        // ensure modloader shutdown as well
-                        try {
-                            ModLoader.shutdownIfAlive();
-                        } catch (Throwable ignored) {
-                        }
-                    } finally {
-                        // Ensure process exit so the new instance can bind the port
-                        System.exit(0);
-                    }
-                });
-    }
-
     // ===========================================================
-    // Track currently running game so we can close it on takeover
+    // Track the game window and its close request
     private volatile JFrame gameWindow = null;
     private volatile Minecraft runningMc = null;
     private volatile boolean[] askedToQuitRef = null;
-
-    // Keep a reference to the single-instance guard to release on normal exit
-    private SingleInstance singleInstance = null;
 
     /** Config persistence */
     private static final class LauncherConfig {

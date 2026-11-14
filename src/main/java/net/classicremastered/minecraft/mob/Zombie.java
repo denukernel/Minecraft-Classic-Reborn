@@ -4,7 +4,6 @@ package net.classicremastered.minecraft.mob;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.ai.goal.zombie.ZombieDifficultyGoal;
 import net.classicremastered.minecraft.mob.ai.goal.zombie.ZombieSunlightGoal;
-import net.classicremastered.util.MathHelper;
 
 public class Zombie extends HumanoidMob {
 
@@ -115,11 +114,6 @@ public class Zombie extends HumanoidMob {
 
     // --- Water check helper ---
     public boolean isInWaterOrOnWater() {
-        if (isInWater())
-            return true;
-        int bx = MathHelper.floor(x);
-        int bz = MathHelper.floor(z);
-        return level.isWater(bx, MathHelper.floor(bb.y0), bz)
-                || level.isWater(bx, MathHelper.floor(bb.y0 - .08f), bz);
+        return isWetForFire();
     }
 }

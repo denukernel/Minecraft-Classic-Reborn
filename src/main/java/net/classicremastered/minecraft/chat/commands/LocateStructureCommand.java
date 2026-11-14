@@ -71,6 +71,9 @@ public class LocateStructureCommand implements Command {
 
         if (target instanceof net.classicremastered.minecraft.level.structure.DesertPyramid
                 && lvl.biomeSeed != null) {
+            var biomes =
+                    net.classicremastered.minecraft.level.generator.BiomeLevelGenerator.forLevel(
+                            lvl);
             net.classicremastered.minecraft.level.structure.DesertPyramid.Site nearest = null;
             double best = Double.MAX_VALUE;
             int cx = Math.floorDiv((int) sender.x, 64), cz = Math.floorDiv((int) sender.z, 64);
@@ -78,7 +81,12 @@ public class LocateStructureCommand implements Command {
                 for (int dz = -20; dz <= 20; dz++) {
                     var site =
                             net.classicremastered.minecraft.level.structure.DesertPyramid.site(
-                                    lvl.biomeSeed, lvl.depth, cx + dx, cz + dz, lvl.flatBiomes);
+                                    lvl.biomeSeed,
+                                    lvl.depth,
+                                    cx + dx,
+                                    cz + dz,
+                                    lvl.flatBiomes,
+                                    biomes);
                     if (site == null) continue;
                     if (!(lvl instanceof net.classicremastered.minecraft.level.LevelInfiniteTerrain)
                             && (site.x() < 0
