@@ -90,6 +90,7 @@ public class ThrownEnderPearl extends Entity {
         }
         for (Entity target : level.blockMap.getEntities(this, sweep.grow(.1f, .1f, .1f))) {
             if (target != owner
+                    && !(owner.riding instanceof BoatEntity boat && boat.carries(target))
                     && target instanceof Mob mob
                     && !(mob instanceof Player)
                     && mob.isPickable()
@@ -163,6 +164,7 @@ public class ThrownEnderPearl extends Entity {
         }
 
         spawnTeleportParticles(player.x, player.y, player.z);
+        player.unmount();
         player.ySlideOffset = 0.0F;
         player.setPos(
                 lastSafeLanding.x, lastSafeLanding.y + player.heightOffset, lastSafeLanding.z);
@@ -172,6 +174,7 @@ public class ThrownEnderPearl extends Entity {
         player.zo = player.z;
         player.fallDistance = 0.0F;
         player.onGround = false;
+        if (player.blockMap != null) player.blockMap.moved(player);
         spawnTeleportParticles(player.x, player.y, player.z);
         level.playSound("item/ender_pearl/teleport", player, 1.0F, 1.0F);
 

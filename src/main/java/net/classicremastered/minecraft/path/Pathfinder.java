@@ -178,6 +178,31 @@ public final class Pathfinder {
         return null;
     }
 
+    public static Node findShadeRefuge(Level level, Mob mob) {
+        GroundClearance ground = new GroundClearance(level, mob);
+        int sx = cell(mob.x, ground.width), sz = cell(mob.z, ground.width);
+        int sy = (int) Math.floor(mob.bb.y0);
+        List<Node> candidates = new ArrayList<>();
+        for (int x = sx - 10; x <= sx + 10; x++) {
+            for (int z = sz - 10; z <= sz + 10; z++) {
+                float cx = x + ground.offset, cz = z + ground.offset;
+                for (int y = sy + 3; y >= sy - 3; y--) {
+                    if (ground.supportedAt(cx, y, cz)
+                            && !level.hasDirectSun(cx, y + mob.bbHeight * .85f, cz)) {
+                        candidates.add(new Node(x, y, z, null));
+                    }
+                }
+            }
+        }
+        candidates.sort(Comparator.comparingDouble(n -> heuristic(n.x, n.feetY, n.z, sx, sy, sz)));
+        for (int i = 0; i < Math.min(candidates.size(), 8); i++) {
+            Node candidate = candidates.get(i);
+            if (findPath(ground, mob, candidate.x, candidate.feetY, candidate.z, 512) != null)
+                return candidate;
+        }
+        return null;
+    }
+
     public static List<Node> findPathWithRemovableFire(
             Level level,
             Mob mob,

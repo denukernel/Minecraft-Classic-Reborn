@@ -1,13 +1,13 @@
 package net.classicremastered.minecraft.entity;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.gui.FontRenderer;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
-import net.classicremastered.nbt.CompoundTag;
-import net.classicremastered.minecraft.gui.FontRenderer;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.ModelPart;
 import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.nbt.CompoundTag;
 
 import org.lwjgl.opengl.GL11;
 
@@ -28,6 +28,9 @@ public final class SignEntity extends Entity {
 
     public static final int LINE_COUNT = 4;
     public static final int INK_COLOR = 0x17120D;
+    public static final float MODEL_HEIGHT = 26f / 16f;
+    // Diagonal of the 24 by 2 pixel board, rounded up for its rotating footprint.
+    public static final float MODEL_FOOTPRINT = 1.51f;
     public static final int LINE_LENGTH = 15;
     private final String[] messages = {"", "", "", ""};
     private final int blockX, blockY, blockZ;
@@ -119,16 +122,26 @@ public final class SignEntity extends Entity {
 
     @Override
     public void render(TextureManager texMgr, float partial) {
+        float px = xo + (x - xo) * partial;
+        float pz = zo + (z - zo) * partial;
+        FontRenderer font = level.minecraft == null ? null : level.minecraft.fontRenderer;
+        renderStandingSign(texMgr, font, px, blockY, pz, rot, messages);
+    }
+
+    public static void renderStandingSign(
+            TextureManager texMgr,
+            FontRenderer font,
+            float x,
+            float feetY,
+            float z,
+            float rotation,
+            String... lines) {
         GL11.glPushMatrix();
 
-        // Position
-        float px = this.xo + (this.x - this.xo) * partial;
-        float py = blockY + .75f;
-        float pz = this.zo + (this.z - this.zo) * partial;
-        GL11.glTranslatef(px, py, pz);
+        GL11.glTranslatef(x, feetY + .75f, z);
 
         // Facing
-        GL11.glRotatef(this.rot, 0.0F, 1.0F, 0.0F);
+        GL11.glRotatef(rotation, 0.0F, 1.0F, 0.0F);
 
         // Bind sign texture
         int tex = texMgr.load("/item/sign.png");
@@ -143,7 +156,6 @@ public final class SignEntity extends Entity {
         GL11.glPopMatrix();
 
         // Draw text overlay
-        FontRenderer font = level.minecraft == null ? null : level.minecraft.fontRenderer;
         if (font != null) {
             float scale = 0.015625F;
             GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT);
@@ -153,12 +165,12 @@ public final class SignEntity extends Entity {
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
-            for (int i = 0; i < messages.length; i++) {
-                String msg = messages[i];
+            for (int i = 0; i < lines.length; i++) {
+                String msg = lines[i];
                 int width = font.getLiteralWidth(msg);
                 GL11.glPushMatrix();
                 GL11.glScalef(Math.min(1f, 88f / Math.max(1, width)), 1, 1);
-                font.renderLiteral(msg, -width / 2, i * 10 - 19, INK_COLOR);
+                font.renderLiteral(msg, -width / 2, i * 10 - (lines.length - 1) * 5 - 4, INK_COLOR);
                 GL11.glPopMatrix();
             }
 

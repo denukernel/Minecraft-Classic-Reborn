@@ -35,6 +35,7 @@ public class InputHandlerImpl extends InputHandler {
 
     @Override
     public void resetKeys() {
+        super.resetKeys();
         for (int i = 0; i < keyStates.length; ++i) {
             keyStates[i] = false;
         }

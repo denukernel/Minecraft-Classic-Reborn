@@ -8,6 +8,8 @@ import net.classicremastered.minecraft.phys.AABB;
 
 public final class EndermanTeleportation {
 
+    private static final String TELEPORT_SOUND = "mob/enderman/teleport";
+
     private final EndermanAI ai;
 
     public EndermanTeleportation(EndermanAI ai) {
@@ -16,13 +18,18 @@ public final class EndermanTeleportation {
 
     void performTeleport(Enderman mob, float cx, float cy, float cz, int cooldown) {
         if (mob == null) return;
+        float oldX = mob.x;
+        float oldY = mob.y;
+        float oldZ = mob.z;
         mob.setPos(cx, cy, cz);
         mob.xd = mob.yd = mob.zd = 0;
 
-        // unify cooldown + FX
         ai.teleportCooldown = cooldown;
         spawnTeleportParticles(mob);
-        // Optional: play a sound here if you expose one (e.g., "enderman.teleport")
+        if (mob.level != null) {
+            mob.level.playSound(TELEPORT_SOUND, oldX, oldY, oldZ, 1.0F, 1.0F);
+            mob.level.playSound(TELEPORT_SOUND, mob.x, mob.y, mob.z, 1.0F, 1.0F);
+        }
     }
 
     boolean teleportToShade(Enderman mob, int radius, int attempts) {
@@ -48,6 +55,7 @@ public final class EndermanTeleportation {
             // Probe: place, test burn; if safe, commit with proper FX
             mob.setPos(cx, cy, cz);
             if (!lvl.shouldUndeadBurnAt(mob)) {
+                mob.setPos(ox, oy, oz);
                 performTeleport(mob, cx, cy, cz, 40);
                 return true;
             }

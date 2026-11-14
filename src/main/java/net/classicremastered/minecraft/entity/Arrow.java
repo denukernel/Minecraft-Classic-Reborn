@@ -181,6 +181,9 @@ public class Arrow extends Entity {
                     Entity entity = (Entity) blockMapEntitiesList.get(currentEntity);
                     if (owner != null && entity == owner.riding && time <= 5)
                         continue;
+                    if (owner instanceof CrossbowTurret
+                            && owner.riding instanceof BoatEntity boat
+                            && (entity == boat || boat.carries(entity))) continue;
                     if (owner instanceof net.classicremastered.minecraft.mob.CrossbowTurret
                             && entity instanceof net.classicremastered.minecraft.mob.Mob mob
                             && mob.health <= 0) {

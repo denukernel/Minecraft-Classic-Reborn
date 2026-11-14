@@ -53,6 +53,7 @@ public final class LevelIO {
         Path tmp = null;
         ProgressBarDisplay display = showProgress ? progressBar : null;
         try {
+            net.classicremastered.minecraft.mob.MobRegistry.bootstrapDefaults();
             if (display != null) {
                 reportSaveProgress(
                         () -> {

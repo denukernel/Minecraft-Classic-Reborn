@@ -10,6 +10,7 @@ import net.classicremastered.minecraft.level.structure.GeneratedHouse;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.FireBlock;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.path.Pathfinder;
 import net.classicremastered.minecraft.phys.AABB;
@@ -35,6 +36,16 @@ public class ZombieIgniter extends Zombie {
         ai = new HouseIgnitionAI();
     }
 
+    public boolean isPreparingHouseIgnition() {
+        return !removed
+                && health > 0
+                && !corruptedToDefendPlayer
+                && ignitionCooldown == 0
+                && ai instanceof HouseIgnitionAI houseAI
+                && houseAI.approach != null
+                && !houseAI.isUsingEmergencyMovement();
+    }
+
     @Override
     public void tick() {
         if (ai != null && ai.getClass() == BasicAttackAI.class) {
@@ -53,6 +64,7 @@ public class ZombieIgniter extends Zombie {
                 || removed
                 || corruptedToDefendPlayer
                 || level.isNetworkMode()
+                || ai instanceof HouseIgnitionAI houseAI && houseAI.isUsingEmergencyMovement()
                 || ignitionCooldown > 0
                 || isInWaterOrOnWater()) {
             turnTowardIgnition();
@@ -82,10 +94,21 @@ public class ZombieIgniter extends Zombie {
     private boolean igniteNearbyHouse() {
         if (houseSearchCooldown > 0
                 || CombatRules.difficulty(level) != Difficulty.EXTREME
-                || ai instanceof HouseIgnitionAI houseAI && houseAI.houseTarget != null
+                || ai instanceof HouseIgnitionAI houseAI
+                        && (houseAI.houseTarget != null || houseAI.outsidePlayer != null)
                 || overlapsFire(bb.grow(.5f, 0, .5f))) return false;
         houseSearchCooldown = 10;
 
+        var occupied =
+                level.generatedHouses.stream()
+                        .filter(
+                                house ->
+                                        Math.abs(house.x() + .5f - x) <= 6
+                                                && Math.abs(house.z() + .5f - z) <= 6
+                                                && Math.abs(house.floor() + 1 - bb.y0) <= 6
+                                                && hasOccupant(house))
+                        .toList();
+        if (occupied.isEmpty()) return false;
         float eyeY = bb.y0 + bbHeight * .85f;
         int bx = MathHelper.floor(x), by = MathHelper.floor(eyeY), bz = MathHelper.floor(z);
         MovingObjectPosition closest = null;
@@ -105,7 +128,7 @@ public class ZombieIgniter extends Zombie {
                             || hit.x != tx
                             || hit.y != ty
                             || hit.z != tz
-                            || !GeneratedHouse.containsHouse(level, tx, ty, tz)) continue;
+                            || !occupiedWall(occupied, tx, ty, tz)) continue;
                     if (material == Block.WOOD.id && !canLightFace(firePosition(hit), bb)) continue;
                     closest = hit;
                     closestDistance = distance;
@@ -124,6 +147,68 @@ public class ZombieIgniter extends Zombie {
                 || level.getTile(fire.x(), fire.y(), fire.z()) != Block.FIRE.id) return false;
         lookAtIgnition(closest.vec);
         return true;
+    }
+
+    private static boolean occupiedWall(
+            java.util.List<GeneratedHouse> houses, int x, int y, int z) {
+        for (GeneratedHouse house : houses) {
+            if (Math.abs(x - house.x()) <= 3
+                    && Math.abs(z - house.z()) <= 3
+                    && y > house.floor()
+                    && y < house.floor() + 4) return true;
+        }
+        return false;
+    }
+
+    private static AABB houseInterior(GeneratedHouse house) {
+        return new AABB(
+                house.x() - 2,
+                house.floor() + 1,
+                house.z() - 2,
+                house.x() + 3,
+                house.floor() + 4,
+                house.z() + 3);
+    }
+
+    private boolean hasOccupant(GeneratedHouse house) {
+        AABB interior = houseInterior(house);
+        for (Object entity : level.findEntities(this, interior)) {
+            if (entity instanceof Mob target
+                    && validOccupant(target)
+                    && interior.contains(new Vec3D(target.x, target.bb.y0 + .1f, target.z)))
+                return true;
+        }
+        Player player = level.getNearestPlayer(x, y, z, 35f);
+        return validOccupant(player)
+                && isOnRoof(house, player)
+                && HostileTargets.hasLineOfSight(this, player);
+    }
+
+    private static boolean isOnRoof(GeneratedHouse house, Player player) {
+        float roof = house.floor() + 5;
+        return player.x >= house.x() - 3
+                && player.x < house.x() + 4
+                && player.z >= house.z() - 3
+                && player.z < house.z() + 4
+                && player.bb.y0 >= roof - .1f
+                && player.bb.y0 <= roof + 2;
+    }
+
+    private boolean isAtHouse(Player player) {
+        for (GeneratedHouse house : level.generatedHouses) {
+            if (isOnRoof(house, player)
+                    || houseInterior(house)
+                            .contains(new Vec3D(player.x, player.bb.y0 + .1f, player.z)))
+                return true;
+        }
+        return false;
+    }
+
+    private static boolean validOccupant(Mob target) {
+        return (target instanceof Player || target instanceof Villager)
+                && !target.removed
+                && target.health > 0
+                && !CreativeModeHelper.shouldIgnoreTarget(target);
     }
 
     private void lookAtIgnition(Vec3D point) {
@@ -182,6 +267,7 @@ public class ZombieIgniter extends Zombie {
         private transient Pos approach;
         private transient int searchTicks;
         private transient Mob houseTarget;
+        private transient Player outsidePlayer;
 
         HouseIgnitionAI() {
             super(true, true, true);
@@ -190,6 +276,7 @@ public class ZombieIgniter extends Zombie {
         @Override
         protected void update() {
             ZombieIgniter igniter = (ZombieIgniter) mob;
+            outsidePlayer = null;
             if (CombatRules.difficulty(level) != Difficulty.EXTREME
                     || mob.corruptedToDefendPlayer
                     || level.isNetworkMode()
@@ -201,7 +288,20 @@ public class ZombieIgniter extends Zombie {
                 super.update();
                 return;
             }
-            if (--searchTicks <= 0) {
+            Player player = level.getNearestPlayer(mob.x, mob.y, mob.z, getSightRange());
+            if (validOccupant(player)
+                    && HostileTargets.hasLineOfSight(mob, player)
+                    && !igniter.isAtHouse(player)) {
+                if (approach != null || houseTarget != null) clearNavigation();
+                approach = null;
+                houseTarget = null;
+                searchTicks = 0;
+                outsidePlayer = player;
+                setPursuitTarget(player);
+                super.update();
+                return;
+            }
+            if (--searchTicks <= 0 || houseTarget != null && !validOccupant(houseTarget)) {
                 Mob previousTarget = houseTarget;
                 houseTarget = findReachableOccupant();
                 if (previousTarget != null && houseTarget == null) {
@@ -237,14 +337,7 @@ public class ZombieIgniter extends Zombie {
                 if (Math.abs(mob.x - house.x() - .5f) > SEARCH_RANGE
                         || Math.abs(mob.z - house.z() - .5f) > SEARCH_RANGE
                         || Math.abs(mob.bb.y0 - house.floor() - 1) > 8) continue;
-                AABB interior =
-                        new AABB(
-                                house.x() - 2,
-                                house.floor() + 1,
-                                house.z() - 2,
-                                house.x() + 3,
-                                house.floor() + 4,
-                                house.z() + 3);
+                AABB interior = houseInterior(house);
                 for (Object entity : level.findEntities(mob, interior).toArray()) {
                     if (!(entity instanceof Mob target)
                             || !validOccupant(target)
@@ -272,13 +365,6 @@ public class ZombieIgniter extends Zombie {
                 }
             }
             return null;
-        }
-
-        private static boolean validOccupant(Mob target) {
-            return (target instanceof Player || target instanceof Villager)
-                    && !target.removed
-                    && target.health > 0
-                    && !CreativeModeHelper.shouldIgnoreTarget(target);
         }
 
         private boolean canDouse(GeneratedHouse house, Pos fire) {
@@ -309,7 +395,8 @@ public class ZombieIgniter extends Zombie {
             for (GeneratedHouse house : level.generatedHouses) {
                 if (Math.abs(house.x() + .5f - mob.x) > SEARCH_RANGE
                         || Math.abs(house.z() + .5f - mob.z) > SEARCH_RANGE
-                        || Math.abs(house.floor() + 1 - mob.bb.y0) > 8) continue;
+                        || Math.abs(house.floor() + 1 - mob.bb.y0) > 8
+                        || !igniter.hasOccupant(house)) continue;
                 for (int offset = -3; offset <= 3; offset++) {
                     addApproaches(
                             igniter,
@@ -375,7 +462,7 @@ public class ZombieIgniter extends Zombie {
             for (int y = floor; y <= floor + 2; y++) {
                 if (!Pathfinder.hasStandingRoom(level, mob, x + .5f, y, z + .5f)) continue;
                 AABB bounds = mob.bb.cloneMove(x + .5f - mob.x, y - mob.bb.y0, z + .5f - mob.z);
-                if (mob.overlapsFire(bounds.grow(.5f, 0, .5f))) continue;
+                if (mob.overlapsFire(bounds.grow(1f, 0, 1f))) continue;
                 float eyeY = y + mob.bbHeight * .85f;
                 for (int wallY = floor + 1; wallY <= floor + 3; wallY++) {
                     if (level.getTile(wallX, wallY, wallZ) != Block.WOOD.id) continue;

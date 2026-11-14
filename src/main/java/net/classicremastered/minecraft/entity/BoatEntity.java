@@ -61,6 +61,10 @@ public final class BoatEntity extends Entity {
         return secondPassenger;
     }
 
+    public boolean carries(Entity passenger) {
+        return passenger != null && hasPassenger(passenger);
+    }
+
     public boolean board(Player player) {
         if (player.sneaking || !canAcceptPassenger(player)) return false;
         player.mount(this);
@@ -73,7 +77,10 @@ public final class BoatEntity extends Entity {
     protected boolean canAcceptPassenger(Entity passenger) {
         return !level.isNetworkMode()
                 && !removed
-                && secondPassenger == null
+                && (secondPassenger == null
+                        || rider == null
+                                && secondPassenger instanceof CrossbowTurret
+                                && passenger instanceof Player)
                 && submergedTicks < 60
                 && passenger.riding == null
                 && passenger.rider == null
@@ -81,7 +88,10 @@ public final class BoatEntity extends Entity {
                 && passenger instanceof Mob mob
                 && mob.health > 0
                 && passenger.bbWidth <= MAX_PASSENGER_WIDTH
-                && !(passenger instanceof CrossbowTurret || passenger instanceof Spider)
+                && !(passenger instanceof Spider)
+                && (!(passenger instanceof CrossbowTurret)
+                        || rider == null
+                        || rider instanceof Player)
                 && !level.containsLiquid(bb.grow(0, -.24f, 0), LiquidType.LAVA);
     }
 
@@ -93,7 +103,10 @@ public final class BoatEntity extends Entity {
     @Override
     protected void addPassenger(Entity passenger) {
         Entity previous = rider;
-        if (previous == null) {
+        if (passenger instanceof CrossbowTurret) {
+            secondPassenger = passenger;
+            if (previous != null) previous.syncRidingPosition();
+        } else if (previous == null) {
             rider = passenger;
         } else {
             if (takesDriverSeat(passenger)) {
@@ -113,8 +126,8 @@ public final class BoatEntity extends Entity {
     @Override
     protected void removePassenger(Entity passenger) {
         if (rider == passenger) {
-            rider = secondPassenger;
-            secondPassenger = null;
+            rider = secondPassenger instanceof CrossbowTurret ? null : secondPassenger;
+            if (rider != null) secondPassenger = null;
         } else if (secondPassenger == passenger) {
             secondPassenger = null;
         }
@@ -137,6 +150,14 @@ public final class BoatEntity extends Entity {
 
     @Override
     protected AABB ridingBounds(Entity passenger) {
+        if (passenger instanceof CrossbowTurret && rider == null) {
+            Vec3D back = seat(false, true);
+            float half = passenger.bbWidth * .5f;
+            float halfX = Math.max(bbWidth * .5f, Math.abs(back.x - x) + half);
+            float halfZ = Math.max(bbWidth * .5f, Math.abs(back.z - z) + half);
+            return new AABB(
+                    x - halfX, bb.y0, z - halfZ, x + halfX, back.y + passenger.bbHeight, z + halfZ);
+        }
         boolean addingSecond = rider != null && passenger != rider && passenger != secondPassenger;
         boolean twoPassengers = addingSecond || secondPassenger != null;
         boolean promote = addingSecond && takesDriverSeat(passenger);
@@ -153,6 +174,17 @@ public final class BoatEntity extends Entity {
             top = Math.max(top, back.y + second.bbHeight);
         }
         return new AABB(x - halfX, bb.y0, z - halfZ, x + halfX, top, z + halfZ);
+    }
+
+    @Override
+    public void ejectPassengers() {
+        if (secondPassenger != null) secondPassenger.unmount();
+        super.ejectPassengers();
+    }
+
+    @Override
+    protected Entity collisionPassenger() {
+        return rider != null ? rider : secondPassenger;
     }
 
     @Override
@@ -248,6 +280,7 @@ public final class BoatEntity extends Entity {
             if (!entity.isPushable() || entity.removed || hasPassenger(entity)) continue;
             if (!(rider instanceof Player)
                     && !(entity instanceof Player)
+                    && !(entity instanceof CrossbowTurret)
                     && canAcceptPassenger(entity)
                     && entity.bb.y0 <= bb.y1) {
                 entity.mount(this);

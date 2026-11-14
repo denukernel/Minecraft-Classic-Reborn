@@ -4,8 +4,10 @@ import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.MobSpawner;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.Zombie;
+import net.classicremastered.minecraft.mob.ZombieIgniter;
 import net.classicremastered.minecraft.mob.ai.goal.Goal;
 import net.classicremastered.minecraft.mob.ai.goal.GoalSelector;
 import net.classicremastered.minecraft.mob.ai.goal.movement.FleeThreatGoal;
@@ -56,6 +58,10 @@ public class BasicAI extends AI {
     private transient net.classicremastered.minecraft.path.PathNavigator navigator;
     private transient Level navigationLevel;
     private transient boolean steeredThisTick;
+    private transient int panicTicks;
+    private transient Entity panicAttacker;
+    private transient GroundWander panicRoute;
+    private transient boolean emergencyMovement;
     private int wanderRouteTicks;
     private transient GroundWander wander;
     private transient GroundWander blockedPursuit;
@@ -82,6 +88,7 @@ public class BasicAI extends AI {
 
     @Override
     public void tick(Level level, Mob mob) {
+        emergencyMovement = false;
         ladderStep = null;
         if (shorePath == null) shorePath = java.util.List.of();
         ++this.noActionTime;
@@ -115,10 +122,12 @@ public class BasicAI extends AI {
                 blockedPursuitTarget = null;
             }
             float previousYaw = mob.yRot;
-            boolean escapingFire = escapeFire();
-            boolean seekingWater = !escapingFire && seekSunlightWater();
-            shelteringInWater = seekingWater && mob.isWetForFire();
-            if (!escapingFire && !seekingWater) {
+            emergencyMovement =
+                    escapeFire() || seekFireWater() || panicFromDamage() || yieldToIgniter();
+            boolean seekingShade = !emergencyMovement && seekSunlightShade();
+            boolean seekingWater = !emergencyMovement && !seekingShade && seekSunlightWater();
+            shelteringInWater = (seekingWater || emergencyMovement) && mob.isWetForFire();
+            if (!emergencyMovement && !seekingShade && !seekingWater) {
                 this.update();
                 goalSelector().tick();
             } else if (selector != null) {
@@ -423,10 +432,8 @@ public class BasicAI extends AI {
 
     private boolean escapeFire() {
         if (!navigationAllowed()) return false;
-        boolean igniter = mob instanceof net.classicremastered.minecraft.mob.ZombieIgniter;
-        var fireBounds = igniter ? mob.bb.grow(.5f, 0, .5f) : mob.bb;
-        if ((!igniter && mob.remainingFireTicks <= 0) || !mob.overlapsFire(fireBounds))
-            return false;
+        var fireBounds = mob.bb.grow(.4f, 0, .4f);
+        if (!mob.overlapsFire(fireBounds)) return false;
 
         float bestDistance = Float.POSITIVE_INFINITY;
         float bestYaw = mob.yRot;
@@ -456,6 +463,117 @@ public class BasicAI extends AI {
         return true;
     }
 
+    public final boolean isUsingEmergencyMovement() {
+        return emergencyMovement;
+    }
+
+    private boolean seekFireWater() {
+        if (mob.remainingFireTicks > 0 && navigationAllowed() && Pathfinder.supportsSwimming(mob)) {
+            return seekWaterRefuge();
+        }
+        if (!usingWaterShelter) resetWaterRefuge();
+        return false;
+    }
+
+    private boolean panicFromDamage() {
+        if (panicTicks <= 0 && !(MobSpawner.isAnimal(mob) && mob.remainingFireTicks > 0)) {
+            panicRoute = null;
+            panicAttacker = null;
+            return false;
+        }
+        if (panicTicks > 0) panicTicks--;
+        if (!navigationAllowed()) return false;
+        if (panicRoute == null || panicRoute.level != level) {
+            if (panicAttacker != null) {
+                mob.yRot =
+                        (float)
+                                        Math.toDegrees(
+                                                Math.atan2(
+                                                        mob.z - panicAttacker.z,
+                                                        mob.x - panicAttacker.x))
+                                - 90f;
+            }
+            panicRoute = new GroundWander(level, random);
+        }
+        running = true;
+        runMultiplier = 1.4f;
+        steeredThisTick = true;
+        applyRoute(panicRoute.steer(mob, random), 1f);
+        return true;
+    }
+
+    private boolean yieldToIgniter() {
+        if (!(mob instanceof Zombie)
+                || mob instanceof ZombieIgniter
+                || mob instanceof net.classicremastered.minecraft.mob.Skeleton
+                || mob.corruptedToDefendPlayer
+                || !navigationAllowed()
+                || CombatRules.difficulty(level) != Difficulty.EXTREME) return false;
+        for (Object candidate : level.findEntities(mob, mob.bb.grow(6f, 3f, 6f))) {
+            if (!(candidate instanceof ZombieIgniter igniter)
+                    || !igniter.isPreparingHouseIgnition()) continue;
+            float dx = mob.x - igniter.x, dz = mob.z - igniter.z;
+            float distance = (float) Math.hypot(dx, dz);
+            if (distance > 5f) continue;
+            if (distance > .05f && distance < 3f) {
+                float retreat = 3.5f / distance;
+                float x = igniter.x + dx * retreat, z = igniter.z + dz * retreat;
+                if (Pathfinder.canWalkStraight(level, mob, x, mob.bb.y0, z)) {
+                    navigateTo(x, mob.bb.y0, z, .85f);
+                    return true;
+                }
+            }
+            holdPosition(mob.yRot);
+            mob.xd *= .5f;
+            mob.zd *= .5f;
+            return true;
+        }
+        return false;
+    }
+
+    private transient Pathfinder.Node shadeDestination;
+    private transient int shadeSearchDelay;
+
+    private boolean seekSunlightShade() {
+        if (!(mob instanceof Zombie zombie)
+                || !zombie.canBurnInSunlight()
+                || !navigationAllowed()
+                || CombatRules.difficulty(level) != Difficulty.EXTREME
+                || !level.isDaytime()
+                || level.getDaylightBrightness() < .55f) {
+            shadeDestination = null;
+            shadeSearchDelay = 0;
+            return false;
+        }
+        if (!level.isSunlitAtHead(mob)) {
+            if (shadeDestination == null) return false;
+            holdPosition(mob.yRot);
+            mob.xd *= .5f;
+            mob.zd *= .5f;
+            return true;
+        }
+        if (zombie.isInWaterOrOnWater()) return false;
+        float offset = Pathfinder.offset(mob.bbWidth);
+        if (shadeDestination != null
+                && level.hasDirectSun(
+                        shadeDestination.x + offset,
+                        shadeDestination.feetY + mob.bbHeight * .85f,
+                        shadeDestination.z + offset)) shadeDestination = null;
+        if (shadeDestination == null && --shadeSearchDelay <= 0) {
+            shadeDestination = Pathfinder.findShadeRefuge(level, mob);
+            shadeSearchDelay = 20;
+        }
+        if (shadeDestination == null) return false;
+        running = true;
+        navigateTo(
+                shadeDestination.x + offset,
+                shadeDestination.feetY,
+                shadeDestination.z + offset,
+                runSpeed);
+        if (getNavigator().isWaitingForRoute()) shadeDestination = null;
+        return true;
+    }
+
     private transient PathNavigator waterRefuge;
     private transient Level waterRefugeLevel;
     private transient int waterSearchDelay;
@@ -474,10 +592,7 @@ public class BasicAI extends AI {
                 || !(level.shouldUndeadBurnAt(zombie)
                         || (usingWaterShelter || waterDestination != null)
                                 && zombie.isInWaterOrOnWater())) {
-            waterDestination = null;
-            usingWaterShelter = false;
-            waterSearchDelay = 0;
-            if (waterRefuge != null) waterRefuge.clearGoal();
+            resetWaterRefuge();
             return false;
         }
         if (zombie.isInWaterOrOnWater()) {
@@ -487,6 +602,17 @@ public class BasicAI extends AI {
             mob.zd *= .5f;
             return true;
         }
+        return seekWaterRefuge();
+    }
+
+    private void resetWaterRefuge() {
+        waterDestination = null;
+        usingWaterShelter = false;
+        waterSearchDelay = 0;
+        if (waterRefuge != null) waterRefuge.clearGoal();
+    }
+
+    private boolean seekWaterRefuge() {
         if (waterRefuge == null || waterRefugeLevel != level) {
             waterRefuge = new PathNavigator(level);
             waterRefugeLevel = level;
@@ -817,6 +943,11 @@ public class BasicAI extends AI {
     public void hurt(Entity src, int dmg) {
         super.hurt(src, dmg);
         this.noActionTime = 0;
+        if (dmg > 0 && MobSpawner.isAnimal(mob)) {
+            panicTicks = 60;
+            panicAttacker = src;
+            panicRoute = null;
+        }
     }
 
     public void bind(

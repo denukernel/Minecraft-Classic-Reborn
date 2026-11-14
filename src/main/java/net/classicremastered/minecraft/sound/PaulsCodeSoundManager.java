@@ -296,6 +296,9 @@ public final class PaulsCodeSoundManager {
             if (pooled != null)
                 list = sfx.get(pooled);
         }
+        if ((list == null || list.isEmpty()) && "random/wood_click".equals(chosenKey)) {
+            list = sfx.get(net.classicremastered.minecraft.level.tile.Tile$SoundType.wood.pool);
+        }
         if (list == null || list.isEmpty()) {
             System.out.println("[Audio] Missing sound: " + chosenKey + " (orig=" + key + ")");
             return;

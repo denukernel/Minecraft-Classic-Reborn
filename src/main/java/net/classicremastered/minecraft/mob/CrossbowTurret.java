@@ -223,6 +223,8 @@ public final class CrossbowTurret extends Mob {
 
     public boolean canTarget(Entity entity) {
         return entity instanceof Mob mob
+                && !(riding instanceof net.classicremastered.minecraft.entity.BoatEntity boat
+                        && boat.carries(entity))
                 && mob.health > 0
                 && !mob.removed
                 && !mob.corruptedToDefendPlayer
@@ -239,14 +241,15 @@ public final class CrossbowTurret extends Mob {
             return;
         }
         if (headless) {
-            fall(0f, 0f);
+            if (riding == null) fall(0f, 0f);
             return;
         }
         TurretShot shot = null;
-        if (variant == TurretVariant.ROVER) {
+        boolean driving = variant == TurretVariant.ROVER && riding == null;
+        if (driving) {
             if (drive == null) setGuardPost();
             shot = drive.tick(this);
-        } else {
+        } else if (riding == null) {
             fall(0f, 0f);
         }
         if (!enabled || health <= 0) {
@@ -257,7 +260,7 @@ public final class CrossbowTurret extends Mob {
         if (reloadTicks > 0) {
             reloadTicks--;
         }
-        if (variant != TurretVariant.ROVER && ammo > 0) shot = findShot();
+        if (!driving && ammo > 0) shot = findShot();
         trackedTarget = shot == null ? null : shot.target();
         if (shot == null) {
             aligned = false;
@@ -468,6 +471,9 @@ public final class CrossbowTurret extends Mob {
     public void tick() {
         hasTicked = true;
         super.tick();
+        if (riding instanceof net.classicremastered.minecraft.entity.BoatEntity && health > 0) {
+            aiStep();
+        }
         if (!level.isNetworkMode()
                 && health > 0
                 && health < maxHealth()

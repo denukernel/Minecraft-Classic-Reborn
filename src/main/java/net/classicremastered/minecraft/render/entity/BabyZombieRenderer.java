@@ -19,10 +19,10 @@ public final class BabyZombieRenderer extends MobRenderer<BabyZombie> {
         renderPose(mob, tm, animInputs(mob, partial), yaw, pitch);
     }
 
-    private void renderPose(BabyZombie mob, TextureManager tm, AnimInputs a, float yaw, float pitch) {
+    private void renderPose(
+            BabyZombie mob, TextureManager tm, AnimInputs a, float yaw, float pitch) {
         bind(tm, texture);
         model.preAnimate(mob);
         model.render(a.anim, a.runAmt, a.age, yaw, pitch, MODEL_SCALE);
-        mob.renderArmorLayer(tm, a.anim, a.runAmt, a.age, yaw, pitch, MODEL_SCALE);
     }
 }

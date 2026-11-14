@@ -97,6 +97,7 @@ public class PrimedTnt extends Entity {
     @Override
     public void tick() {
         super.tick();
+        applyLiquidCurrent();
         this.xo = this.x;
         this.yo = this.y;
         this.zo = this.z;

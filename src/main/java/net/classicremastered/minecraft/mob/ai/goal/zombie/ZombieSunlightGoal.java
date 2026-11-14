@@ -20,9 +20,11 @@ public final class ZombieSunlightGoal extends Goal {
     public void
             tick() { // --- Sunlight burning (skip if variant is sun-immune; also don't burn in/onto
         // water) ---
-        if (zombie.canBurnInSunlight()
-                && zombie.level.shouldUndeadBurnAt(zombie)
-                && !zombie.isInWaterOrOnWater()) {
+        if (zombie.isInWaterOrOnWater()) {
+            zombie.sunlightFlameTicks = 0;
+            zombie.sunBurnTicks = 0;
+        } else if (zombie.canBurnInSunlight() && zombie.level.shouldUndeadBurnAt(zombie)) {
+            zombie.sunlightFlameTicks = 20;
             // The attached fire overlay follows the zombie and cuts off on water contact.
             if (zombie.level.particleEngine != null) {
                 if (zombie.level.random.nextInt(4) == 0) {
@@ -44,6 +46,7 @@ public final class ZombieSunlightGoal extends Goal {
             }
         } else {
             zombie.sunBurnTicks = 0;
+            if (zombie.sunlightFlameTicks > 0) zombie.sunlightFlameTicks--;
         }
 
     }

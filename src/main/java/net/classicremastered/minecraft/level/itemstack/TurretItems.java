@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level.itemstack;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.entity.BoatEntity;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.player.Player;
@@ -90,18 +91,47 @@ public final class TurretItems {
         if (occupied(level, turret) || !level.getCubes(turret.bb).isEmpty()) {
             return;
         }
+        finishPlacement(player, raw, turret, variant, crate);
+    }
+
+    public static void place(Player player, BoatEntity boat, int raw) {
+        Level level = player.level;
+        if (level != boat.level
+                || level.isNetworkMode()
+                || level.blockMap == null
+                || player.inventory.getSelected() != raw
+                || player.inventory.getCount(player.inventory.selected) <= 0) return;
+        var crate = player.inventory.crate(player.inventory.selected);
+        var variant =
+                raw == PACKED + 256 && crate != null
+                        ? net.classicremastered.minecraft.mob.TurretVariant.fromSave(
+                                crate.variantId())
+                        : net.classicremastered.minecraft.mob.TurretVariant.fromItem(raw);
+        if (variant == null) return;
+        CrossbowTurret turret = new CrossbowTurret(level, boat.x, boat.y, boat.z);
+        turret.mount(boat);
+        if (turret.riding == boat) finishPlacement(player, raw, turret, variant, crate);
+    }
+
+    private static void finishPlacement(
+            Player player,
+            int raw,
+            CrossbowTurret turret,
+            net.classicremastered.minecraft.mob.TurretVariant variant,
+            PackedTurret crate) {
         if (player.inventory.getSelected() != raw
                 || player.inventory.getCount(player.inventory.selected) <= 0) {
             return;
         }
         turret.variant = variant;
         turret.owner = CrossbowTurret.playerName(player);
+        boolean packed = raw == PACKED + 256;
         if (packed) {
             turret.restore(crate);
         }
         turret.setGuardPost();
-        level.addEntity(turret);
-        if (packed || !level.creativeMode) {
+        player.level.addEntity(turret);
+        if (packed || !player.level.creativeMode) {
             player.inventory.removeSelected(1);
         }
     }

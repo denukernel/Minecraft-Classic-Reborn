@@ -9,19 +9,34 @@ import org.lwjgl.opengl.GL11;
 
 public final class EquipmentRenderer {
     private static HumanoidModel outer, leggings;
+    private static HumanoidModel compactOuter, compactLeggings, frostbiteLeggings;
 
     private EquipmentRenderer() {}
 
-    private static void copy(ModelPart to, ModelPart from) {
-        to.setPosition(from.x, from.y, from.z);
-        to.pitch = from.pitch;
-        to.yaw = from.yaw;
-        to.roll = from.roll;
+    private static boolean isCompactBaby(HumanoidModel model) {
+        return model instanceof FrostbiteModel cold && cold.isBabyModel();
+    }
+
+    private static boolean hasScaledHead(HumanoidModel model) {
+        return model instanceof BabyZombieModel || model instanceof BabySkeletonModel;
     }
 
     private static boolean isChildModel(HumanoidModel model) {
-        return model instanceof BabyZombieModel || model instanceof BabySkeletonModel
-                || model instanceof FrostbiteModel cold && cold.isBabyModel();
+        return hasScaledHead(model) || isCompactBaby(model);
+    }
+
+    private static HumanoidMob legacyArmor(Mob mob, HumanoidModel model) {
+        if (!(model instanceof BabyZombieModel
+                        || model instanceof HuskModel
+                        || model instanceof FrostbiteModel
+                        || mob instanceof TeenZombie
+                        || mob instanceof TeenSkeleton)
+                || !(mob instanceof HumanoidMob humanoid)
+                || (mob.equipmentRolled && !mob.legacyArmor)
+                || !(humanoid.helmet || humanoid.armor)) {
+            return null;
+        }
+        return humanoid;
     }
 
     public static void armor(Mob mob, HumanoidModel base, TextureManager tm, float scale) {
@@ -30,10 +45,20 @@ public final class EquipmentRenderer {
 
     public static void armor(
             Mob mob, HumanoidModel base, TextureManager tm, float scale, float brightness) {
-        if (Equipment.points(mob) == 0) return;
+        HumanoidMob legacy = legacyArmor(mob, base);
+        if (Equipment.points(mob) == 0 && legacy == null) return;
         if (outer == null) {
             outer = new HumanoidModel(.55f);
             leggings = new HumanoidModel(.25f);
+        }
+        boolean compactBaby = isCompactBaby(base);
+        if (compactBaby && compactOuter == null) {
+            compactOuter = BabyHumanoidArmorModel.compactArmor(.55F);
+            compactLeggings = BabyHumanoidArmorModel.compactArmor(.25F);
+        }
+        if (base instanceof FrostbiteModel && !compactBaby && frostbiteLeggings == null) {
+            // The adult frostbite has an ice layer inflated by .25 model units.
+            frostbiteLeggings = new HumanoidModel(.35F);
         }
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         GL11.glPushMatrix();
@@ -44,24 +69,46 @@ public final class EquipmentRenderer {
             if (isChildModel(base)) {
                 BabyZombieModel.applyChildTransform(scale);
             }
+            if (compactBaby) {
+                scale *= 2.0F;
+            }
             for (int slot = 0; slot < 4; slot++) {
-                Equipment.Gear gear = Equipment.gear(mob.equipment[slot]);
-                if (gear == null || gear.slot != slot)
+                Equipment.Gear gear = mob.equipment == null ? null : Equipment.gear(mob.equipment[slot]);
+                boolean equipped = gear != null && gear.slot == slot;
+                if (!equipped
+                        && (legacy == null
+                                || !(slot == 0 && legacy.helmet || slot == 1 && legacy.armor))) {
                     continue;
-                HumanoidModel m = slot == 2 ? leggings : outer;
-                copy(m.head, base.head);
-                copy(m.body, base.body);
-                copy(m.rightArm, base.rightArm);
-                copy(m.leftArm, base.leftArm);
-                copy(m.rightLeg, base.rightLeg);
-                copy(m.leftLeg, base.leftLeg);
-                boolean leather = gear.armorMaterial.equals("leather");
-                String texture = switch (gear.armorMaterial) {
-                case "leather" -> slot == 2 ? "/armor/leather_leggings.png" : "/armor/leather.png";
-                case "iron" -> slot == 2 ? "/armor/iron_leggings.png"
-                        : slot == 3 ? "/armor/iron_boots.png" : "/armor/plate.png";
-                default -> "/armor/" + gear.armorMaterial + (slot == 2 ? "_leggings.png" : ".png");
-                };
+                }
+                HumanoidModel m = outer;
+                if (compactBaby) {
+                    m = slot == 2 ? compactLeggings : compactOuter;
+                } else if (slot == 2) {
+                    m = base instanceof FrostbiteModel ? frostbiteLeggings : leggings;
+                }
+                m.head.copyFrom(base.head);
+                m.body.copyFrom(base.body);
+                m.rightArm.copyFrom(base.rightArm);
+                m.leftArm.copyFrom(base.leftArm);
+                m.rightLeg.copyFrom(base.rightLeg);
+                m.leftLeg.copyFrom(base.leftLeg);
+                String material = equipped ? gear.armorMaterial : "iron";
+                boolean leather = material.equals("leather");
+                String texture =
+                        switch (material) {
+                            case "leather" ->
+                                    slot == 2
+                                            ? "/armor/leather_leggings.png"
+                                            : "/armor/leather.png";
+                            case "iron" ->
+                                    slot == 2
+                                            ? "/armor/iron_leggings.png"
+                                            : slot == 3
+                                                    ? "/armor/iron_boots.png"
+                                                    : "/armor/plate.png";
+                            default ->
+                                    "/armor/" + material + (slot == 2 ? "_leggings.png" : ".png");
+                        };
                 m.head.render = slot == 0;
                 m.body.render = slot == 1 || slot == 2;
                 m.rightArm.render = m.leftArm.render = slot == 1;
@@ -93,8 +140,7 @@ public final class EquipmentRenderer {
     }
 
     private static void renderParts(HumanoidModel base, HumanoidModel armor, float scale) {
-        if (isChildModel(base))
-            BabyZombieModel.renderHead(armor.head, scale);
+        if (hasScaledHead(base)) BabyZombieModel.renderHead(armor.head, scale);
         else armor.head.render(scale);
         armor.body.render(scale);
         armor.rightArm.render(scale);

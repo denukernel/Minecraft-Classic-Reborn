@@ -1,8 +1,12 @@
 package net.classicremastered.minecraft.mob.ai.goal.zombie;
 
+import java.util.HashMap;
+import java.util.Map;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
+import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.LeavesBaseBlock;
 import net.classicremastered.minecraft.level.tile.StairBlock;
 import net.classicremastered.minecraft.mob.ZombieBuilder;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
@@ -23,6 +27,9 @@ public final class BuildStepsGoal extends Goal {
     private int routeCheckTicks;
     private boolean walkingRoute;
     private float routeX, routeY, routeZ;
+    private int stalledTicks;
+    private final Map<Long, Integer> rejectedSteps = new HashMap<>();
+    private float progressX, progressY, progressZ;
 
     public BuildStepsGoal(ZombieBuilder builder) {
         this.builder = builder;
@@ -38,6 +45,7 @@ public final class BuildStepsGoal extends Goal {
     public void tick() {
 
         if (cooldown > 0) cooldown--;
+        rejectedSteps.values().removeIf(expiry -> expiry <= builder.tickCount);
         if (routeCheckTicks > 0) routeCheckTicks--;
         if (poseTicks > 0 && --poseTicks == 0) {
             builder.poseBreaking = builder.posePlacing = false;
@@ -67,9 +75,7 @@ public final class BuildStepsGoal extends Goal {
             return;
         }
         builder.leaveTowerFor(p);
-        if (builder.onGround
-                && (travelTicks == 0 || !descending || stepReady)
-                && hasWalkingRoute(p)) {
+        if (travelTicks == 0 && builder.onGround && hasWalkingRoute(p)) {
             travelTicks = 0;
             breakHP = 0;
             builder.poseBreaking = builder.posePlacing = false;
@@ -84,34 +90,59 @@ public final class BuildStepsGoal extends Goal {
             if (descending && !stepReady) {
                 builder.xd = builder.zd = 0;
                 stepReady = prepareDescent();
-                if (!stepReady) return;
+                if (!stepReady) {
+                    if (travelTicks == 0) rejectStep(stepX, stepY + 2, stepZ);
+                    return;
+                }
             }
             float sx = stepX + .5f - builder.x,
                     sz = stepZ + .5f - builder.z,
                     len = (float) Math.sqrt(sx * sx + sz * sz);
-            if (len > .12f) {
-                builder.xd += sx / len * .035f;
-                builder.zd += sz / len * .035f;
-                builder.yRot = (float) Math.toDegrees(Math.atan2(sz, sx)) - 90;
-            }
-            if (builder.onGround && Math.abs(builder.bb.y0 - (stepY + 1)) < .2f && len < .3f) {
+            if (builder.onGround && Math.abs(builder.bb.y0 - (stepY + 1)) < .2f && len < .4f) {
                 travelTicks = 0;
-            } else if (builder.onGround && builder.bb.y0 < stepY + .9f && cooldown == 0) {
+            } else if (travelTicks == 0 || stalled()) {
+                rejectStep(stepX, stepY + (descending ? 2 : 0), stepZ);
+            } else if (builder.onGround
+                    && builder.bb.y0 < stepY + .9f
+                    && cooldown == 0
+                    && len < 1.6f) {
                 builder.yd = .42f;
                 cooldown = 6;
             }
             return;
         }
         descending = false;
+        stalledTicks = 0;
         if (!builder.onGround) return;
         int fx = (int) Math.floor(builder.x),
                 fy = (int) Math.floor(builder.bb.y0 + .01f),
                 fz = (int) Math.floor(builder.z);
         int targetFeet = (int) Math.floor(p.bb.y0 + .01f);
-        if (targetFeet >= fy && dx * dx + dz * dz < .6f) return;
+        if (targetFeet == fy && dx * dx + dz * dz < .6f) return;
         int nx = fx, nz = fz;
         if (Math.abs(dx) >= Math.abs(dz)) nx += dx >= 0 ? 1 : -1;
         else nz += dz > 0 ? 1 : -1;
+        if (targetFeet > fy) {
+            float best = Float.POSITIVE_INFINITY;
+            for (int direction = 0; direction < 4; direction++) {
+                int x = fx + (direction == 0 ? 1 : direction == 1 ? -1 : 0);
+                int z = fz + (direction == 2 ? 1 : direction == 3 ? -1 : 0);
+                if (!canBuildAscent(x, fy, z, p)) continue;
+                float distance =
+                        (p.x - x - .5f) * (p.x - x - .5f) + (p.z - z - .5f) * (p.z - z - .5f);
+                // Prefer an open staircase beside the canopy over tunneling into it.
+                for (int y = fy + 1; y <= Math.max(fy + 2, targetFeet - 1); y++) {
+                    if (Block.blocks[builder.level.getTile(x, y, z)] instanceof LeavesBaseBlock)
+                        distance += 3;
+                }
+                if (distance < best) {
+                    best = distance;
+                    nx = x;
+                    nz = z;
+                }
+            }
+            if (!Float.isFinite(best)) return;
+        }
         if (!loaded(nx, nz)) return;
         if (targetFeet < fy) {
             descending = true;
@@ -152,11 +183,11 @@ public final class BuildStepsGoal extends Goal {
             return;
         }
         if (targetFeet > fy) {
-            if (!air(nx, fy + 1, nz)) {
+            if (!bodySpace(nx, fy + 1, nz)) {
                 clear(nx, fy + 1, nz);
                 return;
             }
-            if (!air(nx, fy + 2, nz)) {
+            if (!bodySpace(nx, fy + 2, nz)) {
                 clear(nx, fy + 2, nz);
                 return;
             }
@@ -164,16 +195,24 @@ public final class BuildStepsGoal extends Goal {
                 place(nx, fy - 1, nz);
                 return;
             }
-            if (air(nx, fy, nz)) {
+            if (replaceable(nx, fy, nz)) {
                 if (!place(nx, fy, nz)) {
                     if (builder.bb.intersects(new AABB(nx, fy, nz, nx + 1, fy + 1, nz + 1))) {
                         builder.xd -= (nx - fx) * .08f;
                         builder.zd -= (nz - fz) * .08f;
+                    } else if (cooldown == 0) {
+                        rejectStep(nx, fy, nz);
                     }
                     return;
                 }
             }
-            if (builder.level.isSolidTile(nx, fy, nz)) {
+            if (supportsConstruction(nx, fy, nz)) {
+                // Lift off in the current column before moving onto the next tread.
+                if (!bodySpace(fx, fy + 2, fz)) {
+                    if (breakableBlock(fx, fy + 2, fz) != null) clear(fx, fy + 2, fz);
+                    else rejectStep(nx, fy, nz);
+                    return;
+                }
                 stepX = nx;
                 stepY = fy;
                 stepZ = nz;
@@ -196,8 +235,68 @@ public final class BuildStepsGoal extends Goal {
                 ai.holdForConstruction();
                 return;
             }
-            ai.navigateTo(stepX + .5f, stepY + 1, stepZ + .5f, ai.runSpeed);
+            if (!descending && builder.bb.y0 <= stepY + 1.3f) {
+                ai.moveToBuiltStep(stepX + .5f, stepY + 1, stepZ + .5f);
+            } else {
+                ai.navigateTo(stepX + .5f, stepY + 1, stepZ + .5f, ai.runSpeed);
+            }
+        } else if (walkingRoute
+                && ai.attackTarget == null
+                && builder.level.getPlayer() instanceof Player player
+                && player.health > 0
+                && !player.removed
+                && !CreativeModeHelper.shouldIgnoreTarget(player)
+                && Math.abs(player.x - routeX) <= .5f
+                && Math.abs(player.z - routeZ) <= .5f
+                && Math.abs(player.bb.y0 - routeY) <= .5f
+                && Math.abs(routeY - builder.bb.y0) >= 1
+                && Math.hypot(routeX - builder.x, routeZ - builder.z) <= 40
+                && CombatRules.difficulty(builder.level) != Difficulty.PEACEFUL
+                && !builder.isInWater()
+                && !builder.isInLava()) {
+            // A staircase built by another builder may work before the canopy is visible.
+            ai.navigateTo(routeX, routeY, routeZ, ai.runSpeed);
         }
+    }
+
+    private boolean canBuildAscent(int x, int y, int z, Player player) {
+        if (!loaded(x, z)
+                || !builder.level.isInBounds(x, y + 2, z)
+                || rejectedSteps.containsKey(Level.getCoordKey(x, y, z))) return false;
+        if (!replaceable(x, y, z) && !supportsConstruction(x, y, z)) return false;
+        AABB landing = new AABB(x + .2f, y + 1, z + .2f, x + .8f, y + 2.8f, z + .8f);
+        for (Object entity : builder.level.findEntities(builder, landing)) {
+            if (entity instanceof ZombieBuilder other
+                    && !other.removed
+                    && other.health > 0
+                    && other.bb.intersects(landing)) return false;
+        }
+        for (int above = y + 1; above <= y + 2; above++) {
+            if (above == (int) Math.floor(player.bb.y0 - .01f)
+                    && x == (int) Math.floor(player.x)
+                    && z == (int) Math.floor(player.z)) return false;
+            if (!bodySpace(x, above, z) && breakableBlock(x, above, z) == null) return false;
+        }
+        return true;
+    }
+
+    private boolean stalled() {
+        float dx = builder.x - progressX,
+                dy = builder.bb.y0 - progressY,
+                dz = builder.z - progressZ;
+        if (dx * dx + dz * dz >= .04f || builder.onGround && Math.abs(dy) >= .45f) {
+            progressX = builder.x;
+            progressY = builder.bb.y0;
+            progressZ = builder.z;
+            stalledTicks = 0;
+        }
+        return ++stalledTicks >= 20;
+    }
+
+    private void rejectStep(int x, int y, int z) {
+        rejectedSteps.put(Level.getCoordKey(x, y, z), builder.tickCount + 100);
+        stalledTicks = travelTicks = routeCheckTicks = 0;
+        if (builder.ai instanceof ZombieBuilderAI ai) ai.clearNavigation();
     }
 
     private boolean hasWalkingRoute(Player player) {
@@ -209,9 +308,12 @@ public final class BuildStepsGoal extends Goal {
             routeX = player.x;
             routeY = player.bb.y0;
             routeZ = player.z;
+            var path =
+                    Pathfinder.findChasePath(builder.level, builder, routeX, routeY, routeZ, 1024);
             walkingRoute =
-                    Pathfinder.findChasePath(builder.level, builder, routeX, routeY, routeZ, 1024)
-                            != null;
+                    path != null
+                            && !path.isEmpty()
+                            && Math.abs(path.get(path.size() - 1).feetY - routeY) < 1.25f;
         }
         return walkingRoute;
     }
@@ -244,6 +346,7 @@ public final class BuildStepsGoal extends Goal {
 
     private boolean descentSpace(int x, int feetY, int z) {
         if (!loaded(x, z) || feetY < 3 || feetY + 1 >= builder.level.depth - 2) return false;
+        if (rejectedSteps.containsKey(Level.getCoordKey(x, feetY, z))) return false;
         if (!air(x, feetY - 2, z) && !builder.level.isSolidTile(x, feetY - 2, z)) return false;
         for (int y = feetY - 1; y <= feetY + 1; y++) {
             if (!air(x, y, z) && breakableBlock(x, y, z) == null) return false;
@@ -271,12 +374,25 @@ public final class BuildStepsGoal extends Goal {
     }
 
     private boolean supportsConstruction(int x, int y, int z) {
-        return builder.level.isSolidTile(x, y, z)
-                || Block.blocks[builder.level.getTile(x, y, z)] instanceof StairBlock;
+        Block block = Block.blocks[builder.level.getTile(x, y, z)];
+        return block != null
+                && (block.isSolid()
+                        || block instanceof StairBlock
+                        || block instanceof LeavesBaseBlock);
+    }
+
+    private boolean bodySpace(int x, int y, int z) {
+        if (air(x, y, z)) return true;
+        int id = builder.level.getTile(x, y, z);
+        return id == Block.SNOW_LAYER.id;
+    }
+
+    private boolean replaceable(int x, int y, int z) {
+        return y > 0 && y < builder.level.depth - 2 && loaded(x, z) && bodySpace(x, y, z);
     }
 
     private boolean place(int x, int y, int z, int block) {
-        if (cooldown > 0 || !air(x, y, z)) return false;
+        if (cooldown > 0 || !replaceable(x, y, z)) return false;
         AABB cell = new AABB(x, y, z, x + 1, y + 1, z + 1);
         if (builder.bb.intersects(cell) || !builder.level.findEntities(builder, cell).isEmpty())
             return false;
@@ -299,18 +415,17 @@ public final class BuildStepsGoal extends Goal {
     }
 
     private Block breakableBlock(int x, int y, int z) {
-        if (descending
+        int id = builder.level.getTile(x, y, z);
+        Block b = id > 0 ? Block.blocks[id] : null;
+        if ((descending || b instanceof LeavesBaseBlock)
                 && net.classicremastered.minecraft.level.structure.GeneratedHouse.protects(
                         builder.level, x, y, z)
                 && !builder.canBuildTowerExit(x, y, z)) return null;
-        int id = builder.level.getTile(x, y, z);
-        Block b = id > 0 ? Block.blocks[id] : null;
         if (b == null
-                || !b.isSolid()
+                || !(b.isSolid() || !descending && b instanceof LeavesBaseBlock)
                 || b == Block.BEDROCK
                 || b == Block.OBSIDIAN
                 || b == Block.GLASS
-                || b == Block.LEAVES
                 || b == Block.TNT) return null;
         return b;
     }

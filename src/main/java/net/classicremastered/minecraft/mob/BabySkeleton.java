@@ -7,7 +7,7 @@ import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 public final class BabySkeleton extends Skeleton {
 
     public static final long serialVersionUID = 1L;
-    public static final short REGISTRY_ID = 43;
+    public static final short REGISTRY_ID = 86;
 
     public BabySkeleton(Level level, float x, float y, float z) {
         super(level, x, y, z);
@@ -16,6 +16,7 @@ public final class BabySkeleton extends Skeleton {
         setSize(.44f, 1.26f);
         heightOffset = .63f;
         health = 10;
+        setVoicePitch(1.5F);
         bobStrength = .2f;
         setPos(x, y, z);
         if (ai instanceof BasicAttackAI attack)

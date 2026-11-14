@@ -244,6 +244,7 @@ public final class MobSpawner {
                     if (roll < 5) variant = BabySkeleton.REGISTRY_ID;
                     else if (roll < 13 && CombatRules.difficulty(level) == Difficulty.EXTREME)
                         variant = SkeletonTrap.REGISTRY_ID;
+                    else if (roll >= 13 && roll < 18) variant = TeenSkeleton.REGISTRY_ID;
                 }
                 if (id == 1) {
                     var biome = biomes == null ? null : biomes.biomeAt(sx, sz, level.flatBiomes);
@@ -279,11 +280,14 @@ public final class MobSpawner {
 
     private short zombieVariant(BiomeLevelGenerator.Biome biome, int x, int y, int z) {
         boolean surface = hasOpenSky(x, y, z);
-        boolean baby = level.random.nextInt(100) < 5;
+        int ageRoll = level.random.nextInt(100);
+        boolean baby = ageRoll < 5;
+        boolean teen = ageRoll >= 5 && ageRoll < 10;
         short adult = 1;
         short igniter = ZombieIgniter.REGISTRY_ID;
         if (surface && biome == BiomeLevelGenerator.Biome.DESERT) {
             if (baby) return BabyHusk.REGISTRY_ID;
+            if (teen) return TeenHusk.REGISTRY_ID;
             adult = Husk.REGISTRY_ID;
             igniter = HuskIgniter.REGISTRY_ID;
         } else if (surface
@@ -291,10 +295,13 @@ public final class MobSpawner {
                 && (biome == BiomeLevelGenerator.Biome.SNOWY_PLAINS
                         || biome == BiomeLevelGenerator.Biome.SNOWY_FOREST)) {
             if (baby) return BabyFrostbite.REGISTRY_ID;
+            if (teen) return TeenFrostbite.REGISTRY_ID;
             adult = Frostbite.REGISTRY_ID;
             igniter = FrostbiteIgniter.REGISTRY_ID;
         } else if (baby) {
             return 40;
+        } else if (teen) {
+            return TeenZombie.REGISTRY_ID;
         }
 
         Difficulty difficulty = CombatRules.difficulty(level);

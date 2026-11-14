@@ -1,41 +1,68 @@
 package net.classicremastered.minecraft.bot.ai;
 
-import net.classicremastered.minecraft.bot.Bot;
+import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
+import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.player.Player;
 
 public class BotPvPAI extends BasicAI {
-    private final Bot bot;
+    private final float reach;
+    private final int attackInterval;
+    private final boolean sprint;
 
-    public BotPvPAI(Bot mob) {
-        this.bot = mob;
+    public BotPvPAI(Mob bot) {
+        this(bot, 2.5f, 20, false);
+    }
+
+    protected BotPvPAI(Mob bot, float reach, int attackInterval, boolean sprint) {
+        this.mob = bot;
+        this.reach = reach;
+        this.attackInterval = attackInterval;
+        this.sprint = sprint;
     }
 
     @Override
     protected void update() {
-        if (bot.level == null || !(bot.level.player instanceof Player)) return;
-        Player player = (Player) bot.level.player;
-
-        // --- Simple chase movement ---
-        float dx = player.x - bot.x;
-        float dz = player.z - bot.z;
-        float distSq = dx * dx + dz * dz;
-
-        if (distSq > 0.0001f) {
-            float dist = (float)Math.sqrt(distSq);
-            // normalize to forward input
-            this.yya = 1.0f; // always walk forward
-            bot.yRot = (float)(Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0f;
-        } else {
-            this.yya = 0f;
+        running = false;
+        if (!(level.getPlayer() instanceof Player player)
+                || player.removed
+                || player.health <= 0
+                || player.isSpectator()) {
+            clearNavigation();
+            holdPosition(mob.yRot);
+            return;
         }
 
-        // --- Attack if close enough ---
-        if (distSq < 2.5f * 2.5f) { // melee range ~2.5 blocks
-            if (bot.attackTime <= 0) {
-                bot.attackTime = 20; // cooldown (1 sec at 20 TPS)
-                player.hurt(bot, 2); // deal 2 damage (like Zombie)
+        float dx = player.x - mob.x;
+        float dz = player.z - mob.z;
+        float rise = player.bb.y0 - mob.bb.y0;
+        float horizontalDistanceSquared = dx * dx + dz * dz;
+        float yaw =
+                horizontalDistanceSquared > .001f
+                        ? (float) Math.toDegrees(Math.atan2(dz, dx)) - 90f
+                        : mob.yRot;
+        if (Math.abs(rise) < 1.5f
+                && horizontalDistanceSquared <= reach * reach
+                && HostileTargets.hasLineOfSight(mob, player)) {
+            clearNavigation();
+            holdPosition(yaw);
+            if (attackDelay == 0) {
+                attackDelay = attackInterval;
+                mob.attackTime = Mob.ATTACK_DURATION;
+                player.hurt(mob, 2);
             }
+            return;
         }
+
+        running = sprint;
+        navigateTo(player.x, player.bb.y0, player.z, sprint ? 1f : .85f);
+        if (!hasActiveRoute() && tryBuild(rise, horizontalDistanceSquared)) {
+            clearNavigation();
+            holdPosition(yaw);
+        }
+    }
+
+    protected boolean tryBuild(float rise, float horizontalDistanceSquared) {
+        return false;
     }
 }

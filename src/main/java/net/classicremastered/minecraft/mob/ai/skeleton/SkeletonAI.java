@@ -24,6 +24,10 @@ public final class SkeletonAI extends BasicAttackAI {
     public void tick(Level level, Mob mob) {
         rangedStance = false;
         super.tick(level, mob);
+        if (isUsingEmergencyMovement()) {
+            if (mob instanceof Skeleton skeleton) skeleton.cancelBowAttack();
+            return;
+        }
         if (bowGoals == null)
             bowGoals = createGoalSelector(new SkeletonBowGoal(this));
         bowGoals.tick();

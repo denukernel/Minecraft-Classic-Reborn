@@ -181,6 +181,7 @@ public class ImpactPrimedTnt extends Entity {
     @Override
     public void tick() {
         super.tick();
+        applyLiquidCurrent();
 
         // last pos for interpolation
         this.xo = this.x;

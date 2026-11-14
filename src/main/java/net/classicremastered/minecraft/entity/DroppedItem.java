@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.util.MathHelper;
 
@@ -54,7 +55,7 @@ public class DroppedItem extends Entity {
         if (fireDestroysStack(fireResistant)) return;
         heightOffset = bbHeight / 2;
         super.tick();
-        yd -= 0.04F;
+        applyDroppedStackMotion();
         move(xd, yd, zd);
         if (fireDestroysStack(fireResistant) || cactusDamagesStack()) return;
         yd *= 0.98F; xd *= 0.98F; zd *= 0.98F;
@@ -64,45 +65,27 @@ public class DroppedItem extends Entity {
 
     @Override
     public void playerTouch(Entity who) {
-        if (removed) return;
-        if (!(who instanceof net.classicremastered.minecraft.player.Player)) return;
-        if (life > 5990) return;
+        if (removed || life > 5990 || count <= 0 || !(who instanceof Player player)) return;
+        if (itemId < 0 || itemId >= Item.items.length) return;
 
-        net.classicremastered.minecraft.player.Player p =
-            (net.classicremastered.minecraft.player.Player) who;
-
-        int idToAdd = this.itemId;
-
-        // fixed: if an Item exists at this ID, remap it into item space (offset 256+)
-        net.classicremastered.minecraft.level.itemstack.Item it =
-            net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
-        if (it != null) {
-            idToAdd = 256 + itemId; // fixed: prevents collision with Block IDs
-        }
-
-        int added = 0;
-        for (int i = 0; i < (crate == null ? this.count : 1); i++) {
-            if (crate != null
-                    ? p.inventory.addCrate(crate)
-                    : p.inventory.addResource(idToAdd, armorWear)) {
-                added++;
+        int before = count;
+        if (crate != null) {
+            if (player.inventory.addCrate(crate)) count = 0;
+        } else {
+            int inventoryId = Item.items[itemId] == null ? itemId : itemId + 256;
+            while (count > 0 && player.inventory.addResource(inventoryId, armorWear)) {
+                count--;
                 armorWear = 0;
-            } else {
-                break;
             }
         }
+        if (count == before) return;
 
-        if (added > 0) {
-            if (this.level != null) {
-                float pitch = 1.0F + (MathHelper.random.nextFloat() - 0.5F) * 0.2F;
-                this.level.playSound("random/pop", this.x, this.y, this.z, 0.2F, pitch);
-                this.level.addEntity(new TakeEntityAnim(this.level, this, p));
-            }
-            this.count = crate == null ? this.count - added : 0;
-            if (this.count <= 0) {
-                remove();
-            }
+        if (level != null) {
+            float pitch = 1.0F + (MathHelper.random.nextFloat() - 0.5F) * 0.2F;
+            level.playSound("random/pop", x, y, z, 0.2F, pitch);
+            if (count == 0) level.addEntity(new TakeEntityAnim(level, this, player));
         }
+        if (count == 0) remove();
     }
 
     @Override

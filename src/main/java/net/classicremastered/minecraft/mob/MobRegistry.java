@@ -310,8 +310,15 @@ public final class MobRegistry {
                 BabyVillager.class,
                 (l, x, y, z) -> new BabyVillager(l, x, y, z));
 
-        tryRegister(
-                BabySkeleton.REGISTRY_ID, "BabySkeleton", BabySkeleton.class, BabySkeleton::new);
+        register(BabySkeleton.REGISTRY_ID, "BabySkeleton", BabySkeleton.class, BabySkeleton::new);
+        register(TeenSkeleton.REGISTRY_ID, "TeenSkeleton", TeenSkeleton.class, TeenSkeleton::new);
+        register(TeenZombie.REGISTRY_ID, "TeenZombie", TeenZombie.class, TeenZombie::new);
+        register(TeenHusk.REGISTRY_ID, "TeenHusk", TeenHusk.class, TeenHusk::new);
+        register(
+                TeenFrostbite.REGISTRY_ID,
+                "TeenFrostbite",
+                TeenFrostbite.class,
+                TeenFrostbite::new);
 
         // Reserve a range for future mobs (e.g., 60–99)
 

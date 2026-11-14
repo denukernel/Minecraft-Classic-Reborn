@@ -187,6 +187,16 @@ public abstract class Mob extends Entity {
     protected float hurtPitchMin = 1.0F, hurtPitchMax = 1.0F;
     protected float deathPitchMin = 1.0F, deathPitchMax = 1.0F;
 
+    protected final void setVoicePitch(float pitch) {
+        idlePitchMin = idlePitchMax = pitch;
+        hurtPitchMin = hurtPitchMax = pitch;
+        deathPitchMin = deathPitchMax = pitch;
+    }
+
+    protected float modelScale() {
+        return 1.0F;
+    }
+
     // helper: get random pitch between min/max
     protected float randPitch(float min, float max) {
         return (min == max) ? min : (min + level.random.nextFloat() * (max - min));
@@ -540,15 +550,8 @@ public abstract class Mob extends Entity {
                 this.zo + (this.z - this.zo) * partial);
 
         boolean showFireOverlay = remainingFireTicks > 0 && !isWetForFire();
-        if (!showFireOverlay && this instanceof Zombie) {
-            Zombie z = (Zombie) this;
-            if (z.canBurnInSunlight()
-                    && z.level != null
-                    && z.level.shouldUndeadBurnAt(z)
-                    && !z.isInWaterOrOnWater()) {
-                showFireOverlay = true;
-            }
-        }
+        if (this instanceof Zombie zombie && zombie.sunlightFlameTicks > 0 && !isWetForFire())
+            showFireOverlay = true;
 
         if (showFireOverlay) {
             GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_TEXTURE_BIT | GL11.GL_CURRENT_BIT);
@@ -602,6 +605,8 @@ public abstract class Mob extends Entity {
             GL11.glRotatef(-(180.0F - bodyRot + modelYawOffset), 0.0F, 1.0F, 0.0F);
         }
 
+        float modelScale = modelScale();
+        GL11.glScalef(modelScale, modelScale, modelScale);
         GL11.glTranslatef(0.0F, -bob * scale, 0.0F);
         GL11.glScalef(1.0F, -1.0F, 1.0F);
         GL11.glRotatef(180.0F - bodyRot + modelYawOffset, 0.0F, 1.0F, 0.0F);
@@ -688,7 +693,8 @@ public abstract class Mob extends Entity {
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
             GL11.glColor4f(1.0f, 0.2f, 0.2f, Math.min(0.75f, 0.55f * s));
 
-            if (this instanceof Skeleton || this instanceof Zombie && isBaby()) {
+            if (this instanceof Skeleton
+                    || this instanceof Zombie && (isBaby() || modelScale != 1.0F)) {
                 this.bindTexture(tm);
             }
             if (this.modelName != null && this.modelName.endsWith(".md3")) {
@@ -994,15 +1000,17 @@ public abstract class Mob extends Entity {
         Entity credited = DeathMessages.resolveAttacker(killer);
         if (credited instanceof CrossbowTurret turret) credited = turret.creditedOwner();
         int points = killScore();
-        if (credited != null && points > 0) credited.awardKillScore(this, points);
         if (credited instanceof net.classicremastered.minecraft.player.Player p) {
-            p.coins += legacyCoinBonus();
+            int coins = legacyCoinBonus();
             if (coinDrop > 0 && (level == null || level.doMobLoot)) {
-                p.coins += coinDrop;
+                coins += coinDrop;
                 if (p.minecraft != null && p.minecraft.hud != null) {
                     p.minecraft.hud.addChat("&e+" + coinDrop + " coins");
                 }
             }
+            p.awardMobKill(this, points, coins);
+        } else if (credited != null && points > 0) {
+            credited.awardKillScore(this, points);
         }
 
         // [rest of your existing death physics…]

@@ -70,6 +70,10 @@ public class LadderBlock extends Block {
         return true;
     }
 
+    public void renderCracks(ShapeRenderer renderer, int x, int y, int z, int texture) {
+        renderSide(renderer, x, y, z, face, texture);
+    }
+
     @Override
     public int getDrop() {
         return LADDER.id;

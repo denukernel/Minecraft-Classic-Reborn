@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.mob.ai.goal.combat;
 
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.mob.Creeper;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.Skeleton;
 import net.classicremastered.minecraft.mob.Villager;
@@ -50,7 +51,7 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
                                 ai.mob, ai.getSightRange(), ai.attackTarget);
         }
         float retain =
-                ai.mob instanceof net.classicremastered.minecraft.mob.Skeleton
+                ai.mob instanceof Skeleton || ai.mob instanceof Creeper
                         ? ai.getSightRange()
                         : Math.max(ai.getSightRange(), 32);
         if (ai.attackTarget != null && distanceSquared(ai.attackTarget) > retain * retain) {
@@ -112,7 +113,7 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
             playerDistance = distanceSquared(player);
         }
         Entity nearestVillager = null;
-        float villagerDistance = villagerRange * villagerRange;
+        float villagerDistance = range * range;
         for (Object entity : ai.level.findEntities(ai.mob, ai.mob.bb.grow(range, range, range))) {
             if (!(entity instanceof Entity candidate)
                     || candidate == stalledTarget
@@ -123,7 +124,10 @@ public final class TargetSelectionGoal extends MobGoal<BasicAttackAI> {
                     && HostileTargets.canLocate(ai.mob, candidate)) {
                 nearestPlayer = candidate;
                 playerDistance = distance;
-            } else if (candidate instanceof Villager && distance <= villagerDistance) {
+            } else if (candidate instanceof Villager
+                    && distance <= villagerDistance
+                    && (distance <= villagerRange * villagerRange
+                            || HostileTargets.hasLineOfSight(ai.mob, candidate))) {
                 nearestVillager = candidate;
                 villagerDistance = distance;
             }

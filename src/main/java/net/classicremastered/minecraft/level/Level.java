@@ -17,6 +17,7 @@ import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.LevelRenderer;
 import net.classicremastered.util.MathHelper;
+import net.classicremastered.nbt.CompoundTag;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -335,7 +336,7 @@ public class Level implements Serializable {
                     net.classicremastered.minecraft.level.itemstack.Equipment.load(m, s.extraData);
                     if (s.extraData != null) m.loadPersistence(s.extraData);
                     VillagerDoorManager.loadHome(m, s.extraData);
-                    m.moveTo(s.x, s.y, s.z, s.yRot, s.xRot);
+                    restoreMobPosition(m, s.extraData, s.x, s.y, s.z, s.yRot, s.xRot);
                     m.health = m.lastHealth = s.health;
                     this.addEntity(m);
                     ridingLinks.read(m, s.extraData);
@@ -343,6 +344,23 @@ public class Level implements Serializable {
                 this.pendingEntities = null; // spawn only once
             }
         }
+    }
+
+    static void restoreMobPosition(
+            Mob mob, CompoundTag tag, float x, float y, float z, float yaw, float pitch) {
+        mob.moveTo(x, y, z, yaw, pitch);
+        if (tag == null) return;
+        float feetY = tag.hasKey("FeetY") ? tag.getFloat("FeetY") : Float.NaN;
+        if (!Float.isFinite(feetY)) {
+            if (!(mob instanceof net.classicremastered.minecraft.mob.Villager)) return;
+            // Older saves store the movement anchor, which is above the feet.
+            float estimatedFeet = y - mob.heightOffset;
+            AABB estimated = mob.bb.cloneMove(0, estimatedFeet - mob.bb.y0, 0);
+            if (mob.level.getCubes(mob.bb).isEmpty() || !mob.level.getCubes(estimated).isEmpty())
+                return;
+            feetY = estimatedFeet;
+        }
+        mob.bb.move(0, feetY - mob.bb.y0, 0);
     }
 
     public void setData(int var1, int var2, int var3, byte[] var4) {
@@ -1305,10 +1323,18 @@ public class Level implements Serializable {
 
     /** Convenience for entity head position. */
     public boolean isSunlitAtHead(Entity e) {
-        // Use head/eye height like your brightness/fog code (~+0.12F or heightOffset if
-        // present)
-        float headY = e.y + 0.12F;
-        return isSunlitAt(e.x, headY, e.z);
+        return hasDirectSun(e.x, e.bb.y0 + e.bbHeight * .85f, e.z);
+    }
+
+    public boolean hasDirectSun(float x, float headY, float z) {
+        int bx = MathHelper.floor(x), bz = MathHelper.floor(z);
+        for (int y = Math.max(0, MathHelper.floor(headY)); y < depth; y++) {
+            Block block = Block.blocks[getTile(bx, y, bz)];
+            if (block != null
+                    && (block instanceof net.classicremastered.minecraft.level.tile.LeavesBaseBlock
+                            || block.isSolid() && block.isOpaque())) return false;
+        }
+        return true;
     }
 
     /** Single source of truth for whether undead (zombies/skeletons) should burn here. */
@@ -1769,6 +1795,14 @@ public class Level implements Serializable {
                 int var6 = (int) Math.floor((double) var1.x);
                 int var7 = (int) Math.floor((double) var1.y);
                 int var8 = (int) Math.floor((double) var1.z);
+                int initialTile = getTile(var6, var7, var8);
+                if (!checkSolidOnly
+                        && net.classicremastered.minecraft.level.tile.LadderBlock.isLadder(
+                                initialTile)) {
+                    MovingObjectPosition hit =
+                            Block.blocks[initialTile].clip(this, var6, var7, var8, var1, var2);
+                    if (hit != null) return hit;
+                }
                 int var9 = 20;
 
                 while (var9-- >= 0) {

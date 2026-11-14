@@ -61,8 +61,8 @@ public final class BossThrownBlock extends Entity {
                 heightOffset = bbHeight * .5f;
                 setPos(x, y, z);
             }
-            yd -= GRAVITY;
         }
+        yd -= GRAVITY;
         xo = x;
         yo = y;
         zo = z;

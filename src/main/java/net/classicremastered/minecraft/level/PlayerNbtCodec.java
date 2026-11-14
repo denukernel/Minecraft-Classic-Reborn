@@ -53,6 +53,7 @@ final class PlayerNbtCodec {
         tag.putInt("Health", player.health);
         tag.putInt("Coins", player.coins);
         tag.putInt("Score", player.score);
+        tag.put(player.worldStats().saveWorld());
         if (player.packedTurretHealth > 0) {
             tag.putInt("PackedTurretHealth", player.packedTurretHealth);
             tag.putInt("PackedTurretAmmo", player.packedTurretAmmo);
@@ -141,6 +142,8 @@ final class PlayerNbtCodec {
         if (tag.hasKey("Health")) player.lastHealth = player.health = tag.getInt("Health");
         if (tag.hasKey("Coins")) player.coins = tag.getInt("Coins");
         player.score = tag.getInt("Score");
+        if (tag.hasKey("LifetimeStats"))
+            player.worldStats().loadWorld(tag.getCompound("LifetimeStats"));
         player.packedTurretHealth = tag.getInt("PackedTurretHealth");
         player.packedTurretAmmo = tag.getInt("PackedTurretAmmo");
         player.packedTurretEnabled = tag.getBoolean("PackedTurretEnabled");

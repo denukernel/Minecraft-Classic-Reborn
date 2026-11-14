@@ -60,6 +60,7 @@ final class ClassicLevelNbtCodec {
             mPos.add(new FloatTag(null, m.y));
             mPos.add(new FloatTag(null, m.z));
             mobTag.put(mPos);
+            mobTag.putFloat("FeetY", m.bb.y0);
 
             ListTag mRot = new ListTag("Rotation", (byte) 5);
             mRot.add(new FloatTag(null, m.yRot));

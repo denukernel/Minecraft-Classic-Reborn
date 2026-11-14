@@ -150,6 +150,7 @@ public final class HeldBlockEntity extends Entity {
     }
 
     private void tickThrown() {
+        yd -= gravity;
         ProjectileSweep.Impact impact = ProjectileSweep.move(this, owner);
         if (impact == null) {
             if (age <= life) return;

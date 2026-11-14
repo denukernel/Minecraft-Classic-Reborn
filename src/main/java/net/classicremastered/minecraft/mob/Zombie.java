@@ -10,6 +10,7 @@ public class Zombie extends HumanoidMob {
     public static final long serialVersionUID = 0L;
 
     public int sunBurnTicks = 0;
+    public transient int sunlightFlameTicks;
 
     private int hordeCooldown;
 

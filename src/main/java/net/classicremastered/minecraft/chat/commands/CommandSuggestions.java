@@ -81,7 +81,8 @@ public final class CommandSuggestions {
                     out.addAll(CommandManager.getRegisteredNames());
                     break;
                 case "difficulty":
-                    out.addAll(List.of("peaceful", "easy", "normal", "hard", "very_hard", "extreme"));
+                    out.addAll(
+                            List.of("peaceful", "easy", "normal", "hard", "very_hard", "extreme"));
                     break;
                 case "gamemode":
                     out.addAll(List.of("creative", "survival", "spectator"));
@@ -92,9 +93,6 @@ public final class CommandSuggestions {
                 case "coins":
                 case "reputation":
                     out.addAll(List.of("set", "add", "remove"));
-                    break;
-                case "bot":
-                    out.add("spawn");
                     break;
                 case "aispeed":
                     out.addAll(
@@ -128,8 +126,6 @@ public final class CommandSuggestions {
             out.addAll(List.of("blocks", "items", "all"));
         if (name.equals("time") && index == 1 && args[0].equalsIgnoreCase("set"))
             out.addAll(List.of("day", "noon", "night", "midnight"));
-        if (name.equals("bot") && index == 2 && args[0].equalsIgnoreCase("spawn"))
-            out.addAll(List.of("follow", "pvp", "expertpvp"));
         return out;
     }
 }

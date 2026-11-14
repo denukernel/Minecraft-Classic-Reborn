@@ -123,14 +123,33 @@ public class InputManager {
     private void useSelected() {
         lastUseTick = mc.ticks;
         Item held = selectedItem();
+        int raw = mc.player.inventory.getSelected();
         if (mc.selected != null
                 && mc.selected.entity
                         instanceof net.classicremastered.minecraft.entity.BoatEntity boat
                 && !(held instanceof GrapplingHookItem
                         || held instanceof GravityGunItem
                         || held instanceof PhysicsGunItem)) {
-            if (!mc.isOnline() && !mc.level.isNetworkMode() && mc.entityWithinReach(boat))
-                boat.board(mc.player);
+            if (net.classicremastered.minecraft.level.itemstack.TurretItems.isPlacementItem(raw)) {
+                if (!mc.isOnline() && mc.entityWithinReach(boat)) {
+                    net.classicremastered.minecraft.level.itemstack.TurretItems.place(
+                            mc.player, boat, raw);
+                }
+                return;
+            }
+            // Looking at our own boat should still allow normal held-item use.
+            if (mc.player.riding != boat) {
+                if (!mc.isOnline() && !mc.level.isNetworkMode() && mc.entityWithinReach(boat))
+                    boat.board(mc.player);
+                return;
+            }
+        } else if (mc.player.riding
+                        instanceof net.classicremastered.minecraft.entity.BoatEntity boat
+                && net.classicremastered.minecraft.level.itemstack.TurretItems.isPlacementItem(raw)
+                && (mc.selected == null
+                        || !(mc.selected.entity
+                                instanceof net.classicremastered.minecraft.mob.CrossbowTurret))) {
+            net.classicremastered.minecraft.level.itemstack.TurretItems.place(mc.player, boat, raw);
             return;
         }
         onMouseClick(1);

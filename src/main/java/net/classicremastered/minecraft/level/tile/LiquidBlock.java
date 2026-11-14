@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.level.tile;
 
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
+import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 
@@ -77,6 +78,47 @@ public class LiquidBlock extends Block {
 
     public static boolean usesLevelledFlow(Level level) {
         return level.minecraft == null || level.minecraft.settings == null || level.minecraft.settings.finiteWater;
+    }
+
+    /** Direction of the current at a cell, derived from its neighboring liquid levels. */
+    public Vec3D current(Level level, int x, int y, int z) {
+        boolean levelled = usesLevelledFlow(level);
+        int flow = levelled ? level.getFlowLevel(x, y, z) : 0;
+        int amount = flowAmount(flow);
+        float dx = 0;
+        float dz = 0;
+        for (int i = 0; i < STEP_X.length; i++) {
+            int nx = x + STEP_X[i];
+            int nz = z + STEP_Z[i];
+            LiquidType neighbor = level.getLiquid(nx, y, nz);
+            int difference;
+            if (neighbor == type) {
+                difference = amount - flowAmount(levelled ? level.getFlowLevel(nx, y, nz) : 0);
+            } else if (neighbor == LiquidType.NOT_LIQUID
+                    && !level.isSolidTile(nx, y, nz)
+                    && level.getLiquid(nx, y - 1, nz) == type) {
+                difference =
+                        amount + 8 - flowAmount(levelled ? level.getFlowLevel(nx, y - 1, nz) : 0);
+            } else {
+                continue;
+            }
+            dx += STEP_X[i] * difference;
+            dz += STEP_Z[i] * difference;
+        }
+        Vec3D horizontal = new Vec3D(dx, 0, dz);
+        if (dx != 0 || dz != 0) horizontal = horizontal.normalize();
+        boolean falling =
+                type == LiquidType.WATER && levelled
+                        ? flow == FALLING_WATER
+                        : level.getLiquid(x, y + 1, z) == type
+                                && level.getLiquid(x, y - 1, z) == type
+                                && (id == movingId || flow > 0);
+        return falling ? horizontal.add(0, -6, 0).normalize() : horizontal;
+    }
+
+    private int flowAmount(int flow) {
+        if (type == LiquidType.LAVA) return 8 - flow * 2;
+        return flow == FALLING_WATER ? 8 : 8 - flow;
     }
 
     protected final void tryIgniteNearLava(Level level, int x, int y, int z, Random random) {

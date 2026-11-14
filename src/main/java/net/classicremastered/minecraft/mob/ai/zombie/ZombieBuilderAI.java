@@ -13,6 +13,16 @@ public final class ZombieBuilderAI extends BasicAttackAI {
         holdPosition(mob.yRot);
     }
 
+    public void moveToBuiltStep(float x, float feet, float z) {
+        float dx = x - mob.x, dz = z - mob.z;
+        float distance = (float) Math.hypot(dx, dz);
+        holdPosition(distance > .01f ? (float) Math.toDegrees(Math.atan2(dz, dx)) - 90 : mob.yRot);
+        // Rise vertically until the feet clear the tread, then move onto its center.
+        float speed = mob.bb.y0 + .02f < feet ? 0 : Math.min(.24f, distance);
+        mob.xd = distance > .01f ? dx / distance * speed : 0;
+        mob.zd = distance > .01f ? dz / distance * speed : 0;
+    }
+
     @Override
     protected void update() {
         super.update();

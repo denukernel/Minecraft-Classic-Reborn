@@ -251,7 +251,9 @@ public class GameMode {
                 float vol = (block.stepsound.getVolume() + 1.0F) / 2.0F;
                 float pitch = block.stepsound.getPitch() * 0.8F;
                 Player p = this.minecraft != null ? this.minecraft.player : null;
-                if (p != null) {
+                if (block instanceof net.classicremastered.minecraft.level.tile.LadderBlock) {
+                    level.playSound(block.stepsound.pool, x + .5f, y + .5f, z + .5f, vol, pitch);
+                } else if (p != null) {
                     p.playPositionalSound(block.stepsound.pool, vol, pitch);
                 } else {
                     level.playSound(

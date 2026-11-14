@@ -421,6 +421,13 @@ public abstract class Entity implements Serializable {
             }
             boolean inWater = isWetForFire();
             updateWaterContact(inWater);
+            if (riding == null
+                    && !noPhysics
+                    && !(this instanceof net.classicremastered.minecraft.net.NetworkPlayer)
+                    && !(this instanceof net.classicremastered.minecraft.player.Player player
+                            && (player.isSpectator() || (player.canFly && player.isFlying)))) {
+                applyLiquidCurrent();
+            }
             if (inWater
                     || this instanceof net.classicremastered.minecraft.player.Player player
                             && player.isSpectator()) {
@@ -483,13 +490,14 @@ public abstract class Entity implements Serializable {
     }
 
     public void move(float var1, float var2, float var3) {
-        if (rider == null || noPhysics) {
+        Entity passenger = collisionPassenger();
+        if (passenger == null || noPhysics) {
             moveWithBounds(var1, var2, var3);
             return;
         }
         // Travel with room for both bodies while keeping their individual hitboxes for combat.
         AABB body = bb;
-        bb = ridingBounds(rider);
+        bb = ridingBounds(passenger);
         float startX = bb.x0, startY = bb.y0, startZ = bb.z0;
         try {
             moveWithBounds(var1, var2, var3);
@@ -497,6 +505,10 @@ public abstract class Entity implements Serializable {
             body.move(bb.x0 - startX, bb.y0 - startY, bb.z0 - startZ);
             bb = body;
         }
+    }
+
+    protected Entity collisionPassenger() {
+        return rider;
     }
 
     private void moveWithBounds(float var1, float var2, float var3) {
@@ -698,6 +710,81 @@ public abstract class Entity implements Serializable {
             }
         }
         return null;
+    }
+
+    protected final void applyLiquidCurrent() {
+        if (level != null && !removed && !noPhysics && riding == null) {
+            applyLiquidMotion(false);
+        }
+    }
+
+    protected final void applyDroppedStackMotion() {
+        applyLiquidMotion(true);
+    }
+
+    private void applyLiquidMotion(boolean droppedStack) {
+        float flowX = 0;
+        float flowY = 0;
+        float flowZ = 0;
+        float immersion = 0;
+        boolean inWater = false;
+        int contacts = 0;
+        for (int bx = MathHelper.floor(bb.x0 + .001f);
+                bx <= MathHelper.floor(bb.x1 - .001f);
+                bx++) {
+            for (int by = MathHelper.floor(bb.y0 + .001f);
+                    by <= MathHelper.floor(bb.y1 - .001f);
+                    by++) {
+                for (int bz = MathHelper.floor(bb.z0 + .001f);
+                        bz <= MathHelper.floor(bb.z1 - .001f);
+                        bz++) {
+                    if (!(Block.blocks[level.getTile(bx, by, bz)] instanceof LiquidBlock liquid)) {
+                        continue;
+                    }
+                    boolean water = liquid.getLiquidType() == LiquidType.WATER;
+                    float surface =
+                            water
+                                    ? LiquidBlock.waterSurfaceAt(
+                                            level,
+                                            bx,
+                                            by,
+                                            bz,
+                                            Math.max(0, Math.min(1, x - bx)),
+                                            Math.max(0, Math.min(1, z - bz)))
+                                    : by + 1;
+                    if (surface <= bb.y0 + .001f) continue;
+                    immersion = Math.max(immersion, surface - bb.y0);
+                    inWater |= water;
+                    Vec3D current = liquid.current(level, bx, by, bz);
+                    float strength = water ? .014f : .0023333333f;
+                    flowX += current.x * strength;
+                    flowY += current.y * strength;
+                    flowZ += current.z * strength;
+                    contacts++;
+                }
+            }
+        }
+        if (contacts > 0) {
+            float scale = 1.0f / contacts;
+            if (!droppedStack && Math.abs(xd) < .003f && Math.abs(zd) < .003f) {
+                // A weak current can still move a stationary swimmer.
+                float speed =
+                        MathHelper.sqrt(flowX * flowX + flowY * flowY + flowZ * flowZ) * scale;
+                if (speed > .000001f && speed < .0045f) scale *= .0045f / speed;
+            }
+            xd += flowX * scale;
+            yd += flowY * scale;
+            zd += flowZ * scale;
+        }
+        if (!droppedStack) return;
+        if (immersion > .1f) {
+            float drag = inWater ? .99f : .95f;
+            xd *= drag;
+            zd *= drag;
+            if (yd < .06f) yd += .0005f;
+        } else {
+            yd -= .04f;
+        }
     }
 
     protected final boolean fireDestroysStack(boolean fireResistant) {

@@ -104,6 +104,8 @@ public class ResourceDownloadThread extends Thread {
                         }); // <--- added
                 registerBundledSound(sm, "mob/cow/classic_idle.ogg");
                 registerBundledSound(sm, "mob/cow/classic_hurt.ogg");
+                registerBundledSound(sm, "mob/enderman/teleport1.ogg");
+                registerBundledSound(sm, "mob/enderman/teleport2.ogg");
                 for (int i = 1; i <= 3; i++)
                     registerBundledSound(sm, "mob/villager/idle" + i + ".ogg");
                 for (int i = 1; i <= 4; i++)

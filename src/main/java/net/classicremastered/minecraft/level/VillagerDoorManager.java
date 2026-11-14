@@ -9,6 +9,8 @@ import net.classicremastered.nbt.*;
 
 /** One authoritative record per assigned doorway; never owns pre-existing/player blocks. */
 public final class VillagerDoorManager {
+    public static final int SIEGE_RANGE = 35;
+
     public record Approach(float x, float y, float z) {
     }
 
@@ -19,6 +21,7 @@ public final class VillagerDoorManager {
         final Set<Villager> residents = new LinkedHashSet<>();
         int owned, clearTicks;
         boolean wasNight, sawZombie, released, sabotaged;
+        boolean burning;
         Villager builder;
         Door(int x, int y, int z, float hx, float hy, float hz, float radius) {
             this.x = x;
@@ -100,6 +103,134 @@ public final class VillagerDoorManager {
         return d != null && d.builder == villager ? d.approach : null;
     }
 
+    public Approach fleeShelter(Villager villager) {
+        if (!villager.hasHomeDoor) return null;
+        Door door =
+                doors.get(
+                        Level.getCoordKey(
+                                villager.homeDoorX, villager.homeDoorY, villager.homeDoorZ));
+        if (door == null || door.burning) return null;
+        if (door.owned == 3 && inside(door, villager)) {
+            return new Approach(villager.x, villager.bb.y0, villager.z);
+        }
+        return door.owned == 0
+                        && !door.sabotaged
+                        && !collidable(door.x, door.y, door.z)
+                        && !collidable(door.x, door.y + 1, door.z)
+                ? door.approach
+                : null;
+    }
+
+    public boolean homeBurning(Villager villager) {
+        if (!villager.hasHomeDoor) return false;
+        Door door =
+                doors.get(
+                        Level.getCoordKey(
+                                villager.homeDoorX, villager.homeDoorY, villager.homeDoorZ));
+        return door != null && door.burning;
+    }
+
+    public List<Approach> evacuationShelters(Villager villager) {
+        List<Approach> shelters = new ArrayList<>();
+        for (Door door : doors.values()) {
+            if (door.burning
+                    || door.owned != 0
+                    || door.residents.isEmpty()
+                    || collidable(door.x, door.y, door.z)
+                    || collidable(door.x, door.y + 1, door.z)) continue;
+            Approach point = door.approach;
+            if (villager.distanceTo(point.x(), point.y() + villager.heightOffset, point.z()) <= 24)
+                shelters.add(point);
+        }
+        shelters.sort(
+                Comparator.comparingDouble(
+                        p -> villager.distanceTo(p.x(), p.y() + villager.heightOffset, p.z())));
+        return shelters;
+    }
+
+    private boolean houseOnFire(Door door) {
+        int x = (int) Math.floor(door.homeX), z = (int) Math.floor(door.homeZ);
+        // Flames set against the outside wall are a siege hazard, not an evacuation signal.
+        for (int bx = x - 2; bx <= x + 2; bx++)
+            for (int bz = z - 2; bz <= z + 2; bz++)
+                for (int y = door.y; y <= door.y + 4; y++)
+                    if (level.getTile(bx, y, bz) == Block.FIRE.id) return true;
+        return false;
+    }
+
+    private final transient Map<Zombie, Approach> siegePositions = new WeakHashMap<>();
+
+    public Approach siegeApproach(Zombie zombie, float range) {
+        if (level.isNetworkMode()) return null;
+        Approach nearest = null;
+        float bestDistance = range * range;
+        for (Door door : doors.values()) {
+            if (!door.burning
+                    && (door.owned != 3
+                            || level.getTile(door.x, door.y, door.z) != Block.WOOD.id
+                            || level.getTile(door.x, door.y + 1, door.z) != Block.WOOD.id))
+                continue;
+            float x = 2 * door.x + 1 - door.approach.x();
+            float z = 2 * door.z + 1 - door.approach.z();
+            float dy = door.y - zombie.bb.y0;
+            float dx = x - zombie.x, dz = z - zombie.z;
+            float distance = dx * dx + dy * dy + dz * dz;
+            if (distance > bestDistance
+                    || door.residents.stream()
+                            .noneMatch(
+                                    v ->
+                                            !v.removed
+                                                    && v.health > 0
+                                                    && !v.isHostile()
+                                                    && inside(door, v))) {
+                continue;
+            }
+            Approach position = siegePosition(zombie, door, x, z, dy);
+            if (position != null) {
+                nearest = position;
+                bestDistance = distance;
+            }
+        }
+        if (nearest == null) siegePositions.remove(zombie);
+        else siegePositions.put(zombie, nearest);
+        return nearest;
+    }
+
+    private Approach siegePosition(Zombie zombie, Door door, float x, float z, float dy) {
+        float nx = x - door.x - .5f, nz = z - door.z - .5f;
+        int firstRow = door.burning ? 2 : 0;
+        for (int row = firstRow; row <= 4; row++) {
+            for (int index = 0; index < 5; index++) {
+                int side = (index + 1) / 2 * (index % 2 == 0 ? -1 : 1);
+                float px = x + nx * row - nz * side, pz = z + nz * row + nx * side;
+                Approach position = new Approach(px, door.y, pz);
+                AABB bounds = zombie.bb.cloneMove(px - zombie.x, dy, pz - zombie.z);
+                if (zombie.overlapsFire(bounds.grow(1f, 0, 1f))
+                        || !level.getCubes(bounds).isEmpty()
+                        || level.getCubes(bounds.cloneMove(0, -.1f, 0)).isEmpty()) continue;
+                boolean taken =
+                        siegePositions.entrySet().stream()
+                                .anyMatch(
+                                        entry ->
+                                                entry.getKey() != zombie
+                                                        && !entry.getKey().removed
+                                                        && entry.getKey().health > 0
+                                                        && entry.getKey()
+                                                                        .distanceTo(
+                                                                                px,
+                                                                                door.y
+                                                                                        + entry
+                                                                                                .getKey()
+                                                                                                .heightOffset,
+                                                                                pz)
+                                                                < 10
+                                                        && position.equals(entry.getValue()));
+                if (!taken) return position;
+            }
+        }
+        return null;
+    }
+
     public void openForHostile(Villager villager) {
         if (level.isNetworkMode() || !villager.hasHomeDoor)
             return;
@@ -151,14 +282,23 @@ public final class VillagerDoorManager {
     private boolean zombiesNear(Door d) {
         if (level.blockMap == null)
             return false;
-        for (Entity entity : level.blockMap.getEntities(null,
-                new AABB(d.homeX - 24, d.homeY - 24, d.homeZ - 24, d.homeX + 24, d.homeY + 24, d.homeZ + 24))) {
-            if (!(entity instanceof Zombie) || entity instanceof Skeleton || entity.removed
-                    || ((Mob) entity).health <= 0)
-                continue;
+        for (Entity entity :
+                level.blockMap.getEntities(
+                        null,
+                        new AABB(
+                                d.homeX - SIEGE_RANGE,
+                                d.homeY - SIEGE_RANGE,
+                                d.homeZ - SIEGE_RANGE,
+                                d.homeX + SIEGE_RANGE,
+                                d.homeY + SIEGE_RANGE,
+                                d.homeZ + SIEGE_RANGE))) {
+            if (!(entity instanceof Zombie zombie)
+                    || entity instanceof Skeleton
+                    || entity.removed
+                    || zombie.health <= 0
+                    || zombie.corruptedToDefendPlayer) continue;
             float dx = entity.x - d.homeX, dy = entity.y - d.homeY, dz = entity.z - d.homeZ;
-            if (dx * dx + dy * dy + dz * dz <= 24 * 24)
-                return true;
+            if (dx * dx + dy * dy + dz * dz <= SIEGE_RANGE * SIEGE_RANGE) return true;
         }
         return false;
     }
@@ -181,7 +321,16 @@ public final class VillagerDoorManager {
                 iterator.remove();
                 continue;
             }
-            if (!night) {
+            d.burning = houseOnFire(d);
+            if (d.burning) {
+                if (exitClearOfFire(d)) removeOwned(d);
+                continue;
+            }
+            boolean threatened =
+                    night || d.owned != 0
+                            ? zombiesNear(d)
+                            : d.residents.stream().anyMatch(this::chasedByZombie);
+            if (!night && !threatened && !d.sawZombie) {
                 d.wasNight = false;
                 d.sawZombie = false;
                 d.released = false;
@@ -190,14 +339,15 @@ public final class VillagerDoorManager {
                 removeOwned(d);
                 continue;
             }
-            if (!d.wasNight) {
+            if (night && !d.wasNight) {
                 d.wasNight = true;
                 d.sawZombie = false;
                 d.released = false;
                 d.clearTicks = 0;
                 d.sabotaged = false;
             }
-            if (zombiesNear(d)) {
+            if (!night) d.wasNight = false;
+            if (threatened) {
                 d.sawZombie = true;
                 d.clearTicks = 0;
                 if (d.released) {
@@ -206,8 +356,10 @@ public final class VillagerDoorManager {
                 }
             } else if (d.sawZombie) {
                 d.clearTicks = Math.min(100, d.clearTicks + 20);
-                if (d.clearTicks >= 100)
+                if (d.clearTicks >= 100) {
                     d.released = true;
+                    if (!night) d.sawZombie = false;
+                }
             }
             boolean hostile = d.residents.stream().anyMatch(Villager::isHostile);
             if (d.released || hostile) {
@@ -230,6 +382,30 @@ public final class VillagerDoorManager {
             }
             d.builder = null;
         }
+    }
+
+    private boolean exitClearOfFire(Door door) {
+        int dx = Math.round(door.approach.x() - door.x - .5f);
+        int dz = Math.round(door.approach.z() - door.z - .5f);
+        for (int step = -1; step <= 1; step++) {
+            for (int y = door.y; y <= door.y + 1; y++) {
+                if (level.getTile(door.x + step * dx, y, door.z + step * dz) == Block.FIRE.id)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean chasedByZombie(Villager villager) {
+        for (Object entity : level.findEntities(villager, villager.bb.grow(12, 4, 12))) {
+            if (entity instanceof Zombie zombie
+                    && !(zombie instanceof Skeleton)
+                    && !zombie.removed
+                    && zombie.health > 0
+                    && !zombie.corruptedToDefendPlayer
+                    && villager.distanceToSqr(zombie) <= 12 * 12) return true;
+        }
+        return false;
     }
 
     public void save(CompoundTag root) {
@@ -305,11 +481,15 @@ public final class VillagerDoorManager {
         if (!(mob instanceof Villager v) || tag == null || !tag.hasKey("VillagerHome"))
             return;
         CompoundTag h = tag.getCompound("VillagerHome");
-        float x = h.getFloat("X"), y = h.getFloat("Y"), z = h.getFloat("Z"), radius = h.getFloat("Radius");
+        float x = h.getFloat("X"),
+                y = h.getFloat("Y"),
+                z = h.getFloat("Z"),
+                radius = h.getFloat("Radius");
         if (!validHome(x, y, z, radius))
             return;
         v.setHome(x, y, z, radius);
-        if (h.getBoolean("HasDoor") && v.level.isInBounds(h.getInt("DoorX"), h.getInt("DoorY"), h.getInt("DoorZ"))
+        if (h.getBoolean("HasDoor")
+                && v.level.isInBounds(h.getInt("DoorX"), h.getInt("DoorY"), h.getInt("DoorZ"))
                 && v.level.isInBounds(h.getInt("DoorX"), h.getInt("DoorY") + 1, h.getInt("DoorZ")))
             v.setHomeDoor(h.getInt("DoorX"), h.getInt("DoorY"), h.getInt("DoorZ"));
     }

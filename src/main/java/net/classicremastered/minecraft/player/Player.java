@@ -236,7 +236,14 @@ public class Player extends Mob {
     private transient boolean ladderGripHeld;
 
     public boolean isHoldingLadder() {
-        return !isFlying && (sneaking || ladderGripHeld);
+        return !isFlying
+                && (sneaking || ladderGripHeld)
+                && level != null
+                && net.classicremastered.minecraft.level.tile.LadderBlock.isLadder(
+                        level.getTile(
+                                (int) Math.floor(x),
+                                (int) Math.floor(bb.y0 + .05f),
+                                (int) Math.floor(z)));
     }
 
     private transient float sneakProgress;
@@ -246,6 +253,7 @@ public class Player extends Mob {
     private static final float STAND_HOFFSET = 1.62F;
     private static final float SNEAK_HEIGHT = 1.50F; // bb height while sneaking
     private static final float STAND_HEIGHT = 1.80F; // bb height while standing
+    private transient float sprintFov, previousSprintFov;
 
     public boolean isSneaking() {
         return sneaking;
@@ -253,6 +261,7 @@ public class Player extends Mob {
 
     @Override
     public void tick() {
+        if (!spectator) inventory.tick();
         if (packedTurretHealth > 0) {
             net.classicremastered.minecraft.level.itemstack.TurretItems.migrateLegacyCrate(this);
         }
@@ -264,9 +273,25 @@ public class Player extends Mob {
         previousSneakProgress = sneakProgress;
         GrapplingHookItem.updateTether(this);
         super.tick();
+        previousSprintFov = sprintFov;
+        boolean sprinting =
+                health > 0
+                        && !spectator
+                        && !isFlying
+                        && riding == null
+                        && !sneaking
+                        && !isHoldingLadder()
+                        && ai instanceof PlayerInputAI movement
+                        && movement.running;
+        float targetFov = sprinting ? (PlayerInputAI.SPRINT_MULTIPLIER - 1f) * .5f : 0f;
+        sprintFov += (targetFov - sprintFov) * .5f;
         if (frostbiteSlowTicks > 0) frostbiteSlowTicks--;
         sneakProgress =
                 sneaking ? Math.min(1, sneakProgress + .5f) : Math.max(0, sneakProgress - .5f);
+    }
+
+    public float sprintFovMultiplier(float partial) {
+        return 1f + lerp(previousSprintFov, sprintFov, partial);
     }
 
     public float frostbiteMovementMultiplier() {
@@ -359,16 +384,12 @@ public class Player extends Mob {
     public void setSneaking(boolean s) {
         if (sneaking == s) return;
         if (!s && level != null) {
-            float inset = .001f;
-            AABB headroom =
-                    new AABB(
-                            bb.x0 + inset,
-                            bb.y1 + inset,
-                            bb.z0 + inset,
-                            bb.x1 - inset,
-                            bb.y0 + STAND_HEIGHT - inset,
-                            bb.z1 - inset);
-            if (!level.getCubes(headroom).isEmpty()) return;
+            // Test the entire added volume. Even a small overlap can let a
+            // resized box start inside a wall and bypass swept collision.
+            AABB headroom = new AABB(bb.x0, bb.y1, bb.z0, bb.x1, bb.y0 + STAND_HEIGHT, bb.z1);
+            for (Object collision : level.getCubes(headroom)) {
+                if (((AABB) collision).intersects(headroom)) return;
+            }
         }
         sneaking = s;
         heightOffset = s ? SNEAK_HOFFSET : STAND_HOFFSET;
@@ -464,8 +485,6 @@ public class Player extends Mob {
                     controlsActive && shiftHeld());
             return;
         }
-        this.inventory.tick();
-
         // Handle Health Drink healing timer
         if (healthDrinkTimer > 0) {
             healthDrinkTimer--;
@@ -838,6 +857,7 @@ public class Player extends Mob {
     public void die(Entity killer) {
         if (!deathMessageSent) {
             deathMessageSent = true;
+            recordStats(null, 0, 0, true);
             if (minecraft != null && minecraft.hud != null) {
                 minecraft.hud.addChat(
                         DeathMessages.message(
@@ -972,6 +992,32 @@ public class Player extends Mob {
     @Override
     public void awardKillScore(Entity e, int value) {
         this.score += value;
+        if (value > 0) recordStats(null, 0, value, false);
+    }
+
+    private PlayerStats worldStats;
+
+    public PlayerStats worldStats() {
+        if (worldStats == null) worldStats = new PlayerStats();
+        return worldStats;
+    }
+
+    public void awardMobKill(Mob victim, int earnedScore, int earnedCoins) {
+        score += earnedScore;
+        coins += earnedCoins;
+        recordStats(victim instanceof Player ? null : victim, earnedCoins, earnedScore, false);
+    }
+
+    private void recordStats(Mob victim, long earnedCoins, long earnedScore, boolean died) {
+        if (level == null || level.isNetworkMode()) return;
+        String mobType = victim == null ? null : PlayerStats.mobType(victim);
+        worldStats().record(mobType, earnedCoins, earnedScore, died);
+        if (minecraft == null || minecraft.player != this) return;
+        try {
+            PlayerStats.recordGlobal(mobType, earnedCoins, earnedScore, died);
+        } catch (java.io.IOException | SecurityException error) {
+            System.err.println("Could not save global stats: " + error.getMessage());
+        }
     }
 
     @Override

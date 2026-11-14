@@ -187,8 +187,11 @@ public final class PathNavigator {
                 index = replanTicks = 0;
                 return Result.idle();
             }
-            return Result.ladder(rung.x + ground.offset - mob.x, rung.feetY - feet,
-                    rung.z + ground.offset - mob.z);
+            float climbX = rung.x + ground.offset - mob.x;
+            float climbZ = rung.z + ground.offset - mob.z;
+            float climbY = rung.feetY - feet;
+            if (vertical && climbX * climbX + climbZ * climbZ > .05f * .05f) climbY = 0;
+            return Result.ladder(climbX, climbY, climbZ);
         }
         if (index == 0 && path.size() > 1 && mob.onGround && crowded(mob)) {
             Pathfinder.Node start = path.get(0), next = path.get(1);

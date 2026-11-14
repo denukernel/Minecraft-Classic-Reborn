@@ -77,10 +77,13 @@ record TurretShot(Mob target, Vec3D muzzle, float yaw, float pitch) {
                     return false;
             }
             for (Entity entity : nearby) {
-                if (!entity.removed && entity.isShootable()
-                        && (!(entity instanceof Mob mob) || mob.health > 0) && !turret.canTarget(entity)
-                        && sweep.intersectsInner(entity.bb) && intersects(entity.bb, start, end))
-                    return false;
+                if (entity != turret.riding
+                        && !entity.removed
+                        && entity.isShootable()
+                        && (!(entity instanceof Mob mob) || mob.health > 0)
+                        && !turret.canTarget(entity)
+                        && sweep.intersectsInner(entity.bb)
+                        && intersects(entity.bb, start, end)) return false;
             }
             start = end;
         }

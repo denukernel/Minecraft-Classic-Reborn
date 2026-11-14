@@ -35,7 +35,7 @@ public final class EndermanModel extends Model {
         // Arms
         rightArm = new ModelPart(56, 0);
         rightArm.setBounds(-1, -2, -1, 2, 30, 2, 0.0F);
-        rightArm.setPosition(-3, -12, 0);
+        rightArm.setPosition(-5, -12, 0);
 
         leftArm = new ModelPart(56, 0);
         leftArm.mirror = true;
@@ -207,12 +207,9 @@ public final class EndermanModel extends Model {
         headwear.z = 0.0F;
         headwear.y = isAttacking ? 5.0F : 0.0F;
 
-        // --- “Scream/attack” stance: head & torso attitude ---
+        // Raise the head for the angry pose.
         if (isAttacking) {
             head.y -= 5.0F;
-            body.pitch = 0.08F;
-        } else {
-            body.pitch = 0.0F;
         }
     }
 }

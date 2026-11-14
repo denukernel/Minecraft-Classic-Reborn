@@ -52,7 +52,7 @@ public class DroppedBlock extends Entity {
         yo = y;
         zo = z;
 
-        yd -= 0.04F;
+        applyDroppedStackMotion();
         move(xd, yd, zd);
         if (fireDestroysStack(fireResistant) || cactusDamagesStack()) return;
 

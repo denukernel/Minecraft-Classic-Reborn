@@ -166,7 +166,7 @@ final class ClientFrameRenderer {
                         }
 
                         camPlayer = r2.minecraft.player;
-                        float fov = 70.0F;
+                        float fov = 70.0F * camPlayer.sprintFovMultiplier(renderPartial);
                         if (camPlayer.health <= 0) {
                             float deathTimeInterp = (float) camPlayer.deathTime + renderPartial;
                             fov /= (1.0F - 500.0F / (deathTimeInterp + 500.0F)) * 2.0F + 1.0F;
@@ -330,6 +330,19 @@ final class ClientFrameRenderer {
                                 if (pickBlock == null) pickBlock = Block.STONE;
                                 GL11.glDepthMask(false);
                                 int stageTexture = crackTexture(lrPick.cracks);
+                                if (pickBlock
+                                        instanceof
+                                        net.classicremastered.minecraft.level.tile.LadderBlock
+                                                        ladder) {
+                                    GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
+                                    GL11.glPolygonOffset(-1, -1);
+                                    sr1.begin();
+                                    sr1.noColor();
+                                    ladder.renderCracks(sr1, pick.x, pick.y, pick.z, stageTexture);
+                                    sr1.end();
+                                    GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
+                                    pickBlock = null;
+                                }
                                 if (pickBlock
                                         instanceof
                                         net.classicremastered.minecraft.level.tile.CircuitBlock

@@ -214,8 +214,9 @@ public class Skeleton extends Zombie {
         float sx = x + (float) (dx / horizontal * launchOffset), sy = bb.y0 + getEyeHeight(1),
               sz = z + (float) (dz / horizontal * launchOffset);
         float tx = target.x, tz = target.z, ty = (target.bb.y0 + target.bb.y1) * .5f;
-        double leadX = Math.max(-.35, Math.min(.35, target.x - target.xo));
-        double leadZ = Math.max(-.35, Math.min(.35, target.z - target.zo));
+        double maxLeadSpeed = maxTargetLeadSpeed();
+        double leadX = Math.max(-maxLeadSpeed, Math.min(maxLeadSpeed, target.x - target.xo));
+        double leadZ = Math.max(-maxLeadSpeed, Math.min(maxLeadSpeed, target.z - target.zo));
         double time =
                 Math.max(
                         1,
@@ -247,6 +248,10 @@ public class Skeleton extends Zombie {
         arrow.zd = (float) vz;
         lvl.addEntity(arrow);
         lvl.playSound("random/bow", this, .8f, 1.0f);
+    }
+
+    protected double maxTargetLeadSpeed() {
+        return .35;
     }
 
     @Override

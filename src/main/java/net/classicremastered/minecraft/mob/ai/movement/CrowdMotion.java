@@ -63,11 +63,14 @@ public final class CrowdMotion {
                 float x = target.x + (float) Math.cos(angle) * candidateRadius,
                         z = target.z + (float) Math.sin(angle) * candidateRadius;
                 if (reserved(mob, target, nearby, x, z, current)
-                        || !net.classicremastered.minecraft.path.Pathfinder.hasStandingRoom(ai.level, mob, x,
-                                target.bb.y0, z)
-                        || !net.classicremastered.minecraft.path.Pathfinder.canWalkStraight(ai.level, mob, x,
-                                target.bb.y0, z))
-                    continue;
+                        || mob.overlapsFire(
+                                mob.bb
+                                        .cloneMove(x - mob.x, target.bb.y0 - mob.bb.y0, z - mob.z)
+                                        .grow(.75f, 0, .75f))
+                        || !net.classicremastered.minecraft.path.Pathfinder.hasStandingRoom(
+                                ai.level, mob, x, target.bb.y0, z)
+                        || !net.classicremastered.minecraft.path.Pathfinder.canWalkStraight(
+                                ai.level, mob, x, target.bb.y0, z)) continue;
                 approachAngle = angle;
                 approachRadius = candidateRadius;
                 approachAssigned = true;

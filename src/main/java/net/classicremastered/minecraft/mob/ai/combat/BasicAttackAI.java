@@ -2,6 +2,14 @@ package net.classicremastered.minecraft.mob.ai.combat;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.Arrow;
+import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Difficulty;
+import net.classicremastered.minecraft.mob.Creeper;
+import net.classicremastered.minecraft.mob.Skeleton;
+import net.classicremastered.minecraft.mob.StickFigure;
+import net.classicremastered.minecraft.mob.Villager;
+import net.classicremastered.minecraft.mob.Zombie;
+import net.classicremastered.minecraft.level.VillagerDoorManager;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.goal.GoalSelector;
 import net.classicremastered.minecraft.mob.ai.goal.combat.AvoidTntGoal;
@@ -64,11 +72,11 @@ public class BasicAttackAI extends BasicAI {
     }
 
     public float getSightRange() {
-        return mob instanceof net.classicremastered.minecraft.mob.StickFigure
-                ? 40
-                : mob instanceof net.classicremastered.minecraft.mob.Skeleton
-                        ? 20
-                        : mob instanceof net.classicremastered.minecraft.mob.Zombie ? 35 : 16;
+        if (mob instanceof StickFigure) return 40;
+        if (mob instanceof Skeleton) return 20;
+        if (mob instanceof Zombie) return 35;
+        if (mob instanceof Creeper) return 19;
+        return 16;
     }
 
     public int retaliationTicks;
@@ -117,7 +125,30 @@ public class BasicAttackAI extends BasicAI {
     /** Runs the common targeting and melee goals after optional avoidance. */
     public final void tickCombatGoals() {
         selectCombatTarget();
+        if (approachClosedHouse()) return;
         tickMeleeGoal();
+    }
+
+    private boolean approachClosedHouse() {
+        if (!(mob instanceof Zombie zombie)
+                || mob instanceof Skeleton
+                || mob.corruptedToDefendPlayer
+                || mob.riding != null
+                || !navigationAllowed()
+                || hasRetaliationTarget()
+                || hasPlayerSearch()
+                || CombatRules.difficulty(level) == Difficulty.PEACEFUL
+                || (attackTarget != null
+                        && (!(attackTarget instanceof Villager)
+                                || hasLineOfSight(mob, attackTarget)))) return false;
+        var approach = level.villagerDoors().siegeApproach(zombie, VillagerDoorManager.SIEGE_RANGE);
+        if (approach == null) return false;
+
+        // A door approach must be a fixed navigation goal, separate from the resident.
+        attackTarget = null;
+        running = false;
+        navigateTo(approach.x(), approach.y(), approach.z(), runSpeed);
+        return true;
     }
 
     protected final void selectCombatTarget() {

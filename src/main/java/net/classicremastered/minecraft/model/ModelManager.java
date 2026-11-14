@@ -72,6 +72,7 @@ public final class ModelManager {
             case "skeleton_baby.armor":
                 return armoredHumanBaby;
             case "skeleton":
+            case "skeleton_teen":
                 return this.skeleton;
             case "skeleton_trap":
                 return skeletonTrap;
@@ -80,8 +81,10 @@ public final class ModelManager {
             case "husk_baby":
                 return babyHusk;
             case "frostbite":
+            case "frostbite_teen":
                 return frostbite;
             case "zombie":
+            case "zombie_teen":
                 return this.zombie;
             case "zombiebuilder":
                 return this.zombie;
@@ -124,6 +127,7 @@ public final class ModelManager {
 
             // NEW: Husk mapping
             case "husk":
+            case "husk_teen":
                 return this.husk;
 
             // NEW: Bee mapping

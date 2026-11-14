@@ -31,11 +31,8 @@ public final class BiomeLevelGenerator {
         }
 
         int treeChance() {
-            return switch (this) {
-                case FOREST, SNOWY_FOREST -> 24;
-                case WETLAND -> 75;
-                default -> 240;
-            };
+            if (this == FOREST || this == SNOWY_FOREST) return 24;
+            return this == WETLAND ? 75 : 240;
         }
 
         int leafId() {

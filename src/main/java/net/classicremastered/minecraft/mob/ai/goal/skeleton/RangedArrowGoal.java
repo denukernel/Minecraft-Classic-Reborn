@@ -27,7 +27,7 @@ public final class RangedArrowGoal extends MobGoal<SkeletonArrowAI> {
                 battleTarget != null
                         ? battleTarget
                         : net.classicremastered.minecraft.mob.ai.combat.HostileTargets
-                                .nearestForPursuit(ai.mob, 32, ai.attackTarget);
+                                .nearestForPursuit(ai.mob, 20, ai.attackTarget);
         ai.setPursuitTarget(player);
         if (player == null || player.removed || player.health <= 0) {
             ai.windup = 0;
