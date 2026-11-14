@@ -680,6 +680,10 @@ public class BasicAI extends AI {
         return navigator;
     }
 
+    protected final boolean isWaitingForNavigationRoute() {
+        return navigator != null && navigator.isWaitingForRoute();
+    }
+
     public final List<net.classicremastered.minecraft.model.Vec3D> debugRoute() {
         var route = waterDestination != null ? waterRefuge : navigator;
         if (mob == null) return List.of();

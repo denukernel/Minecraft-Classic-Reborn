@@ -83,6 +83,20 @@ public class BasicAttackAI extends BasicAI {
     private transient GoalSelector combatGoals;
     private transient MeleeAttackGoal melee;
     private transient TargetSelectionGoal targetSelection;
+    private transient SiegeDebug siegeDebug;
+
+    public enum SiegeState {
+        APPROACHING,
+        AT_SLOT,
+        WAITING_FOR_ROUTE,
+        NO_SAFE_SLOT
+    }
+
+    public record SiegeDebug(VillagerDoorManager.SiegeApproach approach, SiegeState state) {}
+
+    public final SiegeDebug siegeDebug() {
+        return siegeDebug;
+    }
 
     public final boolean hasRetaliationTarget() {
         return retaliationTicks > 0
@@ -92,6 +106,7 @@ public class BasicAttackAI extends BasicAI {
 
     @Override
     protected void update() {
+        siegeDebug = null;
         if (retaliationTicks > 0) retaliationTicks--;
         super.update();
         if (mob == null || level == null || mob.health <= 0) return;
@@ -114,6 +129,7 @@ public class BasicAttackAI extends BasicAI {
     }
 
     public void tickMountedCombat(net.classicremastered.minecraft.mob.Mob rider) {
+        siegeDebug = null;
         bind(rider.level, rider);
         if (retaliationTicks > 0)
             retaliationTicks--;
@@ -143,11 +159,23 @@ public class BasicAttackAI extends BasicAI {
                                 || hasLineOfSight(mob, attackTarget)))) return false;
         var approach = level.villagerDoors().siegeApproach(zombie, VillagerDoorManager.SIEGE_RANGE);
         if (approach == null) return false;
+        var slot = approach.slot();
+        if (slot == null) {
+            siegeDebug = new SiegeDebug(approach, SiegeState.NO_SAFE_SLOT);
+            return false;
+        }
 
         // A door approach must be a fixed navigation goal, separate from the resident.
         attackTarget = null;
         running = false;
-        navigateTo(approach.x(), approach.y(), approach.z(), runSpeed);
+        navigateTo(slot.x(), slot.y(), slot.z(), runSpeed);
+        float dx = mob.x - slot.x(), dz = mob.z - slot.z();
+        SiegeState state = SiegeState.APPROACHING;
+        if (dx * dx + dz * dz < .4f * .4f && Math.abs(mob.bb.y0 - slot.y()) < .5f)
+            state = SiegeState.AT_SLOT;
+        else if (!hasActiveRoute() && isWaitingForNavigationRoute())
+            state = SiegeState.WAITING_FOR_ROUTE;
+        siegeDebug = new SiegeDebug(approach, state);
         return true;
     }
 

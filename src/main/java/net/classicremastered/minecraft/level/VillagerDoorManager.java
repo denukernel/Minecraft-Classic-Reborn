@@ -1,18 +1,27 @@
 package net.classicremastered.minecraft.level;
 
 import java.util.*;
+import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.mob.*;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.path.Pathfinder;
 import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.util.CreativeModeHelper;
 import net.classicremastered.nbt.*;
 
 /** One authoritative record per assigned doorway; never owns pre-existing/player blocks. */
 public final class VillagerDoorManager {
     public static final int SIEGE_RANGE = 35;
+    private static final int WAVE_DELAY = 160;
+    private static final int WAVE_PLAYER_RANGE = 32;
+    private static final float CLOSE_RANGE = 2.5f;
 
-    public record Approach(float x, float y, float z) {
-    }
+    public record Approach(float x, float y, float z) {}
+
+    public record SiegeApproach(Approach doorway, Approach slot) {}
 
     private static final class Door {
         final int x, y, z;
@@ -39,6 +48,9 @@ public final class VillagerDoorManager {
     }
     private final Level level;
     private final Map<Long, Door> doors = new LinkedHashMap<>(), cells = new HashMap<>();
+    private Boolean wasDaytime;
+    private Door pendingSiege;
+    private int waveDelay;
     private int clock;
     private boolean editing;
     private long editedCell;
@@ -88,19 +100,40 @@ public final class VillagerDoorManager {
     }
 
     private boolean inside(Door d, Villager v) {
-        return Math.abs(v.x - d.homeX) < d.radius && Math.abs(v.z - d.homeZ) < d.radius && Math.abs(v.bb.y0 - d.y) < 1;
+        return inside(d, v.x, v.bb.y0, v.z);
+    }
+
+    private boolean inside(Door d, float x, float feetY, float z) {
+        return Math.abs(x - d.homeX) < d.radius
+                && Math.abs(z - d.homeZ) < d.radius
+                && Math.abs(feetY - d.y) < 1;
     }
 
     private boolean closeEnough(Door d, Villager v) {
         float dx = v.x - (d.x + .5f), dz = v.z - (d.z + .5f);
-        return dx * dx + dz * dz <= 4 && Math.abs(v.bb.y0 - d.y) < 1;
+        return dx * dx + dz * dz <= CLOSE_RANGE * CLOSE_RANGE && Math.abs(v.bb.y0 - d.y) < 1;
+    }
+
+    private Approach closingApproach(Door door, Villager villager) {
+        // Leave room between the villager and a zombie standing just beyond the doorway.
+        float x = 2 * door.approach.x() - door.x - .5f;
+        float z = 2 * door.approach.z() - door.z - .5f;
+        if (inside(door, x, door.y, z)
+                && Pathfinder.hasStandingRoom(level, villager, x, door.y, z)
+                && !villager.overlapsFire(
+                        villager.bb.cloneMove(
+                                x - villager.x, door.y - villager.bb.y0, z - villager.z)))
+            return new Approach(x, door.y, z);
+        return door.approach;
     }
 
     public Approach approach(Villager villager) {
-        if (!villager.hasHomeDoor)
-            return null;
-        Door d = doors.get(Level.getCoordKey(villager.homeDoorX, villager.homeDoorY, villager.homeDoorZ));
-        return d != null && d.builder == villager ? d.approach : null;
+        if (!villager.hasHomeDoor) return null;
+        Door d =
+                doors.get(
+                        Level.getCoordKey(
+                                villager.homeDoorX, villager.homeDoorY, villager.homeDoorZ));
+        return d != null && d.builder == villager ? closingApproach(d, villager) : null;
     }
 
     public Approach fleeShelter(Villager villager) {
@@ -117,7 +150,7 @@ public final class VillagerDoorManager {
                         && !door.sabotaged
                         && !collidable(door.x, door.y, door.z)
                         && !collidable(door.x, door.y + 1, door.z)
-                ? door.approach
+                ? closingApproach(door, villager)
                 : null;
     }
 
@@ -160,10 +193,13 @@ public final class VillagerDoorManager {
 
     private final transient Map<Zombie, Approach> siegePositions = new WeakHashMap<>();
 
-    public Approach siegeApproach(Zombie zombie, float range) {
+    public SiegeApproach siegeApproach(Zombie zombie, float range) {
         if (level.isNetworkMode()) return null;
         Approach nearest = null;
+        Door selectedDoor = null;
+        Door blockedDoor = null;
         float bestDistance = range * range;
+        float blockedDistance = bestDistance;
         for (Door door : doors.values()) {
             if (!door.burning
                     && (door.owned != 3
@@ -175,25 +211,36 @@ public final class VillagerDoorManager {
             float dy = door.y - zombie.bb.y0;
             float dx = x - zombie.x, dz = z - zombie.z;
             float distance = dx * dx + dy * dy + dz * dz;
-            if (distance > bestDistance
-                    || door.residents.stream()
-                            .noneMatch(
-                                    v ->
-                                            !v.removed
-                                                    && v.health > 0
-                                                    && !v.isHostile()
-                                                    && inside(door, v))) {
+            if (distance > bestDistance || !hasResidentInside(door)) {
                 continue;
             }
             Approach position = siegePosition(zombie, door, x, z, dy);
             if (position != null) {
                 nearest = position;
+                selectedDoor = door;
                 bestDistance = distance;
+            } else if (distance <= blockedDistance) {
+                blockedDoor = door;
+                blockedDistance = distance;
             }
         }
         if (nearest == null) siegePositions.remove(zombie);
         else siegePositions.put(zombie, nearest);
-        return nearest;
+        Door door = selectedDoor != null ? selectedDoor : blockedDoor;
+        return door == null
+                ? null
+                : new SiegeApproach(new Approach(door.x + .5f, door.y, door.z + .5f), nearest);
+    }
+
+    private boolean hasResidentInside(Door door) {
+        return door.residents.stream()
+                .anyMatch(
+                        v ->
+                                v.level == level
+                                        && !v.removed
+                                        && v.health > 0
+                                        && !v.isHostile()
+                                        && inside(door, v));
     }
 
     private Approach siegePosition(Zombie zombie, Door door, float x, float z, float dy) {
@@ -305,8 +352,9 @@ public final class VillagerDoorManager {
 
     /** Called from the shared world clock, not once per resident or rendered frame. */
     public void tick() {
-        if (level.isNetworkMode() || ++clock % 20 != 0)
-            return;
+        if (level.isNetworkMode()) return;
+        tickSiegeWave();
+        if (++clock % 20 != 0) return;
         boolean night = !level.isDaytime();
         Iterator<Door> iterator = doors.values().iterator();
         while (iterator.hasNext()) {
@@ -356,18 +404,17 @@ public final class VillagerDoorManager {
                 }
             } else if (d.sawZombie) {
                 d.clearTicks = Math.min(100, d.clearTicks + 20);
-                if (d.clearTicks >= 100) {
+                if (!night && d.clearTicks >= 100) {
                     d.released = true;
-                    if (!night) d.sawZombie = false;
+                    d.sawZombie = false;
                 }
             }
             boolean hostile = d.residents.stream().anyMatch(Villager::isHostile);
-            if (d.released || hostile) {
+            if ((!night && d.released) || hostile) {
                 removeOwned(d);
                 continue;
             }
-            if (d.owned != 0 || d.sabotaged)
-                continue;
+            if (d.owned != 0 || d.sabotaged) continue;
             if (d.residents.stream().anyMatch(v -> !inside(d, v)))
                 continue;
             d.builder = d.residents.iterator().next();
@@ -382,6 +429,73 @@ public final class VillagerDoorManager {
             }
             d.builder = null;
         }
+    }
+
+    private void tickSiegeWave() {
+        boolean daytime = level.isDaytime();
+        boolean dusk = Boolean.TRUE.equals(wasDaytime) && !daytime;
+        wasDaytime = daytime;
+        Player player = level.player instanceof Player local ? local : null;
+        int desired =
+                switch (CombatRules.difficulty(level)) {
+                    case PEACEFUL, EASY -> 0;
+                    case NORMAL -> 4;
+                    case HARD -> 5;
+                    case VERY_HARD, EXTREME -> 6;
+                };
+        if (daytime
+                || !level.doDayNightCycle
+                || !level.doMobSpawning
+                || desired == 0
+                || player == null
+                || player.level != level
+                || player.removed
+                || player.health <= 0
+                || CreativeModeHelper.shouldIgnoreTarget(player)) {
+            pendingSiege = null;
+            return;
+        }
+        if (dusk) {
+            Door nearest = null;
+            double bestDistance = WAVE_PLAYER_RANGE * WAVE_PLAYER_RANGE;
+            for (Door door : doors.values()) {
+                double distance = homeDistanceSquared(player, door);
+                if (distance <= bestDistance && hasResidentInside(door)) {
+                    nearest = door;
+                    bestDistance = distance;
+                }
+            }
+            if (nearest != null && level.random.nextInt(10) == 0) {
+                pendingSiege = nearest;
+                waveDelay = 0;
+            }
+        }
+        Door door = pendingSiege;
+        if (door == null) return;
+        if (doors.get(Level.getCoordKey(door.x, door.y, door.z)) != door
+                || homeDistanceSquared(player, door) > WAVE_PLAYER_RANGE * WAVE_PLAYER_RANGE
+                || !hasResidentInside(door)) {
+            pendingSiege = null;
+            return;
+        }
+        // The sun crosses the horizon before open ground is dark enough for spawning.
+        if (waveDelay == 0) {
+            if (level.getDayFactorSmooth() > MobSpawner.HOSTILE_SPAWN_BRIGHTNESS) return;
+            waveDelay = WAVE_DELAY;
+            if (level.minecraft != null && level.minecraft.hud != null)
+                level.minecraft.hud.addChat("&cA zombie siege is approaching the village.");
+            return;
+        }
+        if (--waveDelay > 0) return;
+        pendingSiege = null;
+        new MobSpawner(level).spawnSiegeGroup(player, door.x, door.y, door.z, desired);
+    }
+
+    private double homeDistanceSquared(Player player, Door door) {
+        double dx = player.x - door.homeX,
+                dy = player.bb.y0 - door.homeY,
+                dz = player.z - door.homeZ;
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private boolean exitClearOfFire(Door door) {
@@ -432,6 +546,9 @@ public final class VillagerDoorManager {
     public void load(CompoundTag root) {
         doors.clear();
         cells.clear();
+        siegePositions.clear();
+        wasDaytime = null;
+        pendingSiege = null;
         clock = 0;
         ListTag list = root.getList("VillagerDoors");
         for (int n = 0; n < list.size(); n++) {

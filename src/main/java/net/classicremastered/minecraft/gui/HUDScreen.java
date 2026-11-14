@@ -125,8 +125,11 @@ public final class HUDScreen extends Screen {
         world.add("F3 + N: Toggle spectator");
         world.add("F3 + B: Toggle entity hitboxes");
         world.add("F3 + P: Toggle mob paths");
-        if (mc.debugPaths)
+        if (mc.debugPaths) {
             world.add("Cyan: route | Yellow: next | Red: target | Green: shore exit");
+            world.add("Siege door: white | Slot: blue approaching, green reached");
+            world.add("Siege wait: orange no route, magenta no safe slot");
+        }
 
         Runtime runtime = Runtime.getRuntime();
         long max = runtime.maxMemory();

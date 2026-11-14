@@ -3,8 +3,11 @@ package net.classicremastered.minecraft.render;
 import java.util.List;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.VillagerDoorManager.Approach;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
+import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI.SiegeDebug;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
@@ -49,7 +52,9 @@ public final class MobPathDebugRenderer {
             exit = boss.movement().debugShoreExit();
         }
         Entity target = ai.attackTarget;
-        if (route.isEmpty() && exit == null && (target == null || target.removed)) return;
+        SiegeDebug siege = ai instanceof BasicAttackAI combat ? combat.siegeDebug() : null;
+        if (route.isEmpty() && exit == null && siege == null && (target == null || target.removed))
+            return;
 
         Vec3D origin =
                 new Vec3D(
@@ -78,6 +83,32 @@ public final class MobPathDebugRenderer {
             marker(exit, .4f);
         }
         GL11.glEnd();
+        if (siege != null) drawSiege(origin, siege);
+    }
+
+    private static void drawSiege(Vec3D origin, SiegeDebug siege) {
+        Vec3D door = point(siege.approach().doorway());
+        Approach reserved = siege.approach().slot();
+        GL11.glLineWidth(1);
+        GL11.glBegin(GL11.GL_LINES);
+        GL11.glColor3f(1, 1, 1);
+        marker(door, .4f);
+        switch (siege.state()) {
+            case APPROACHING -> GL11.glColor3f(.35f, .55f, 1);
+            case AT_SLOT -> GL11.glColor3f(.3f, 1, .3f);
+            case WAITING_FOR_ROUTE -> GL11.glColor3f(1, .55f, .1f);
+            case NO_SAFE_SLOT -> GL11.glColor3f(1, .3f, 1);
+        }
+        Vec3D slot = reserved == null ? origin : point(reserved);
+        marker(slot, .25f);
+        vertex(slot);
+        vertex(door);
+        GL11.glEnd();
+        GL11.glLineWidth(2);
+    }
+
+    private static Vec3D point(Approach approach) {
+        return new Vec3D(approach.x(), approach.y(), approach.z());
     }
 
     private static void vertex(Vec3D point) {

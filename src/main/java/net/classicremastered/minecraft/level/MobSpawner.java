@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft.level;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
@@ -9,12 +11,14 @@ import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.*;
 import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.player.Player;
 
 /** Bounded local populations and individually validated species packs. */
 public final class MobSpawner {
     public Level level;
     public static final int SPAWN_RADIUS = 48, DESPAWN_RADIUS = 128, LOCAL_MOB_CAP = 32;
     public static final int ANIMAL_CAP = 12;
+    static final float HOSTILE_SPAWN_BRIGHTNESS = .45f;
 
     public MobSpawner(Level level) {
         this.level = level;
@@ -44,6 +48,47 @@ public final class MobSpawner {
             case VERY_HARD -> 32;
             case EXTREME -> 36;
         };
+    }
+
+    void spawnSiegeGroup(Player player, int doorX, int doorY, int doorZ, int desired) {
+        int available = monsterCap() - population(player.x, player.y, player.z, 1, player);
+        int limit = Math.min(desired, available);
+        if (limit < 3) return;
+
+        List<Zombie> bestGroup = List.of();
+        double startAngle = level.random.nextDouble() * 2 * Math.PI;
+        for (int sector = 0; sector < 8; sector++) {
+            List<Zombie> group = new ArrayList<>(limit);
+            double angle = startAngle + sector * Math.PI / 4;
+            int centerX = doorX + (int) Math.round(28 * Math.cos(angle));
+            int centerZ = doorZ + (int) Math.round(28 * Math.sin(angle));
+            for (int cell = 0; cell < 25 && group.size() < limit; cell++) {
+                int x = centerX + cell % 5 - 2;
+                int z = centerZ + cell / 5 - 2;
+                if (!inside(x, z) || !siegeColumnLoaded(x, z)) continue;
+                int y = feet(x, level.getHighestTile(x, z), z);
+                if (y < 1 || !hasOpenSky(x, y, z) || !dark(x, y, z)) continue;
+                int dx = x - doorX, dy = y - doorY, dz = z - doorZ;
+                if (dx * dx + dz * dz < 24 * 24 || dx * dx + dy * dy + dz * dz > 32 * 32) continue;
+                Zombie zombie = new Zombie(level, x + .5f, y, z + .5f);
+                if (place(zombie, x, y, z, player)
+                        && !zombie.overlapsFire(zombie.bb)
+                        && group.stream().noneMatch(other -> other.bb.intersects(zombie.bb))) {
+                    group.add(zombie);
+                }
+            }
+            if (group.size() > bestGroup.size()) bestGroup = group;
+            if (bestGroup.size() == limit) break;
+        }
+        if (bestGroup.size() >= 3) bestGroup.forEach(level::addEntity);
+    }
+
+    private boolean siegeColumnLoaded(int x, int z) {
+        if (level instanceof LevelInfiniteTerrain terrain)
+            return terrain.chunks().isChunkLoaded(x >> 4, z >> 4);
+        if (level instanceof LevelInfiniteFlat flat)
+            return flat.chunks().isChunkLoaded(x >> 4, z >> 4);
+        return true;
     }
 
     private int nearby(float x, float y, float z, int category, Class<?> species, float radius) {
@@ -124,7 +169,7 @@ public final class MobSpawner {
 
     private boolean dark(int x, int y, int z) {
         return !(level.isLit(x, y, z) && level.getDaylightBrightness() >= .6f)
-                && level.getBrightness(x, y, z) <= .45f;
+                && level.getBrightness(x, y, z) <= HOSTILE_SPAWN_BRIGHTNESS;
     }
 
     private boolean villagerNear(float x, float y, float z) {
