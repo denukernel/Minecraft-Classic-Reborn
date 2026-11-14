@@ -55,7 +55,7 @@ the same jar contains `PoisonedAppleItem`, `ExplodingArrow`, and `SiteOpenerBloc
 
 ### crocodile
 
-the 0.33 jar contains `Crocodille`, `CrocodileModel`, and `mob/croc.png`. the 2019 wiki describes the crocodile as a test mob available through mods, and the 2022 source still has its class and model. the 2026 mob registry has no crocodile entry. [`0.33.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33.jar), [2019 wiki](https://github.com/Processmodifyer/0.34/blob/a73202892/wiki/wiki.txt), [2022 crocodile class](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/game/entity/creature/Crocodille.java), [2026 mob registry](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java).
+the 0.33 jar contains `Crocodille`, `CrocodileModel`, and `mob/croc.png`. the archived wiki describes an earlier test version as available through mods. the 0.33 jar itself has a cheat-menu action that adds a crocodile to the world, and its mob spawner also references the class. the 0.34 pre-release jars keep the class without references from other game classes. the 2022 source still has the class and model. the 2026 mob registry has no crocodile entry. [`0.33.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33.jar), [`0.34pre.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2019 wiki](https://github.com/Processmodifyer/0.34/blob/a73202892/wiki/wiki.txt), [2022 crocodile class](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/game/entity/creature/Crocodille.java), [2026 mob registry](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java).
 
 ### halloween build
 
@@ -74,7 +74,7 @@ in `0.34pre2.jar`, the pause menu opens cheats, then spawn mob, then two more mo
 | menu entry | class | behavior or asset confirmed in the jar |
 | --- | --- | --- |
 | giant creeper | `GiantCreeper` | uses `giantcreeper.png`. its ai includes creating an ordinary creeper and triggering an explosion. |
-| lisonio | `Hingno` | uses `enderking.png`. its ai creates angry endermen. |
+| lisonio | `Hingno` | the enderman boss. it uses `enderking.png` and its ai creates angry endermen. |
 | skeleton king | `KingSkeleton` | uses `skeletonking.png`. it fires `NewArrow` projectiles, and its ai creates skeletons. |
 | demonic chicken | `DemonChicken` | uses a dedicated demonic chicken texture and an ai that targets the player. |
 | demonic creeper | `DemonicCreeper` | uses a dedicated demonic creeper texture and an ai with an explosion routine. |
@@ -86,7 +86,29 @@ the 2022 source keeps the ordinary spawn submenus and includes a `GiantCreeperMo
 - **giant and hungelanger.** both classes appear in `031_09.jar`. the coder pack shows that they extend zombie. the giant uses the zombie texture, and hungelanger uses the player texture. the latest 2019 spawn menu has a hungelanger action. [`031_09.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/031_09.jar), [minecraft classic coder pack.7z](https://github.com/Processmodifyer/0.34/blob/a73202892/minecraft%20classic%20coder%20pack.7z), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
 - **headset zombie and pig zombie.** both classes are present by `0.33_02.jar`. the latest 2019 menu calls the headset zombie entry **in control1** and offers pig zombie separately. the 2022 menu still spawns a pig zombie. [`0.33_02.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33_02.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 spawn menu](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/SpawnMobs.java).
 - **printer, wolf, and villager.** the three classes appear in `0.33_04.jar`. the latest 2019 menu creates a printer under the label `mob.Prit.name` and offers wolf on the same page. the 2022 source retains a printer model. reborn registers villagers and has no printer or wolf entry. [`0.33_04.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33_04.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 printer model](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/model/PrinterModel.java), [2026 mob registry](../src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java).
-- **cutemil and speer.** both classes appear in `0.34pre.jar` and `0.34pre2.jar`. speer has a spawn-menu action in the latest 2019 jar and in the 2022 source. cutemil was confirmed in the archive inventory. [`0.34pre.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 speer menu action](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/MoreMobs.java).
+- **cutemil and speer.** both classes appear in `0.34pre.jar` and `0.34pre2.jar`. speer has a spawn-menu action in the latest 2019 jar and in the 2022 source. cutemil has no verified spawn path. [`0.34pre.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar), [2022 speer menu action](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classic/remastered/client/gui/cheats/MoreMobs.java).
+
+## unused classes in the 2019 jars
+
+### mob loader and mod api experiments
+
+`MobLoader` sits at the jar root. in 0.33, its `loadmobs` method returns immediately. in 0.34 pre-release 2, the class instead has an empty `Mods` method. both jars launch through `MinecraftStandalone`, and neither has a game-class reference to `MobLoader`. [`0.33.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
+
+0.34 pre-release 2 also packages a `MinecraftMod` base class with empty tick, mob-render, and world-generator callbacks, an `ExampleMod`, a separate `pluginplus.minecraft` experiment, and pf4j classes. the example and plugin classes contain stubs. the jar has no game-class reference to pf4j, no runtime plugin service entry, and no verified startup path that discovers or enables these mods. [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
+
+the 2022 `MClassicLoader` creates a desktop game window and starts the game thread. reborn uses a separate `com.mcraft.api.loader.ModLoader` that the game initializes. [2022 desktop launcher](https://github.com/Processmodifyer/Minecraft-Classic-Remastered/blob/34ed2cfb8d0343e2763ee8b02e68c563f826d76b/src/main/java/net/classicloader/main/MClassicLoader.java), [2026 mod loader](../src/main/java/com/mcraft/api/loader/ModLoader.java).
+
+### leftover mobs, blocks, and projectiles
+
+| class | archive evidence |
+| --- | --- |
+| `Giant` | present from `031_09.jar` through `0.34pre2.jar`. the standalone giant has no game-class references in the checked jars. the latest boss menu creates the separate `GiantCreeper` class. |
+| `Cutemil` | present in both 0.34 pre-release jars with no references from other game classes. the pre-release 2 class uses `/mob/Anime.png` and contains item-drop code. |
+| `SiteOpenerBlock` | present in all ten jars, with no references from other game classes. |
+| `PoisonedAppleItem` | present from `0.33_02.jar` through both 0.34 pre-releases, with no references from other game classes. |
+| `ExplodingArrow` | present in both 0.34 pre-release jars, with no references from other game classes. |
+
+the table reflects class reference checks. see [the pre-release blocks and items](#blocks-and-items-in-034-pre-release-2) for the behavior inside those classes. [`031_09.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/031_09.jar), [`0.33_02.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.33_02.jar), [`0.34pre.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre.jar), [`0.34pre2.jar`](https://github.com/Processmodifyer/0.34/blob/a73202892/0.34pre2.jar).
 
 ## 2022 title screen and terrain plans
 
