@@ -34,7 +34,7 @@ public final class FireBlock extends Block {
         Block block = Block.blocks[id];
         return block == Block.WOOD
                 || block == Block.LOG
-                || block == Block.LEAVES
+                || block instanceof LeavesBlock
                 || block == Block.BOOKSHELF
                 || block == Block.TNT
                 || block == Block.DANDELION
@@ -140,8 +140,12 @@ public final class FireBlock extends Block {
                 int fuel = level.getTile(tx, ty, tz);
                 if (fuel == Block.TNT.id) {
                     TNTBlock.ignite(level, tx, ty, tz);
-                } else if (isFlammable(fuel) && random.nextInt(
-                        fuel == Block.LEAVES.id ? 4 : fuel == Block.LOG.id ? 12 : 8) == 0) {
+                } else if (isFlammable(fuel)
+                        && random.nextInt(
+                                        Block.blocks[fuel] instanceof LeavesBlock
+                                                ? 4
+                                                : fuel == Block.LOG.id ? 12 : 8)
+                                == 0) {
                     int replacement = canStay(level, tx, ty, tz) && random.nextBoolean() ? id : 0;
                     level.setTile(tx, ty, tz, replacement);
                 }

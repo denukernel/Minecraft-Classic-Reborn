@@ -244,6 +244,10 @@ public class GameMode {
                 int heldBlockId = (held >= 0 && held < 256) ? held : 0;
                 minecraft.networkManager.sendBlockChange(x, y, z, 0, heldBlockId);
             }
+            if (block == Block.FIRE) {
+                FireBlock.playExtinguishSound(level, x + .5f, y + .5f, z + .5f);
+                return;
+            }
             if (block instanceof net.classicremastered.minecraft.level.tile.GlassBlock) {
                 net.classicremastered.minecraft.level.tile.GlassBlock.playShatter(level, x + .5f,
                         y + .5f, z + .5f);

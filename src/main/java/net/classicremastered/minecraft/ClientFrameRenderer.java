@@ -300,9 +300,12 @@ final class ClientFrameRenderer {
                         GL11.glEnable(3553);
                         r2.updateFog(cameraLiquid);
 
-                        if (mc.selected != null && (!mc.hudHidden || lr.cracks > 0.0F)) {
+                        MovingObjectPosition pick = mc.selected;
+                        // Fire remains targetable so the player can put it out.
+                        if (pick != null
+                                && (!mc.hudHidden || lr.cracks > 0.0F)
+                                && lr.level.getTile(pick.x, pick.y, pick.z) != Block.FIRE.id) {
                             GL11.glDisable(3008);
-                            MovingObjectPosition pick = r2.minecraft.selected;
                             LevelRenderer lrPick = lr;
                             ShapeRenderer sr1 = ShapeRenderer.instance;
                             GL11.glEnable(3042);

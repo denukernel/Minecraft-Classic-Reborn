@@ -378,7 +378,8 @@ public class CraftingManager {
             OreMaterials.RAW_GOLD + 256,
             OreMaterials.DIAMOND + 256,
             Block.WOOD.id,
-            Block.COBBLESTONE.id
+            Block.COBBLESTONE.id,
+            Item.COAL_ID + 256
         };
         addRecipe(
                 new ItemStack(

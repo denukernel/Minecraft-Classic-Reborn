@@ -713,7 +713,7 @@ public class Block {
         var1 = var10000;
         var10000.explodes = false;
         COAL_ORE = var1;
-        FIRE = (new FireBlock(50, 31)).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.0F);
+        FIRE = new FireBlock(50, 31);
         LOG = (new WoodBlock(17)).setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.5F);
         LEAVES = (new LeavesBlock(18, 22)).setData(Tile$SoundType.grass, 1.0F, 0.4F, 0.2F);
         SPONGE = (new SpongeBlock(19)).setData(Tile$SoundType.cloth, 1.0F, 0.9F, 0.6F);

@@ -22,7 +22,8 @@ public final class Equipment {
         {200, 201, 202, 203},
         {204, 205, 206, 207},
         {217, 218, 219, 220},
-        {221, 222, 223, 224}
+        {221, 222, 223, 224},
+        {231, 232, 233, 234}
     };
 
     private Equipment() {}
@@ -56,7 +57,7 @@ public final class Equipment {
                                         case "leather" -> 5;
                                         case "gold" -> 7;
                                         case "stone" -> 9;
-                                        case "iron" -> 15;
+                                        case "iron", "chainmail" -> 15;
                                         case "diamond" -> 33;
                                         default ->
                                                 throw new IllegalArgumentException(
@@ -153,10 +154,16 @@ public final class Equipment {
                         material);
         }
         String[] slots = {"Helmet", "Chestplate", "Leggings", "Boots"};
-        String[] names = {"Leather", "Iron", "Golden", "Diamond", "Wood", "Stone"};
-        String[] materials = {"leather", "iron", "gold", "diamond", "wood", "stone"};
+        String[] names = {"Leather", "Iron", "Golden", "Diamond", "Wood", "Stone", "Chainmail"};
+        String[] materials = {"leather", "iron", "gold", "diamond", "wood", "stone", "chainmail"};
         int[][] points = {
-            {1, 3, 2, 1}, {2, 6, 5, 2}, {2, 5, 3, 1}, {3, 8, 6, 3}, {1, 1, 1, 1}, {1, 4, 3, 1}
+            {1, 3, 2, 1},
+            {2, 6, 5, 2},
+            {2, 5, 3, 1},
+            {3, 8, 6, 3},
+            {1, 1, 1, 1},
+            {1, 4, 3, 1},
+            {2, 5, 4, 1}
         };
         int[][] prices = {
             {5, 10, 8, 4},
@@ -164,7 +171,8 @@ public final class Equipment {
             {8, 16, 14, 7},
             {20, 40, 34, 18},
             {2, 4, 3, 2},
-            {4, 8, 6, 3}
+            {4, 8, 6, 3},
+            {7, 16, 12, 6}
         };
         for (int t = 0; t < ARMOR.length; t++) {
             for (int s = 0; s < slots.length; s++) {

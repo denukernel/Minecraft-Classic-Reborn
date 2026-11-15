@@ -88,6 +88,11 @@ public final class SurvivalGameMode extends GameMode {
 
     @Override
     public void hitBlock(int x, int y, int z, int side) {
+        final int type = minecraft.level.getTile(x, y, z);
+        if (type == Block.FIRE.id) {
+            breakBlock(x, y, z);
+            return;
+        }
         if (hitDelay > 0) {
             hitDelay--;
             return;
@@ -98,7 +103,6 @@ public final class SurvivalGameMode extends GameMode {
             hitY = y;
             hitZ = z;
         }
-        final int type = minecraft.level.getTile(x, y, z);
         if (type != hitType) {
             hits = 0;
             hitType = type;
@@ -124,7 +128,9 @@ public final class SurvivalGameMode extends GameMode {
     public void breakBlock(int x, int y, int z) {
         int block = minecraft.level.getTile(x, y, z);
         if (block == 0) return;
-        if ((block != Block.SNOW_BLOCK.id || holdingTool(ToolItem.Kind.SHOVEL))
+        if (block == Block.FIRE.id) {
+            resetHits();
+        } else if ((block != Block.SNOW_BLOCK.id || holdingTool(ToolItem.Kind.SHOVEL))
                 && (block != Block.MAGMA.id || holdingTool(ToolItem.Kind.PICKAXE))) {
             Block.blocks[block].onBreak(minecraft.level, x, y, z);
         }

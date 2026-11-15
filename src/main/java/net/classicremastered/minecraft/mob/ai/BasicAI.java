@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.MobSpawner;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.Skeleton;
 import net.classicremastered.minecraft.mob.Zombie;
 import net.classicremastered.minecraft.mob.ZombieIgniter;
 import net.classicremastered.minecraft.mob.ai.goal.Goal;
@@ -432,7 +433,11 @@ public class BasicAI extends AI {
 
     private boolean escapeFire() {
         if (!navigationAllowed()) return false;
-        var fireBounds = mob.bb.grow(.4f, 0, .4f);
+        // Zombies can follow a clear route past adjacent flames without fleeing.
+        var fireBounds =
+                mob instanceof Zombie && !(mob instanceof Skeleton)
+                        ? mob.bb
+                        : mob.bb.grow(.4f, 0, .4f);
         if (!mob.overlapsFire(fireBounds)) return false;
 
         float bestDistance = Float.POSITIVE_INFINITY;
