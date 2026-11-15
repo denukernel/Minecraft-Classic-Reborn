@@ -9,8 +9,8 @@ public class HealthDrinkItem extends Item {
     }
 
     @Override
-    public void use(Player player, Level level) {
-        if (player == null) return;
+    public boolean use(Player player, Level level) {
+        if (player == null) return false;
 
         // Set healing timer to 5 seconds (100 ticks)
         player.healthDrinkTimer = 100;
@@ -21,5 +21,6 @@ public class HealthDrinkItem extends Item {
 
         // Reduce item stack
         consumeSelected(player,level);
+        return true;
     }
 }

@@ -28,11 +28,11 @@ public final class GrapplingHookItem extends Item {
     }
 
     @Override
-    public void use(Player player, Level level) {
-        if (!canUse(player, level)) return;
+    public boolean use(Player player, Level level) {
+        if (!canUse(player, level)) return false;
         if (player.grapple != null) {
             detach(player);
-            return;
+            return true;
         }
 
         level.playSound(SOUND + "launch", player, .8f, 1f);
@@ -74,6 +74,7 @@ public final class GrapplingHookItem extends Item {
             }
         }
         if (player.grapple != null) level.playSound(SOUND + "latch", player, .8f, 1f);
+        return true;
     }
 
     public static void updateTether(Player player) {

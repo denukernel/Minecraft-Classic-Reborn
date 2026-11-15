@@ -298,6 +298,10 @@ public final class MobRegistry {
         tryRegister((short) 23, "Spider", Spider.class, (l, x, y, z) -> new Spider(l, x, y, z));
         tryRegister((short) 24, "Rana", Rana.class, (l, x, y, z) -> new Rana(l, x, y, z));
         tryRegister((short) 25, "Chicken", Chicken.class, (l, x, y, z) -> new Chicken(l, x, y, z));
+        register(Cod.REGISTRY_ID, "Cod", Cod.class, Cod::new);
+        register(Salmon.REGISTRY_ID, "Salmon", Salmon.class, Salmon::new);
+        register(TropicalFish.REGISTRY_ID, "TropicalFish", TropicalFish.class, TropicalFish::new);
+        register(Pufferfish.REGISTRY_ID, "Pufferfish", Pufferfish.class, Pufferfish::new);
         // --- Variants / babies (optional on some builds) ---
         tryRegister(
                 (short) 40,

@@ -311,10 +311,6 @@ public final class Minecraft implements Runnable {
             if (org.lwjgl.input.Keyboard.isCreated()) org.lwjgl.input.Keyboard.destroy();
         } catch (Throwable ignored) {
         }
-        try {
-            if (org.lwjgl.input.Controllers.isCreated()) org.lwjgl.input.Controllers.destroy();
-        } catch (Throwable ignored) {
-        }
 
         // 7) Tear down display safely
         try {
@@ -622,10 +618,6 @@ public final class Minecraft implements Runnable {
         }
         try {
             if (org.lwjgl.input.Keyboard.isCreated()) org.lwjgl.input.Keyboard.destroy();
-        } catch (Throwable ignored) {
-        }
-        try {
-            if (org.lwjgl.input.Controllers.isCreated()) org.lwjgl.input.Controllers.destroy();
         } catch (Throwable ignored) {
         }
         try {

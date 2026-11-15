@@ -40,6 +40,8 @@ public final class DeathMessages {
             switch (cause) {
                 case "in_wall":
                     return victim + " suffocated in a wall";
+                case "choke":
+                    return victim + " choked";
                 case "drown" :
                     return victim + " drowned";
                 case "lava" :

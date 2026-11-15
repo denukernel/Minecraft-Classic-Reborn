@@ -4,7 +4,7 @@ import net.classicremastered.minecraft.entity.PrimedTnt;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.Entity;
 
-//com/mojang/minecraft/level/tile/TNTBlock.java
+// com/mojang/minecraft/level/tile/TNTBlock.java
 public final class TNTBlock extends Block {
 
     public TNTBlock(int id, int tex) {
@@ -51,10 +51,10 @@ public final class TNTBlock extends Block {
         ignite(level, x, y, z, null);
     }
 
-    public static void ignite(Level level, int x, int y, int z, Entity owner) {
+    public static boolean ignite(Level level, int x, int y, int z, Entity owner) {
         if (level == null || level.isNetworkMode() || level.getTile(x, y, z) != Block.TNT.id
                 || !level.setTile(x, y, z, 0)) {
-            return;
+            return false;
         }
 
         // spawn a primed entity centered (uses your PrimedTnt class)
@@ -64,6 +64,7 @@ public final class TNTBlock extends Block {
 
         // optional: fuse sound (you already wired Level.playSound)
         level.playSound("random/fuse", x + 0.5f, y + 0.5f, z + 0.5f, 1.0f, 1.0f);
+        return true;
     }
 
     // Optional convenience: right-clicking TNT with anything can be ignored;

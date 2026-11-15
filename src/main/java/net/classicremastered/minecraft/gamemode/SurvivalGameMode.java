@@ -46,35 +46,7 @@ public final class SurvivalGameMode extends GameMode {
             return true;
         }
 
-        if (selId >= 256) {
-            int itemId = selId - 256;
-            if (itemId >= 0
-                    && itemId < net.classicremastered.minecraft.level.itemstack.Item.items.length) {
-                net.classicremastered.minecraft.level.itemstack.Item it =
-                        net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
-                if (it != null) {
-                    try {
-                        if (player.minecraft != null && player.minecraft.renderer != null) {
-                            net.classicremastered.minecraft.render.HeldBlock hb =
-                                    player.minecraft.renderer.heldBlock;
-                            if (hb != null) {
-                                hb.offset = -1;
-                                hb.moving = true;
-                            }
-                        }
-                    } catch (Throwable ignored) {
-                    }
-                    it.use(player, player.level);
-                    int slot = player.inventory.selected;
-                    if (player.inventory.count[slot] <= 0) {
-                        player.inventory.slots[slot] = -1;
-                        player.inventory.count[slot] = 0;
-                    }
-                    return true;
-                }
-            }
-            return false;
-        }
+        if (selId >= 256) return useSelectedItem(player);
 
         if (selId < 256 && Block.blocks[selId] != null) {
             if (!this.canPlace(selId)) return false;

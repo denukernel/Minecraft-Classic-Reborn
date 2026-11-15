@@ -49,6 +49,29 @@ public final class Renderer {
     private Level cameraLevel;
     private int previousCameraMode = -1;
     private long previousCameraFrame;
+    private Player waterVisionPlayer;
+    private Level waterVisionLevel;
+    private int waterEntryTick;
+    private float waterFogEnd = 24f;
+
+    public void updateWaterVision(LiquidType liquid) {
+        if (liquid != LiquidType.WATER) {
+            waterVisionPlayer = null;
+            waterVisionLevel = null;
+            waterFogEnd = 24f;
+            return;
+        }
+        if (waterVisionPlayer != minecraft.player || waterVisionLevel != minecraft.level) {
+            waterVisionPlayer = minecraft.player;
+            waterVisionLevel = minecraft.level;
+            waterEntryTick = minecraft.ticks;
+        }
+        int ticks = Math.max(0, minecraft.ticks - waterEntryTick);
+        float adjustment =
+                .6f * Math.min(1f, ticks / 100f)
+                        + .4f * MathHelper.clamp((ticks - 100) / 500f, 0f, 1f);
+        waterFogEnd = 96f * Math.max(.25f, adjustment);
+    }
 
     public boolean shouldRenderLocalPlayer() {
         return minecraft.cameraMode != 0 && localPlayerVisible;
@@ -145,7 +168,7 @@ public final class Renderer {
     }
 
     public void renderUnderwaterOverlay(LiquidType l) {
-        if (l == LiquidType.NOT_LIQUID) return;
+        if (l != LiquidType.LAVA) return;
 
         // === Setup ortho projection ===
         GL11.glMatrixMode(GL11.GL_PROJECTION);
@@ -171,7 +194,7 @@ public final class Renderer {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texId);
 
         // Lookup the animated tile position
-        int texIndex = (l == LiquidType.WATER) ? Block.WATER.textureId : Block.LAVA.textureId;
+        int texIndex = Block.LAVA.textureId;
         int u0 = (texIndex % 16) * 16;
         int v0 = (texIndex / 16) * 16;
         float u1 = u0 / 256.0F;
@@ -179,11 +202,7 @@ public final class Renderer {
         float u2 = (u0 + 16) / 256.0F;
         float v2 = (v0 + 16) / 256.0F;
 
-        if (l == LiquidType.WATER) {
-            GL11.glColor4f(0.6F, 0.6F, 1.0F, 0.6F);
-        } else {
-            GL11.glColor4f(1.0F, 0.4F, 0.2F, 0.7F);
-        }
+        GL11.glColor4f(1.0F, 0.4F, 0.2F, 0.7F);
 
         // Draw fullscreen quad with correct UVs (no manual scroll)
         GL11.glBegin(GL11.GL_QUADS);
@@ -246,30 +265,22 @@ public final class Renderer {
         GL11.glNormal3f(0.0F, -1.0F, 0.0F);
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 
-        if (l != LiquidType.NOT_LIQUID) {
+        if (l == LiquidType.LAVA) {
             GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_EXP2);
-
-            if (l == LiquidType.WATER) {
-                // Vision capped at ~8 blocks
-                GL11.glFogf(GL11.GL_FOG_DENSITY, 0.35F);
-                GL11.glLightModel(
-                        GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.2F, 0.35F, 0.8F, 1.0F));
-            } else if (l == LiquidType.LAVA) {
-                // Vision capped at ~3 blocks
-                GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
-                GL11.glLightModel(
-                        GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
-            }
-            GL11.glEnable(GL11.GL_COLOR_MATERIAL);
-            GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);
-            return;
+            GL11.glFogf(GL11.GL_FOG_DENSITY, 0.7F);
+            GL11.glLightModel(
+                    GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(0.8F, 0.25F, 0.1F, 1.0F));
+        } else {
+            boolean underwater = l == LiquidType.WATER;
+            GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_LINEAR);
+            GL11.glFogf(GL11.GL_FOG_START, underwater ? -8f : 0f);
+            GL11.glFogf(GL11.GL_FOG_END, underwater ? Math.min(waterFogEnd, fogEnd) : fogEnd);
+            GL11.glLightModel(
+                    GL11.GL_LIGHT_MODEL_AMBIENT,
+                    underwater
+                            ? this.createBuffer(.76f, .87f, 1f, 1f)
+                            : this.createBuffer(1f, 1f, 1f, 1f));
         }
-
-        // Normal air fog
-        GL11.glFogi(GL11.GL_FOG_MODE, GL11.GL_LINEAR);
-        GL11.glFogf(GL11.GL_FOG_START, 0.0F);
-        GL11.glFogf(GL11.GL_FOG_END, this.fogEnd);
-        GL11.glLightModel(GL11.GL_LIGHT_MODEL_AMBIENT, this.createBuffer(1.0F, 1.0F, 1.0F, 1.0F));
 
         GL11.glEnable(GL11.GL_COLOR_MATERIAL);
         GL11.glColorMaterial(GL11.GL_FRONT_AND_BACK, GL11.GL_AMBIENT_AND_DIFFUSE);

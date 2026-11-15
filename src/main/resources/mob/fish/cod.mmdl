@@ -1,0 +1,14 @@
+{
+  "name": "cod",
+  "atlasW": 64,
+  "atlasH": 64,
+  "parts": [
+    {"name":"body","x":-1,"y":-2,"z":0,"w":2,"h":4,"d":7,"posX":0,"posY":0,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":0,"v":0},
+    {"name":"head","x":-1,"y":-2,"z":-3,"w":2,"h":4,"d":3,"posX":0,"posY":0,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":18,"v":0},
+    {"name":"nose","x":-1,"y":-2,"z":-1,"w":2,"h":3,"d":1,"posX":0,"posY":0,"posZ":-3,"pitch":0,"yaw":0,"roll":0,"u":28,"v":0},
+    {"name":"right_fin","x":-2,"y":0,"z":-1,"w":2,"h":0,"d":2,"posX":-1,"posY":1,"posZ":0,"pitch":0,"yaw":0,"roll":-0.7853982,"animRoll":"-0.7853982 - 0.35 * sin(ageInTicks * 0.45)","u":34,"v":0},
+    {"name":"left_fin","x":0,"y":0,"z":-1,"w":2,"h":0,"d":2,"posX":1,"posY":1,"posZ":0,"pitch":0,"yaw":0,"roll":0.7853982,"animRoll":"0.7853982 + 0.35 * sin(ageInTicks * 0.45)","u":42,"v":0},
+    {"name":"tail","x":0,"y":-2,"z":0,"w":0,"h":4,"d":4,"posX":0,"posY":0,"posZ":7,"pitch":0,"yaw":0,"roll":0,"animYaw":"0.42 * sin(ageInTicks * 0.6)","u":50,"v":0},
+    {"name":"top_fin","x":0,"y":-1,"z":-1,"w":0,"h":1,"d":6,"posX":0,"posY":-2,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":0,"v":11}
+  ]
+}

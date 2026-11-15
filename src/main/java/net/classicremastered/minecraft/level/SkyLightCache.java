@@ -37,6 +37,7 @@ final class SkyLightCache {
     private byte[] build(Key key) {
         int ox = (key.x << 4) - HALO, oy = (key.y << 4) - HALO, oz = (key.z << 4) - HALO;
         byte[] light = new byte[COUNT];
+        byte[] waterLight = new byte[COUNT];
         boolean[] opaque = new boolean[COUNT];
         int[] queue = new int[COUNT];
         int tail = 0;
@@ -44,19 +45,23 @@ final class SkyLightCache {
             for (int x = 0; x < SIDE; x++) {
                 // Unlike a bounded upward ray, this detects roofs at any world height.
                 boolean sky = true;
+                int waterDepth = 0;
                 for (int y = level.depth - 1; y >= Math.max(0, oy); y--) {
                     int id = level.getTile(ox + x, y, oz + z);
-                    boolean blocked = id > 0 && Block.blocks[id] != null && Block.blocks[id].isOpaque();
-                    if (blocked)
-                        sky = false;
+                    boolean blocked =
+                            id > 0 && Block.blocks[id] != null && Block.blocks[id].isOpaque();
+                    if (id == Block.WATER.id || id == Block.STATIONARY_WATER.id) waterDepth++;
+                    else if (blocked) sky = false;
                     int dy = y - oy;
-                    if (dy >= SIDE)
-                        continue;
+                    if (dy >= SIDE) continue;
                     int i = (dy * SIDE + z) * SIDE + x;
                     opaque[i] = blocked;
-                    if (sky) {
+                    if (sky && waterDepth == 0) {
                         light[i] = 9;
                         queue[tail++] = i;
+                    } else if (sky) {
+                        // Direct daylight loses one skylight step per three blocks of water.
+                        waterLight[i] = (byte) Math.max(0, 9 - (waterDepth + 2) / 3);
                     }
                 }
                 for (int dy = Math.max(0, level.depth - oy); dy < SIDE; dy++) {
@@ -70,31 +75,27 @@ final class SkyLightCache {
         // Multi-source breadth-first propagation visits each transparent cell once.
         for (int head = 0; head < tail; head++) {
             int i = queue[head], value = light[i] - 1;
-            if (value <= 0)
-                continue;
+            if (value <= 0) continue;
             int x = i % SIDE, z = i / SIDE % SIDE, y = i / PLANE;
-            if (x > 0)
-                tail = spread(i - 1, value, light, opaque, queue, tail);
-            if (x < SIDE - 1)
-                tail = spread(i + 1, value, light, opaque, queue, tail);
-            if (z > 0)
-                tail = spread(i - SIDE, value, light, opaque, queue, tail);
-            if (z < SIDE - 1)
-                tail = spread(i + SIDE, value, light, opaque, queue, tail);
-            if (y > 0)
-                tail = spread(i - PLANE, value, light, opaque, queue, tail);
-            if (y < SIDE - 1)
-                tail = spread(i + PLANE, value, light, opaque, queue, tail);
+            if (x > 0) tail = spread(i - 1, value, light, opaque, queue, tail);
+            if (x < SIDE - 1) tail = spread(i + 1, value, light, opaque, queue, tail);
+            if (z > 0) tail = spread(i - SIDE, value, light, opaque, queue, tail);
+            if (z < SIDE - 1) tail = spread(i + SIDE, value, light, opaque, queue, tail);
+            if (y > 0) tail = spread(i - PLANE, value, light, opaque, queue, tail);
+            if (y < SIDE - 1) tail = spread(i + PLANE, value, light, opaque, queue, tail);
         }
         byte[] result = new byte[4096];
         for (int y = 0; y < 16; y++)
             for (int z = 0; z < 16; z++)
-                for (int x = 0; x < 16; x++)
-                    result[(y * 16 + z) * 16 + x] = light[((y + HALO) * SIDE + z + HALO) * SIDE + x + HALO];
+                for (int x = 0; x < 16; x++) {
+                    int i = ((y + HALO) * SIDE + z + HALO) * SIDE + x + HALO;
+                    result[(y * 16 + z) * 16 + x] = (byte) Math.max(light[i], waterLight[i]);
+                }
         return result;
     }
 
-    private static int spread(int i, int value, byte[] light, boolean[] opaque, int[] queue, int tail) {
+    private static int spread(
+            int i, int value, byte[] light, boolean[] opaque, int[] queue, int tail) {
         if (!opaque[i] && light[i] == 0) {
             light[i] = (byte) value;
             queue[tail++] = i;

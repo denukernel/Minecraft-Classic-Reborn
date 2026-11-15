@@ -843,11 +843,14 @@ public class Level implements Serializable {
                     || !isEntityChunkLoaded(mob)
                     || mob.removed
                     || mob.health <= 0) continue;
-            if (!MobSpawner.isMonster(mob) || mob.isPersistenceRequired()) {
+            boolean monster = MobSpawner.isMonster(mob);
+            if ((!monster && !(mob instanceof net.classicremastered.minecraft.mob.Fish))
+                    || mob.isPersistenceRequired()) {
                 mob.despawnIdleTicks = 0;
                 continue;
             }
-            if (isDaytime()
+            if (monster
+                    && isDaytime()
                     && !(mob instanceof net.classicremastered.minecraft.mob.Husk)
                     && getDaylightBrightness() >= 0.6f
                     && (!(mob instanceof net.classicremastered.minecraft.mob.Zombie zombie)

@@ -19,7 +19,6 @@ import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLException;
-import org.lwjgl.input.Controllers;
 import org.lwjgl.input.Cursor;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -176,12 +175,6 @@ final class ClientBootstrap {
 
         Keyboard.create();
         Mouse.create();
-
-        try {
-            Controllers.create();
-        } catch (Exception controllersCreateError) {
-            controllersCreateError.printStackTrace();
-        }
 
         Minecraft.checkGLError("Pre startup");
         GL11.glEnable(3553);

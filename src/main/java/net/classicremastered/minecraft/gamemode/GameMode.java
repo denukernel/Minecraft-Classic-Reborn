@@ -285,21 +285,13 @@ public class GameMode {
 
         net.classicremastered.minecraft.level.itemstack.Item it =
                 net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
-        if (it == null) return false;
-
-        try {
-            if (player.minecraft != null && player.minecraft.renderer != null) {
-                net.classicremastered.minecraft.render.HeldBlock hb =
-                        player.minecraft.renderer.heldBlock;
-                if (hb != null) {
-                    hb.offset = -1;
-                    hb.moving = true;
-                }
-            }
-        } catch (Throwable ignored) {
+        if (it == null || !it.use(player, player.level)) return false;
+        if (!(it instanceof net.classicremastered.minecraft.level.itemstack.FoodItem)
+                && player.minecraft != null
+                && player.minecraft.renderer != null
+                && player.minecraft.renderer.heldBlock != null) {
+            player.minecraft.renderer.heldBlock.swing();
         }
-
-        it.use(player, player.level);
 
         if (player.inventory.count[slot] <= 0) {
             player.inventory.slots[slot] = -1;

@@ -1,22 +1,28 @@
 package net.classicremastered.minecraft;
 
+import java.util.concurrent.ThreadLocalRandom;
 import net.classicremastered.minecraft.chat.ChatInputScreen;
 import net.classicremastered.minecraft.entity.BossFireball;
 import net.classicremastered.minecraft.entity.SignEntity;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
+import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.BowItem;
 import net.classicremastered.minecraft.level.itemstack.BucketItem;
+import net.classicremastered.minecraft.level.itemstack.FoodItem;
 import net.classicremastered.minecraft.level.itemstack.GrapplingHookItem;
 import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.MobWandItem;
 import net.classicremastered.minecraft.level.itemstack.PhysicsGunItem;
+import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.FireBlock;
 import net.classicremastered.minecraft.level.tile.FlowerBlock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.Villager;
+import net.classicremastered.minecraft.particle.FoodParticle;
 import net.classicremastered.minecraft.player.DeveloperPowers;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.input.Keyboard;
@@ -27,10 +33,13 @@ public class InputManager {
     private final Minecraft mc;
     private final PlayerCombat combat;
     private Item activeUse;
+    private Eating eating;
     private boolean attackHeld;
     private boolean useHeld;
     private int lastAttackTick;
     private int lastUseTick;
+
+    private record Eating(Player player, Level level, FoodItem food, int slot, int startTick) {}
 
     public InputManager(Minecraft mc) {
         this.mc = mc;
@@ -76,6 +85,7 @@ public class InputManager {
 
     void releaseUse() {
         useHeld = false;
+        eating = null;
         if (activeUse != null) {
             activeUse.releaseUse(mc.player, mc.level);
             activeUse = null;
@@ -95,6 +105,14 @@ public class InputManager {
             activeUse = null;
         }
         if (!down) releaseUse();
+        if (eating != null) {
+            if (!isEating(mc.player)) {
+                eating = null;
+            } else {
+                tickEating();
+                return;
+            }
+        }
         if (useHeld && mc.ticks - lastUseTick >= USE_INTERVAL && repeatsUse(held)) {
             useSelected();
             if (!canUse()) return;
@@ -103,6 +121,42 @@ public class InputManager {
         if (held != null
                 && (useHeld || held instanceof GravityGunItem || held instanceof PhysicsGunItem)) {
             held.tick(mc.player, mc.level);
+        }
+    }
+
+    public float eatingTime(Player player, float partial) {
+        return isEating(player) ? mc.ticks - eating.startTick() + partial : -1;
+    }
+
+    private boolean isEating(Player player) {
+        return eating != null
+                && eating.player() == player
+                && player == mc.player
+                && eating.level() == mc.level
+                && canUse()
+                && eating.slot() == player.inventory.selected
+                && eating.food().canEat(player);
+    }
+
+    private void tickEating() {
+        int elapsed = mc.ticks - eating.startTick();
+        boolean finished = elapsed >= FoodItem.EAT_TICKS;
+        if (elapsed >= 8 && elapsed % 4 == 0) {
+            var random = ThreadLocalRandom.current();
+            mc.level.playSound(
+                    "item/food/eat",
+                    mc.player,
+                    random.nextBoolean() ? .5f : 1f,
+                    1f + (random.nextFloat() - random.nextFloat()) * .2f);
+            FoodParticle.spawn(mc.player, eating.food().getTexture(), finished ? 16 : 5);
+        }
+        if (finished) {
+            FoodItem food = eating.food();
+            eating = null;
+            lastUseTick = mc.ticks;
+            if (food.use(mc.player, mc.level) && food.playsBurp()) {
+                mc.level.playSound("item/food/burp", mc.player, .5f, 1f);
+            }
         }
     }
 
@@ -132,8 +186,7 @@ public class InputManager {
                         || held instanceof PhysicsGunItem)) {
             if (net.classicremastered.minecraft.level.itemstack.TurretItems.isPlacementItem(raw)) {
                 if (!mc.isOnline() && mc.entityWithinReach(boat)) {
-                    net.classicremastered.minecraft.level.itemstack.TurretItems.place(
-                            mc.player, boat, raw);
+                    if (TurretItems.place(mc.player, boat, raw)) swingHeldItem();
                 }
                 return;
             }
@@ -149,13 +202,31 @@ public class InputManager {
                 && (mc.selected == null
                         || !(mc.selected.entity
                                 instanceof net.classicremastered.minecraft.mob.CrossbowTurret))) {
-            net.classicremastered.minecraft.level.itemstack.TurretItems.place(mc.player, boat, raw);
+            if (TurretItems.place(mc.player, boat, raw)) swingHeldItem();
             return;
         }
         onMouseClick(1);
         if (held != null && canUse() && selectedItem() == held) {
-            activeUse = held;
-            held.use(mc.player, mc.level);
+            if (held instanceof FoodItem food) {
+                if (food.canEat(mc.player)) {
+                    eating =
+                            new Eating(
+                                    mc.player,
+                                    mc.level,
+                                    food,
+                                    mc.player.inventory.selected,
+                                    mc.ticks);
+                }
+            } else if (held.use(mc.player, mc.level)) {
+                activeUse = held;
+                swingHeldItem();
+            }
+        }
+    }
+
+    private void swingHeldItem() {
+        if (mc.renderer != null && mc.renderer.heldBlock != null) {
+            mc.renderer.heldBlock.swing();
         }
     }
 
@@ -214,27 +285,12 @@ public class InputManager {
                                         net.classicremastered.minecraft.level.itemstack.BoatItem)) {
             if (button == 0) {
                 GravityGunItem.launch(mc.player, mc.level);
-            }
-            if (mc.renderer != null && mc.renderer.heldBlock != null) {
-                mc.renderer.heldBlock.offset = -1;
-                mc.renderer.heldBlock.moving = true;
+                swingHeldItem();
             }
             return;
         }
 
-        // --- LEFT CLICK: swing animation ---
-        if (button == 0 && mc.renderer != null && mc.renderer.heldBlock != null) {
-            mc.renderer.heldBlock.offset = -1; // fixed
-            mc.renderer.heldBlock.moving = true; // fixed
-        }
-
-        // Item behavior is dispatched by useSelected after world interactions.
-        if (button == 1 && selId >= 256) { // fixed
-            if (mc.renderer != null && mc.renderer.heldBlock != null) {
-                mc.renderer.heldBlock.offset = -1; // fixed
-                mc.renderer.heldBlock.moving = true; // fixed
-            }
-        }
+        if (button == 0) swingHeldItem();
 
         if (button == 1 && mc.selected != null) {
             if (mc.selected.entity
@@ -259,22 +315,24 @@ public class InputManager {
             }
             if (mc.selected.entity
                     instanceof net.classicremastered.minecraft.mob.CrossbowTurret turret) {
-                if (mc.entityWithinReach(turret)) {
-                    net.classicremastered.minecraft.level.itemstack.TurretItems.interact(
-                            mc.player, turret, selId);
+                if (mc.entityWithinReach(turret)
+                        && TurretItems.interact(mc.player, turret, selId)) {
+                    swingHeldItem();
                 }
                 return;
             }
             if (mc.selected.entityPos == 0
                     && net.classicremastered.minecraft.level.itemstack.TurretItems.isPlacementItem(
                             selId)) {
-                net.classicremastered.minecraft.level.itemstack.TurretItems.place(
+                if (TurretItems.place(
                         mc.player,
                         mc.selected.x,
                         mc.selected.y,
                         mc.selected.z,
                         mc.selected.face,
-                        selId);
+                        selId)) {
+                    swingHeldItem();
+                }
                 return;
             }
         }
@@ -285,7 +343,8 @@ public class InputManager {
                     && selId == net.classicremastered.minecraft.level.itemstack.SaddleItem.ID + 256
                     && mc.selected.entity instanceof net.classicremastered.minecraft.mob.Cow cow
                     && mc.entityWithinReach(cow)) {
-                net.classicremastered.minecraft.level.itemstack.SaddleItem.equip(mc.player, cow);
+                if (net.classicremastered.minecraft.level.itemstack.SaddleItem.equip(
+                        mc.player, cow)) swingHeldItem();
                 return;
             }
             if (button == 1
@@ -297,6 +356,7 @@ public class InputManager {
                                 ? creeper.igniteFuse()
                                 : target.ignite(100))) {
                     mc.level.playSound("random/click", target, .8f, 1f);
+                    swingHeldItem();
                 }
                 return;
             }
@@ -363,13 +423,12 @@ public class InputManager {
                                 instanceof
                                 net.classicremastered.minecraft.level.itemstack.SignItem sign
                         && selId == sign.id + 256) {
-                    sign.place(mc.player, ox, oy, oz, face);
+                    if (sign.place(mc.player, ox, oy, oz, face)) swingHeldItem();
                     return;
                 }
             }
 
-            // 2) RMB + Flint&Steel (allow alongside item swing; main loop still calls
-            // use())
+            // 2) RMB + Flint & Steel
             if (button == 1 && selId >= 256) {
                 int itemIdx = selId - 256;
                 if (itemIdx
@@ -377,13 +436,14 @@ public class InputManager {
                                 .id) {
                     int targetedId = mc.level.getTile(ox, oy, oz);
                     if (targetedId == Block.TNT.id) {
-                        net.classicremastered.minecraft.level.tile.TNTBlock.ignite(
-                                mc.level, ox, oy, oz, mc.player);
+                        if (net.classicremastered.minecraft.level.tile.TNTBlock.ignite(
+                                mc.level, ox, oy, oz, mc.player)) swingHeldItem();
                         return;
                     }
                     if (targetedId == Block.SNOW_LAYER.id) {
                         if (mc.level.setTile(ox, oy, oz, 0)) {
                             FireBlock.playExtinguishSound(mc.level, ox + .5f, oy + .5f, oz + .5f);
+                            swingHeldItem();
                         }
                         return;
                     }
@@ -432,6 +492,7 @@ public class InputManager {
                     if (mc.gamemode.tryPlaceBlock(mc.player, nx, ny, nz, Block.FIRE.id)) {
                         mc.level.playSound(
                                 "random/fuse", nx + 0.5f, ny + 0.5f, nz + 0.5f, 1.0f, 1.0f);
+                        swingHeldItem();
                     }
                     return;
                 }

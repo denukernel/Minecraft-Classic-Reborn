@@ -1,0 +1,13 @@
+{
+  "name": "tropical_fish",
+  "atlasW": 64,
+  "atlasH": 64,
+  "parts": [
+    {"name":"body","x":-1,"y":-3,"z":-3,"w":2,"h":6,"d":6,"posX":0,"posY":0,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":0,"v":0},
+    {"name":"tail","x":0,"y":-3,"z":0,"w":0,"h":6,"d":5,"posX":0,"posY":0,"posZ":3,"pitch":0,"yaw":0,"roll":0,"animYaw":"0.42 * sin(ageInTicks * 0.6)","u":16,"v":0},
+    {"name":"right_fin","x":-2,"y":0,"z":0,"w":2,"h":2,"d":0,"posX":-1,"posY":1,"posZ":0,"pitch":0,"yaw":0.7853982,"roll":0,"animRoll":"0 - 0.35 * sin(ageInTicks * 0.45)","u":26,"v":0},
+    {"name":"left_fin","x":0,"y":0,"z":0,"w":2,"h":2,"d":0,"posX":1,"posY":1,"posZ":0,"pitch":0,"yaw":-0.7853982,"roll":0,"animRoll":"0 + 0.35 * sin(ageInTicks * 0.45)","u":30,"v":0},
+    {"name":"top_fin","x":0,"y":-4,"z":0,"w":0,"h":4,"d":6,"posX":0,"posY":-3,"posZ":-3,"pitch":0,"yaw":0,"roll":0,"u":34,"v":0},
+    {"name":"bottom_fin","x":0,"y":0,"z":0,"w":0,"h":4,"d":6,"posX":0,"posY":3,"posZ":-3,"pitch":0,"yaw":0,"roll":0,"u":46,"v":0}
+  ]
+}

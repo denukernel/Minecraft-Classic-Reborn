@@ -18,6 +18,7 @@ public final class MobSpawner {
     public Level level;
     public static final int SPAWN_RADIUS = 48, DESPAWN_RADIUS = 128, LOCAL_MOB_CAP = 32;
     public static final int ANIMAL_CAP = 12;
+    private static final int FISH_CAP = 16;
     static final float HOSTILE_SPAWN_BRIGHTNESS = .45f;
 
     public MobSpawner(Level level) {
@@ -221,6 +222,19 @@ public final class MobSpawner {
         }
         // Initial seeding uses a finite work budget and one bounded population budget.
         int limit = Math.min(Math.max(0, batches), near == null ? 256 : 6);
+        int fishSlots =
+                biomes == null || !level.oceanBiomes || level.flatBiomes
+                        ? 0
+                        : FISH_CAP
+                                - (near == null
+                                        ? level.countInstanceOf(Fish.class)
+                                        : nearby(
+                                                centerX,
+                                                centerY,
+                                                centerZ,
+                                                0,
+                                                Fish.class,
+                                                DESPAWN_RADIUS));
         for (int batch = 0; batch < limit; batch++) {
             if (bar != null) bar.setProgress(batch * 100 / Math.max(1, limit - 1));
             int animals = population(centerX, centerY, centerZ, 0, near),
@@ -232,10 +246,12 @@ public final class MobSpawner {
                                     && (!allowHostiles
                                             || monsters >= monsterCap()
                                             || level.random.nextBoolean());
-            if (!golemCandidate
-                    && (animal
-                            ? animals >= ANIMAL_CAP
-                            : !allowHostiles || monsters >= monsterCap())) continue;
+            boolean landSlot =
+                    golemCandidate
+                            || (animal
+                                    ? animals < ANIMAL_CAP
+                                    : allowHostiles && monsters < monsterCap());
+            if (!landSlot && fishSlots <= 0) continue;
             boolean infinite =
                     level instanceof LevelInfiniteTerrain || level instanceof LevelInfiniteFlat;
             int x =
@@ -247,6 +263,16 @@ public final class MobSpawner {
                             ? level.random.nextInt(level.height)
                             : (int) Math.floor(centerZ) + level.random.nextInt(97) - 48;
             if (!inside(x, z)) continue;
+            if (fishSlots > 0) {
+                var biome = biomes.biomeAt(x, z);
+                if (biome == BiomeLevelGenerator.Biome.OCEAN
+                        || biome == BiomeLevelGenerator.Biome.DEEP_OCEAN) {
+                    int school = spawnFishSchool(biomes, biome, x, z, near, fishSlots);
+                    fishSlots -= school;
+                    spawned += school;
+                }
+            }
+            if (!landSlot) continue;
             ensureColumn(x, z);
             int guess = level.getHighestTile(x, z);
             if (!animal && level.random.nextInt(3) == 0)
@@ -321,6 +347,53 @@ public final class MobSpawner {
             }
         }
         return spawned;
+    }
+
+    private int spawnFishSchool(
+            BiomeLevelGenerator biomes,
+            BiomeLevelGenerator.Biome biome,
+            int x,
+            int z,
+            Entity near,
+            int slots) {
+        boolean deep = biome == BiomeLevelGenerator.Biome.DEEP_OCEAN;
+        int roll = level.random.nextInt(10);
+        short id =
+                deep
+                        ? (roll < 5 ? Salmon.REGISTRY_ID : Cod.REGISTRY_ID)
+                        : (roll < 2
+                                ? Pufferfish.REGISTRY_ID
+                                : roll < 7 ? TropicalFish.REGISTRY_ID : Cod.REGISTRY_ID);
+        int pack = id == Pufferfish.REGISTRY_ID ? 1 : 3 + level.random.nextInt(3);
+        int sea = Math.min(level.waterLevel, level.depth - 2);
+        int y = sea - 2 - level.random.nextInt(deep ? 10 : 4);
+        if (y < 2 || !range(x + .5f, y + .5f, z + .5f, near)) return 0;
+        Fish leader = null;
+        int count = 0;
+        for (int attempt = 0; attempt < pack * 3 && count < Math.min(slots, pack); attempt++) {
+            int sx = x + level.random.nextInt(5) - 2;
+            int sz = z + level.random.nextInt(5) - 2;
+            if (!inside(sx, sz) || biomes.biomeAt(sx, sz) != biome) continue;
+            ensureColumn(sx, sz);
+            if (!openOceanColumn(sx, y, sz, sea) || !range(sx + .5f, y + .5f, sz + .5f, near))
+                continue;
+            Mob mob = MobRegistry.create(id, level, sx + .5f, y + .5f, sz + .5f);
+            if (!(mob instanceof Fish fish)
+                    || !level.getCubes(fish.bb).isEmpty()
+                    || !level.isFree(fish.bb)) continue;
+            if (leader == null) leader = fish;
+            else fish.followSchool(leader);
+            level.addEntity(fish);
+            count++;
+        }
+        return count;
+    }
+
+    private boolean openOceanColumn(int x, int y, int z, int sea) {
+        for (int yy = y - 1; yy <= sea; yy++) {
+            if (!level.isWater(x, yy, z)) return false;
+        }
+        return hasOpenSky(x, sea, z);
     }
 
     private short zombieVariant(BiomeLevelGenerator.Biome biome, int x, int y, int z) {

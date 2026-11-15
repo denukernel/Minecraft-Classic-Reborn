@@ -64,29 +64,29 @@ public final class PhysicsGunItem extends ToolItem {
     }
 
     @Override
-    public void use(Player player, Level level) {
+    public boolean use(Player player, Level level) {
         if (player == null || level == null || level.isNetworkMode() || player.health <= 0 || player.level != level)
-            return;
+            return false;
         if (getGrabbedEntity(player) != null) {
             drop(player);
-            return;
+            return true;
         }
         Mob target = raycastMob(player, level);
         Entity loose = GunEntityDrag.pick(player, level,
                 target == null ? MAX_RANGE : GunEntityDrag.hitDistance(player, target));
         if (loose != null) {
             GunEntityDrag.grab(player, loose, 266);
-            return;
+            return true;
         }
         if (target == null) {
             level.playSound("random/click", player, .5f, .9f);
-            return;
+            return false;
         }
         if (grabbed.containsValue(target))
-            return;
+            return false;
         // The two tools must not apply competing forces to the same mob.
         if (GravityGunItem.grabbedMobs.containsValue(target)
-                || JockeyToolTarget.isGrappled(target, level)) return;
+                || JockeyToolTarget.isGrappled(target, level)) return false;
         grabbed.put(player, target);
         holdDist.put(player, Math.max(MIN_DISTANCE, Math.min(MAX_RANGE,
                 eye(player).distance(new Vec3D(target.x, (target.bb.y0 + target.bb.y1) * .5f, target.z)))));
@@ -96,6 +96,7 @@ public final class PhysicsGunItem extends ToolItem {
         target.xd = target.yd = target.zd = 0;
         target.fallDistance = 0;
         level.playSound("random/pop", target, .7f, 1.2f);
+        return true;
     }
 
     @Override

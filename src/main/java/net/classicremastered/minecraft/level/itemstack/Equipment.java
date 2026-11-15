@@ -67,17 +67,17 @@ public final class Equipment {
         }
 
         @Override
-        public void use(Player p, Level level) {
-            if (slot < 0 || level.isNetworkMode()) return;
+        public boolean use(Player p, Level level) {
+            if (slot < 0 || level.isNetworkMode()) return false;
             int selected = p.inventory.selected;
-            if (p.inventory.getSelected() != id + 256) return;
+            if (p.inventory.getSelected() != id + 256) return false;
             int previous = p.equipment[slot];
             int previousWear = wear(p, slot);
             int wear = p.inventory.armorWear(selected);
             if (!level.creativeMode) {
                 int count = p.inventory.getCount(selected);
                 if (count > 1) {
-                    if (previous > 0 && !p.inventory.addResource(previous, previousWear)) return;
+                    if (previous > 0 && !p.inventory.addResource(previous, previousWear)) return false;
                     p.inventory.removeSelected(1);
                 } else {
                     p.inventory.setIdCount(selected, previous, previous > 0 ? 1 : 0);
@@ -85,6 +85,7 @@ public final class Equipment {
                 }
             }
             equip(p, slot, id + 256, wear);
+            return true;
         }
     }
 

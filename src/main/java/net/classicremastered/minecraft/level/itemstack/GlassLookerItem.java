@@ -9,7 +9,8 @@ public class GlassLookerItem extends Item {
     }
 
     @Override
-    public void use(Player player, Level level) {
+    public boolean use(Player player, Level level) {
         // Handled in FOV setup inside Renderer
+        return true;
     }
 }

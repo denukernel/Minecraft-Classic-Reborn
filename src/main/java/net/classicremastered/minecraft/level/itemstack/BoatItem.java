@@ -19,7 +19,7 @@ public final class BoatItem extends Item {
     }
 
     @Override
-    public void use(Player player, Level level) {
+    public boolean use(Player player, Level level) {
         if (player == null
                 || level == null
                 || player.level != level
@@ -32,7 +32,7 @@ public final class BoatItem extends Item {
                 || player.minecraft == null
                 || player.minecraft.isOnline()
                 || player.inventory.getSelected() != ID + 256
-                || player.inventory.getCount(player.inventory.selected) <= 0) return;
+                || player.inventory.getCount(player.inventory.selected) <= 0) return false;
 
         float reach = player.minecraft.gamemode.getReachDistance();
         Vec3D start = new Vec3D(player.x, player.y, player.z);
@@ -40,32 +40,33 @@ public final class BoatItem extends Item {
         Vec3D end = start.add(direction.x * reach, direction.y * reach, direction.z * reach);
         MovingObjectPosition hit =
                 level.clip(new Vec3D(start.x, start.y, start.z), end, false, true);
-        if (hit == null) return;
+        if (hit == null) return false;
         LiquidType liquid = level.getLiquid(hit.x, hit.y, hit.z);
         float feet;
         if (liquid == LiquidType.WATER) {
             feet = LiquidBlock.waterSurface(level, hit.x, hit.y, hit.z) - .18f;
         } else {
             Block block = Block.blocks[level.getTile(hit.x, hit.y, hit.z)];
-            if (liquid != LiquidType.NOT_LIQUID || hit.face != 1 || block == null) return;
+            if (liquid != LiquidType.NOT_LIQUID || hit.face != 1 || block == null) return false;
             AABB solid = block.getCollisionBox(hit.x, hit.y, hit.z);
-            if (solid == null) return;
+            if (solid == null) return false;
             feet = solid.y1 + .001f;
         }
 
         BoatEntity boat = new BoatEntity(level, hit.vec.x, feet, hit.vec.z, player.yRot);
         if (!level.getCubes(boat.bb).isEmpty()
                 || level.containsLiquid(boat.bb, LiquidType.LAVA)
-                || player.bb.intersects(boat.bb)) return;
+                || player.bb.intersects(boat.bb)) return false;
         AABB path = player.bb.expand(hit.vec.x - start.x, hit.vec.y - start.y, hit.vec.z - start.z);
         for (Entity entity : level.blockMap.getEntities(player, path.grow(.2f, .2f, .2f))) {
             if (entity.isPickable() && entity.bb.grow(.1f, .1f, .1f).clip(start, hit.vec) != null)
-                return;
+                return false;
         }
         for (Entity entity : level.blockMap.getEntities(player, boat.bb)) {
-            if (entity.isPickable()) return;
+            if (entity.isPickable()) return false;
         }
         level.addEntity(boat);
         consumeSelected(player, level);
+        return true;
     }
 }

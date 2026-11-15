@@ -84,7 +84,7 @@ public class TextureManager {
                         }
                     }
 
-                    load(img, textureID);
+                    load(img, textureID, file.startsWith("/gui/hud/"));
                     textures.put(file, textureID);
 
                 } else if (file.endsWith(".zip")) {
@@ -146,8 +146,13 @@ public class TextureManager {
     }
 
     public void load(BufferedImage image, int textureID) {
+        load(image, textureID, false);
+    }
+
+    private void load(BufferedImage image, int textureID, boolean pixelExact) {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureID);
-        if (settings.smoothing > 0) {
+        int mipmapMode = pixelExact ? 0 : settings.smoothing;
+        if (mipmapMode > 0) {
             GL11.glTexParameteri(
                     GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST_MIPMAP_LINEAR);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
@@ -164,6 +169,10 @@ public class TextureManager {
         } else {
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+        }
+        if (pixelExact) {
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
         }
 
         // GL11.glTexEnvi(GL11.GL_TEXTURE_ENV, GL11.GL_TEXTURE_ENV_MODE,
@@ -211,32 +220,32 @@ public class TextureManager {
                 GL11.GL_UNSIGNED_BYTE,
                 textureBuffer);
 
-        if (settings.smoothing > 0) {
-            if (settings.smoothing == 1) {
+        if (mipmapMode > 0) {
+            if (mipmapMode == 1) {
                 ContextCapabilities capabilities = GLContext.getCapabilities();
 
                 if (capabilities.OpenGL30) {
-                    if (previousMipmapMode != settings.smoothing) {
+                    if (previousMipmapMode != mipmapMode) {
                         System.out.println("Using OpenGL 3.0 for mipmap generation.");
                     }
 
                     GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
                 } else if (capabilities.GL_EXT_framebuffer_object) {
-                    if (previousMipmapMode != settings.smoothing) {
+                    if (previousMipmapMode != mipmapMode) {
                         System.out.println(
                                 "Using GL_EXT_framebuffer_object extension for mipmap generation.");
                     }
 
                     EXTFramebufferObject.glGenerateMipmapEXT(GL11.GL_TEXTURE_2D);
                 } else if (capabilities.OpenGL14) {
-                    if (previousMipmapMode != settings.smoothing) {
+                    if (previousMipmapMode != mipmapMode) {
                         System.out.println("Using OpenGL 1.4 for mipmap generation.");
                     }
 
                     GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL14.GL_GENERATE_MIPMAP, GL11.GL_TRUE);
                 }
-            } else if (settings.smoothing == 2) {
-                if (previousMipmapMode != settings.smoothing) {
+            } else if (mipmapMode == 2) {
+                if (previousMipmapMode != mipmapMode) {
                     System.out.println("Using custom system for mipmap generation.");
                 }
 
@@ -244,7 +253,7 @@ public class TextureManager {
             }
         }
 
-        previousMipmapMode = settings.smoothing;
+        if (!pixelExact) previousMipmapMode = mipmapMode;
     }
 
     // TextureManager.java

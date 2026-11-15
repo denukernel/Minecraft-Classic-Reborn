@@ -113,6 +113,8 @@ public class ResourceDownloadThread extends Thread {
                 registerBundledSound(sm, "mob/villager/death.ogg");
                 registerBundledSound(sm, "item/ender_pearl/throw.ogg");
                 registerBundledSound(sm, "item/ender_pearl/teleport.ogg");
+                for (int i = 1; i <= 3; i++) registerBundledSound(sm, "item/food/eat" + i + ".ogg");
+                registerBundledSound(sm, "item/food/burp.ogg");
                 registerBundledSound(sm, "block/glass/break.wav");
                 registerBundledSound(sm, "item/gravity_gun/grab.wav");
                 registerBundledSound(sm, "item/gravity_gun/drop.wav");

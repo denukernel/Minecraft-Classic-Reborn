@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.particle.FoodParticle;
 import net.classicremastered.minecraft.particle.Particle;
 import net.classicremastered.minecraft.particle.ParticleManager;
 import net.classicremastered.minecraft.phys.AABB;
@@ -99,6 +100,16 @@ final class ClientFrameRenderer {
                     CameraView camera = r.prepareCamera(renderPartial, System.nanoTime());
                     Vec3D eye = camera.position();
                     LiquidType cameraLiquid = mc.level.getLiquidAt(eye.x, eye.y, eye.z);
+                    r2.updateWaterVision(cameraLiquid);
+                    float waterLight =
+                            cameraLiquid == LiquidType.WATER
+                                    ? .45f
+                                            + .55f
+                                                    * mc.level.getBrightness(
+                                                            MathHelper.floor(eye.x),
+                                                            MathHelper.floor(eye.y),
+                                                            MathHelper.floor(eye.z))
+                                    : 1f;
                     int stereoEye = 0;
                     while (true) {
                         if (stereoEye >= 2) {
@@ -132,9 +143,9 @@ final class ClientFrameRenderer {
                         r2.fogBlue *= r2.fogColorMultiplier;
 
                         if (cameraLiquid == LiquidType.WATER) {
-                            r2.fogRed = 0.02F;
-                            r2.fogGreen = 0.02F;
-                            r2.fogBlue = 0.2F;
+                            r2.fogRed = .045f * waterLight;
+                            r2.fogGreen = .17f * waterLight;
+                            r2.fogBlue = .26f * waterLight;
                         } else if (cameraLiquid == LiquidType.LAVA) {
                             r2.fogRed = 0.6F;
                             r2.fogGreen = 0.1F;
@@ -214,6 +225,10 @@ final class ClientFrameRenderer {
                         // Common path: this dispatches to your LevelRenderer logic.
                         // For finite: uses chunkCache. For infinite: uses your SimpleChunkManager
                         // path.
+                        if (cameraLiquid == LiquidType.WATER) {
+                            r2.updateFog(cameraLiquid);
+                            GL11.glEnable(GL11.GL_FOG);
+                        }
                         lr.sortChunks(camPlayer, 0, renderPartial);
                         if (!fabulous) lr.renderOpaqueGlass(camPlayer, renderPartial);
 
@@ -549,6 +564,10 @@ final class ClientFrameRenderer {
             for (int pass = 0; pass < manager.particles.length; pass++) {
                 var particles = manager.particles[pass];
                 if (particles.isEmpty()) continue;
+                if (pass == ParticleManager.FOOD_PASS) {
+                    renderFoodParticles(manager, partial, right, up);
+                    continue;
+                }
                 String texture =
                         switch (pass) {
                             case 0 -> "/particles.png";
@@ -568,5 +587,22 @@ final class ClientFrameRenderer {
         } finally {
             GL11.glPopAttrib();
         }
+    }
+
+    private static void renderFoodParticles(
+            ParticleManager manager, float partial, Vec3D right, Vec3D up) {
+        ShapeRenderer shape = ShapeRenderer.instance;
+        String bound = null;
+        for (Object entry : manager.particles[ParticleManager.FOOD_PASS]) {
+            FoodParticle particle = (FoodParticle) entry;
+            if (!particle.texture().equals(bound)) {
+                if (bound != null) shape.end();
+                bound = particle.texture();
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, manager.textureManager.load(bound));
+                shape.begin();
+            }
+            particle.render(shape, partial, right, up);
+        }
+        if (bound != null) shape.end();
     }
 }

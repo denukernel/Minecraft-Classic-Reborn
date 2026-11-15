@@ -48,8 +48,8 @@ public class BucketItem extends ToolItem {
     }
 
     @Override
-    public void use(Player player, Level level) {
-        if (player == null || level == null) return;
+    public boolean use(Player player, Level level) {
+        if (player == null || level == null) return false;
 
         // Custom raycast that checks for liquid blocks
         float yaw = player.aimYaw(1f), pitch = player.xRot;
@@ -64,7 +64,7 @@ public class BucketItem extends ToolItem {
         Vec3D end = start.add(lx * reach, ly * reach, lz * reach);
 
         MovingObjectPosition sel = level.clip(start, end, false, true);
-        if (sel == null || sel.entityPos != 0) return; // Must hit a block or liquid
+        if (sel == null || sel.entityPos != 0) return false; // Must hit a block or liquid
 
         int x = sel.x;
         int y = sel.y;
@@ -78,15 +78,17 @@ public class BucketItem extends ToolItem {
             int tile = level.getTile(x, y, z);
             if ((tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)
                     && (!LiquidBlock.usesLevelledFlow(level) || level.getFlowLevel(x, y, z) == 0)) {
-                level.setTile(x, y, z, 0); // Remove water
+                if (!level.setTile(x, y, z, 0)) return false;
                 level.playSound("random/pop", player, 0.5f, 1.0f);
                 if (!level.creativeMode)
                     player.inventory.slots[slot] = Item.BUCKET_WATER.id + 256;
+                return true;
             } else if (tile == Block.LAVA.id || tile == Block.STATIONARY_LAVA.id) {
-                level.setTile(x, y, z, 0); // Remove lava
+                if (!level.setTile(x, y, z, 0)) return false;
                 level.playSound("random/pop", player, 0.5f, 0.8f);
                 if (!level.creativeMode)
                     player.inventory.slots[slot] = Item.BUCKET_LAVA.id + 256;
+                return true;
             }
         } else {
             // Place liquid
@@ -111,13 +113,15 @@ public class BucketItem extends ToolItem {
                         ? (LiquidBlock.usesLevelledFlow(level) ? Block.STATIONARY_WATER.id : Block.WATER.id)
                         : Block.LAVA.id;
                 if (!level.setTile(nx, ny, nz, placeTile)) {
-                    return;
+                    return false;
                 }
 
                 level.playSound("random/pop", player, 0.5f, 1.0f);
                 if (!level.creativeMode)
                     player.inventory.slots[slot] = Item.BUCKET_EMPTY.id + 256;
+                return true;
             }
         }
+        return false;
     }
 }

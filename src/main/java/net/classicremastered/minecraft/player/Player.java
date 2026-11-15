@@ -659,7 +659,7 @@ public class Player extends Mob {
             poisonCounter++;
             if (poisonCounter >= poisonEvery) {
                 poisonCounter = 0;
-                this.hurt(null, 1, "magic");
+                if (health > 1) this.hurt(null, 1, "magic");
             }
             poisonTicks--;
         }

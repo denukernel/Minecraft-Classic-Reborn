@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.mob.Defender;
+import net.classicremastered.minecraft.mob.Fish;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.MobRegistry;
 import net.classicremastered.minecraft.mob.TurretVariant;
@@ -93,6 +94,7 @@ public class SpawnMobCommand implements Command, AliasedCommand {
                 turret.setGuardPost();
             }
             if (mob instanceof Defender defender) defender.owner = owner;
+            if (mob instanceof Fish) mob.persistent = true;
             return mob;
         }
 

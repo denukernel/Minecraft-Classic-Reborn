@@ -231,6 +231,17 @@ public final class HUDScreen extends Screen {
         }
     }
 
+    private void drawHudSprite(int texture, int x, int y, int size) {
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+        ShapeRenderer sr = ShapeRenderer.instance;
+        sr.begin();
+        sr.vertexUV(x, y + size, imgZ, 0, 1);
+        sr.vertexUV(x + size, y + size, imgZ, 1, 1);
+        sr.vertexUV(x + size, y, imgZ, 1, 0);
+        sr.vertexUV(x, y, imgZ, 0, 0);
+        sr.end();
+    }
+
     public final void render(float partial, boolean mouseOver, int mx, int my) {
         FontRenderer font = this.mc.fontRenderer;
         this.mc.renderer.enableGuiMode();
@@ -243,7 +254,6 @@ public final class HUDScreen extends Screen {
 
         // cache texture ids once per frame
         final int TEX_GUI = tm.load("/gui/gui.png");
-        final int TEX_ICONS = tm.load("/gui/icons.png");
         final int TEX_TERR =
                 tm.load(net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE);
 
@@ -252,24 +262,24 @@ public final class HUDScreen extends Screen {
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
         // --------------------------------------------------------------------
-        // SURVIVAL HUD (hearts + air) ==> icons.png
+        // SURVIVAL HUD (hearts + air)
         // --------------------------------------------------------------------
         if (this.mc.gamemode.isSurvival()) {
             Player player = this.mc.player;
-
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
-
-            // icons.png UVs (9x9 quads)
-            final int U_HEART_BG = 16, V_HEART_BG = 0; // empty container
-            final int U_HEART_FULL = 52, V_HEART_FULL = 0;
-            final int U_HEART_HALF = 61, V_HEART_HALF = 0;
-            final int U_BUBBLE_FULL = 16, V_BUBBLE_FULL = 18;
-            final int U_BUBBLE_PART = 25, V_BUBBLE_PART = 18;
 
             int health = Math.max(0, Math.min(20, player.health)); // 0..20 half-hearts
             updateHeartDisplay(player, health);
             int blinkTicks = healthBlinkUntil - ticks;
             boolean hurtFlash = blinkTicks > 0 && blinkTicks / 3 % 2 == 1;
+            int heartContainer =
+                    tm.load(
+                            hurtFlash
+                                    ? "/gui/hud/heart_empty_blink.png"
+                                    : "/gui/hud/heart_empty.png");
+            int heartFull = tm.load("/gui/hud/heart_full.png");
+            int heartHalf = tm.load("/gui/hud/heart_half.png");
+            int heartFullBlink = hurtFlash ? tm.load("/gui/hud/heart_full_blink.png") : 0;
+            int heartHalfBlink = hurtFlash ? tm.load("/gui/hud/heart_half_blink.png") : 0;
 
             // hearts (10 slots)
             for (int i = 0; i < 10; i++) {
@@ -277,22 +287,22 @@ public final class HUDScreen extends Screen {
                 int y = this.height - 32 + (health <= 4 ? (ticks ^ (i * 17 + ticks / 3)) & 1 : 0);
 
                 // empty container
-                this.drawImage(x, y, hurtFlash ? U_HEART_BG + 9 : U_HEART_BG, V_HEART_BG, 9, 9);
+                drawHudSprite(heartContainer, x, y, 9);
 
                 // damage flash overlay uses lastHealth
                 if (hurtFlash) {
                     if ((i * 2 + 1) < displayHealth) {
-                        this.drawImage(x, y, U_HEART_FULL + 18, V_HEART_FULL, 9, 9);
+                        drawHudSprite(heartFullBlink, x, y, 9);
                     } else if ((i * 2 + 1) == displayHealth) {
-                        this.drawImage(x, y, U_HEART_HALF + 18, V_HEART_HALF, 9, 9);
+                        drawHudSprite(heartHalfBlink, x, y, 9);
                     }
                 }
 
                 // current health
                 if ((i * 2 + 1) < health) {
-                    this.drawImage(x, y, U_HEART_FULL, V_HEART_FULL, 9, 9);
+                    drawHudSprite(heartFull, x, y, 9);
                 } else if ((i * 2 + 1) == health) {
-                    this.drawImage(x, y, U_HEART_HALF, V_HEART_HALF, 9, 9);
+                    drawHudSprite(heartHalf, x, y, 9);
                 }
             }
 
@@ -301,15 +311,13 @@ public final class HUDScreen extends Screen {
                 int full = (int) Math.ceil((player.airSupply - 2) * 10.0 / 300.0);
                 int part = (int) Math.ceil(player.airSupply * 10.0 / 300.0) - full;
                 int total = Math.max(0, Math.min(10, full + part));
+                int airFull = tm.load("/gui/hud/air_full.png");
+                int airPartial = tm.load("/gui/hud/air_partial.png");
 
                 for (int i = 0; i < total; i++) {
                     int x = this.width / 2 - 91 + i * 8;
                     int y = this.height - 32 - 9;
-                    if (i < full) {
-                        this.drawImage(x, y, U_BUBBLE_FULL, V_BUBBLE_FULL, 9, 9);
-                    } else {
-                        this.drawImage(x, y, U_BUBBLE_PART, V_BUBBLE_PART, 9, 9);
-                    }
+                    drawHudSprite(i < full ? airFull : airPartial, x, y, 9);
                 }
             }
         }
@@ -328,10 +336,9 @@ public final class HUDScreen extends Screen {
                     24, 22);
 
             // --------------------------------------------------------------------
-            // Crosshair ==> icons.png
+            // Crosshair
             // --------------------------------------------------------------------
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
-            this.drawImage(this.width / 2 - 7, this.height / 2 - 7, 0, 0, 16, 16);
+            drawHudSprite(tm.load("/gui/hud/crosshair.png"), width / 2 - 7, height / 2 - 7, 16);
             if (mc.currentScreen == null && mc.input != null) {
                 float charge = mc.input.attackCharge(partial);
                 if (charge < 1) {
@@ -380,9 +387,6 @@ public final class HUDScreen extends Screen {
                     sr.begin();
                     Block.blocks[id].renderFullbright(sr);
                     sr.end();
-
-                    // restore icons for subsequent 2D HUD draws if any
-                    GL11.glBindTexture(GL11.GL_TEXTURE_2D, TEX_ICONS);
                 } else if (id >= 256) {
                     int itemId = id - 256;
                     if (itemId >= 0 && itemId < Item.items.length) {

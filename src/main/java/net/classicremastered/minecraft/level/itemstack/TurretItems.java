@@ -61,7 +61,7 @@ public final class TurretItems {
                 || net.classicremastered.minecraft.mob.TurretVariant.fromItem(raw) != null;
     }
 
-    public static void place(Player player, int x, int y, int z, int face, int raw) {
+    public static boolean place(Player player, int x, int y, int z, int face, int raw) {
         Level level = player.level;
         boolean packed = raw == PACKED + 256;
         var crate = player.inventory.crate(player.inventory.selected);
@@ -76,7 +76,7 @@ public final class TurretItems {
                 || face != 1
                 || !level.isInBounds(x, y + 1, z)
                 || packed && crate == null) {
-            return;
+            return false;
         }
         Block support = Block.blocks[level.getTile(x, y, z)];
         boolean water = level.isWater(x, y, z);
@@ -84,36 +84,36 @@ public final class TurretItems {
                 || (water
                         ? variant != net.classicremastered.minecraft.mob.TurretVariant.HARPOON
                         : !support.isCube() && support != Block.SLAB)) {
-            return;
+            return false;
         }
         float feet = y + (support == Block.SLAB ? .5f : 1f);
         CrossbowTurret turret = new CrossbowTurret(level, x + .5f, feet + .875f, z + .5f);
         if (occupied(level, turret) || !level.getCubes(turret.bb).isEmpty()) {
-            return;
+            return false;
         }
-        finishPlacement(player, raw, turret, variant, crate);
+        return finishPlacement(player, raw, turret, variant, crate);
     }
 
-    public static void place(Player player, BoatEntity boat, int raw) {
+    public static boolean place(Player player, BoatEntity boat, int raw) {
         Level level = player.level;
         if (level != boat.level
                 || level.isNetworkMode()
                 || level.blockMap == null
                 || player.inventory.getSelected() != raw
-                || player.inventory.getCount(player.inventory.selected) <= 0) return;
+                || player.inventory.getCount(player.inventory.selected) <= 0) return false;
         var crate = player.inventory.crate(player.inventory.selected);
         var variant =
                 raw == PACKED + 256 && crate != null
                         ? net.classicremastered.minecraft.mob.TurretVariant.fromSave(
                                 crate.variantId())
                         : net.classicremastered.minecraft.mob.TurretVariant.fromItem(raw);
-        if (variant == null) return;
+        if (variant == null) return false;
         CrossbowTurret turret = new CrossbowTurret(level, boat.x, boat.y, boat.z);
         turret.mount(boat);
-        if (turret.riding == boat) finishPlacement(player, raw, turret, variant, crate);
+        return turret.riding == boat && finishPlacement(player, raw, turret, variant, crate);
     }
 
-    private static void finishPlacement(
+    private static boolean finishPlacement(
             Player player,
             int raw,
             CrossbowTurret turret,
@@ -121,7 +121,7 @@ public final class TurretItems {
             PackedTurret crate) {
         if (player.inventory.getSelected() != raw
                 || player.inventory.getCount(player.inventory.selected) <= 0) {
-            return;
+            return false;
         }
         turret.variant = variant;
         turret.owner = CrossbowTurret.playerName(player);
@@ -134,6 +134,7 @@ public final class TurretItems {
         if (packed || !player.level.creativeMode) {
             player.inventory.removeSelected(1);
         }
+        return true;
     }
 
     private static boolean occupied(Level level, CrossbowTurret turret) {
@@ -145,28 +146,31 @@ public final class TurretItems {
         return false;
     }
 
-    public static void interact(Player player, CrossbowTurret turret, int raw) {
-        if (!turret.canControl(player)) {
-            return;
-        }
+    public static boolean interact(Player player, CrossbowTurret turret, int raw) {
+        if (!turret.canControl(player)) return false;
         if (raw == HEAD + 256) {
-            turret.attachHead(player);
+            return turret.attachHead(player);
         } else if (raw == CONTROL + 256 && player.minecraft != null) {
             if (turret.hasHead()) {
                 player.minecraft.setCurrentScreen(
                         new net.classicremastered.minecraft.gui.TurretControlScreen(turret));
+                return true;
             } else if (player.minecraft.hud != null) {
                 player.minecraft.hud.addChat("&cMissing turret head. Reattach a recovered head.");
             }
+            return false;
         } else if (upgradeIndex(raw) >= 0) {
-            turret.changeUpgrade(player, upgradeIndex(raw), true);
+            return turret.changeUpgrade(player, upgradeIndex(raw), true);
         } else if (raw == REPAIR + 256 && turret.health < turret.maxHealth()) {
             if (player.level.creativeMode || player.inventory.removeResource(raw)) {
                 turret.health = Math.min(turret.maxHealth(), turret.health + 10);
+                return true;
             }
-        } else {
-            turret.loadAmmo(player, raw);
+            return false;
         }
+        int previousAmmo = turret.ammo;
+        turret.loadAmmo(player, raw);
+        return turret.ammo > previousAmmo;
     }
 
     public static void migrateLegacyCrate(Player player) {

@@ -1,0 +1,13 @@
+{
+  "name": "pufferfish",
+  "atlasW": 64,
+  "atlasH": 64,
+  "parts": [
+    {"name":"body","x":-1.5,"y":-2,"z":-1.5,"w":3,"h":2,"d":3,"posX":0,"posY":1,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":0,"v":39},
+    {"name":"right_eye","x":-1.5,"y":0,"z":-1.5,"w":1,"h":1,"d":1,"posX":0,"posY":-2,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":12,"v":39},
+    {"name":"left_eye","x":0.5,"y":0,"z":-1.5,"w":1,"h":1,"d":1,"posX":0,"posY":-2,"posZ":0,"pitch":0,"yaw":0,"roll":0,"u":16,"v":39},
+    {"name":"back_fin","x":-1.5,"y":0,"z":0,"w":3,"h":0,"d":3,"posX":0,"posY":0,"posZ":1.5,"pitch":0,"yaw":0,"roll":0,"u":20,"v":39},
+    {"name":"right_fin","x":-1,"y":0,"z":0,"w":1,"h":0,"d":2,"posX":-1.5,"posY":0,"posZ":-1.5,"pitch":0,"yaw":0,"roll":0,"animRoll":"0 - 0.35 * sin(ageInTicks * 0.45)","u":32,"v":39},
+    {"name":"left_fin","x":0,"y":0,"z":0,"w":1,"h":0,"d":2,"posX":1.5,"posY":0,"posZ":-1.5,"pitch":0,"yaw":0,"roll":0,"animRoll":"0 + 0.35 * sin(ageInTicks * 0.45)","u":38,"v":39}
+  ]
+}

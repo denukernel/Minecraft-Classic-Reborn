@@ -1,6 +1,7 @@
 // File: com/mojang/minecraft/model/HumanoidModel.java
 package net.classicremastered.minecraft.model;
 
+import net.classicremastered.minecraft.render.HeldItemRenderer;
 import net.classicremastered.util.MathHelper;
 
 public class HumanoidModel extends Model {
@@ -200,6 +201,13 @@ public class HumanoidModel extends Model {
     public void renderHoldingItem(float scale, float pose) {
         rightArm.pitch = rightArm.pitch * .5f - (float) Math.PI / 10;
         applySwordPose(pose);
+        float eating = HeldItemRenderer.eatingTime(developerPlayer, renderPartial);
+        if (eating >= 0) {
+            float lift = HeldItemRenderer.eatingLift(eating);
+            float bitePitch = -1.75f + head.pitch * .45f - HeldItemRenderer.eatingBob(eating);
+            rightArm.pitch += (bitePitch - rightArm.pitch) * lift;
+            rightArm.yaw -= .45f * lift;
+        }
         renderParts(scale);
     }
 

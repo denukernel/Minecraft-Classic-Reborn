@@ -38,7 +38,7 @@ public final class MobWandItem extends Item {
         };
     }
 
-    public void apply(Player player, Mob target) {
+    public boolean apply(Player player, Mob target) {
         if (player == null
                 || target == null
                 || target instanceof Player
@@ -46,7 +46,7 @@ public final class MobWandItem extends Item {
                 || target.health <= 0
                 || target.removed
                 || player.level.isNetworkMode()
-                || !player.level.creativeMode) return;
+                || !player.level.creativeMode) return false;
         if (player.mobWandSelections == null) player.mobWandSelections = new HashMap<>();
         List<Mob> group = player.mobWandSelections.computeIfAbsent(id, key -> new ArrayList<>());
         group.removeIf(mob -> mob.removed || mob.health <= 0 || mob.level != player.level);
@@ -92,11 +92,13 @@ public final class MobWandItem extends Item {
                             + "&7: "
                             + instructions()
                             + (group.isEmpty() ? "" : " (" + group.size() + " selected)"));
+        return true;
     }
 
     @Override
-    public void use(Player player, Level level) {
-        if (player == null || player.minecraft == null || player.minecraft.selected == null) return;
-        if (player.minecraft.selected.entity instanceof Mob mob) apply(player, mob);
+    public boolean use(Player player, Level level) {
+        if (player == null || player.minecraft == null || player.minecraft.selected == null)
+            return false;
+        return player.minecraft.selected.entity instanceof Mob mob && apply(player, mob);
     }
 }

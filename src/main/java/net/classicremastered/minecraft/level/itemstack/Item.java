@@ -101,8 +101,10 @@ public class Item {
     }
 
     // --- Behavior hooks ---
-    /** Right-click action (food, bow draw, etc). */
-    public void use(Player player, Level level) {}
+    /** Returns whether a right-click action was performed. */
+    public boolean use(Player player, Level level) {
+        return false;
+    }
 
     protected final void consumeSelected(Player player, Level level) {
         if (player == null || level == null || level.creativeMode || level.isNetworkMode()) return;

@@ -15,11 +15,12 @@ public class BowItem extends ToolItem {
     }
 
     @Override
-    public void use(Player player, Level level) {
+    public boolean use(Player player, Level level) {
         if (player == null || level == null || player.health <= 0 || player.removed)
-            return;
+            return false;
         drawing.put(player, 0);
         active = new WeakReference<>(player);
+        return true;
     }
 
     @Override

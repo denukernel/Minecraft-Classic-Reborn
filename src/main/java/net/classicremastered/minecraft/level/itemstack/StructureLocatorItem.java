@@ -37,14 +37,14 @@ public final class StructureLocatorItem extends Item {
     }
 
     @Override
-    public void use(Player player, Level level) {
+    public boolean use(Player player, Level level) {
         if (player == null
                 || level == null
                 || player.minecraft == null
-                || player.minecraft.hud == null) return;
+                || player.minecraft.hud == null) return false;
         if (level.isNetworkMode()) {
             player.minecraft.hud.addChat("&eStructure scanning is available in local worlds.");
-            return;
+            return false;
         }
         Location found = scan(level, player.x, player.z);
         level.playSound("random/click", player, .6f, 1.4f);
@@ -59,6 +59,7 @@ public final class StructureLocatorItem extends Item {
                                 found.y,
                                 found.z,
                                 Math.hypot(found.x - player.x, found.z - player.z)));
+        return true;
     }
 
     Location scan(Level level, float x, float z) {

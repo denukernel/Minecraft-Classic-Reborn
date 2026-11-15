@@ -1,8 +1,5 @@
 package net.classicremastered.minecraft.level.itemstack;
 
-import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.player.Player;
-
 /** Base class for non-stackable tools (maxStackSize=1). */
 public class ToolItem extends Item {
     public enum Kind {
@@ -69,11 +66,5 @@ public class ToolItem extends Item {
                     default -> false;
                 };
         return effective ? material.speed : 1;
-    }
-
-    @Override
-    public void use(Player player, Level level) {
-        // Tools don't do a right-click action by default.
-        // Attack/mining behavior is handled in click/mining code.
     }
 }

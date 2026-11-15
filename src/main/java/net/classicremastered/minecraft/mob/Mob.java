@@ -202,7 +202,7 @@ public abstract class Mob extends Entity {
         return (min == max) ? min : (min + level.random.nextFloat() * (max - min));
     }
 
-    // idle timing
+    private static final int IDLE_SOUND_INTERVAL = 80;
     private int idleSoundDelay = 0;
 
     /** Keep entities pickable so the ray can select them in Creative and Survival. */
@@ -280,7 +280,7 @@ public abstract class Mob extends Entity {
                     float pitch = randPitch(idlePitchMin, idlePitchMax);
                     this.level.playSound(this.soundIdle, this, 1.0F, pitch);
                 }
-                idleSoundDelay = 80; // 80 ticks ≈ 4 seconds at 20 TPS
+                idleSoundDelay = IDLE_SOUND_INTERVAL;
             }
         }
         this.oTilt = this.tilt;
@@ -314,7 +314,7 @@ public abstract class Mob extends Entity {
         // ===== Normal living logic =====
 
         // fluids / damage
-        if (!(this instanceof StickFigure || this instanceof Skeleton) && this.isUnderWater()) {
+        if (!canBreatheUnderwater() && this.isUnderWater()) {
             if (this.airSupply > 0) {
                 --this.airSupply;
             }
@@ -426,6 +426,10 @@ public abstract class Mob extends Entity {
         if (!this.horizontalCollision) {
             this.ySlideOffset *= 0.6F;
         }
+    }
+
+    protected boolean canBreatheUnderwater() {
+        return this instanceof StickFigure || this instanceof Skeleton;
     }
 
     public void aiStep() {
@@ -885,7 +889,7 @@ public abstract class Mob extends Entity {
         }
 
         Equipment.damageArmor(this, armorDamage);
-        playHurtSound();
+        if (freshHit) playHurtSound();
 
         this.hurtDir = 0.0F;
         if (src != null) {
@@ -1063,6 +1067,7 @@ public abstract class Mob extends Entity {
 
     public void playHurtSound() {
         if (health <= 0 || dead || removed || level == null) return;
+        idleSoundDelay = IDLE_SOUND_INTERVAL;
         if (level.minecraft != null
                 && level.minecraft.settings != null
                 && !level.minecraft.settings.allowMobSounds) return;

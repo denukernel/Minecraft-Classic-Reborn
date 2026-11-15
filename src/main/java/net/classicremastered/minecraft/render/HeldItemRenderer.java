@@ -66,6 +66,10 @@ public final class HeldItemRenderer {
                 displayId >= 256 && displayId - 256 < Item.items.length
                         ? Item.items[displayId - 256]
                         : null;
+        float eating =
+                selected == player.inventory.getSelected() && item instanceof FoodItem
+                        ? eatingTime(player, partial)
+                        : -1;
 
         GL11.glPushMatrix();
         try {
@@ -94,7 +98,13 @@ public final class HeldItemRenderer {
             }
 
             GL11.glTranslatef(.56f, -.52f - equipDrop, -.72f);
-            if (block != null && powers.aimingBlock(player)) {
+            if (eating >= 0) {
+                float lift = eatingLift(eating);
+                GL11.glTranslatef(-.42f * lift, .16f * lift + eatingBob(eating), -.15f * lift);
+                GL11.glRotatef(50 * lift, 0, 1, 0);
+                GL11.glRotatef(-12 * lift, 1, 0, 0);
+                GL11.glRotatef(-12 * lift, 0, 0, 1);
+            } else if (block != null && powers.aimingBlock(player)) {
                 GL11.glTranslatef(-.10f, .28f, -.35f);
                 GL11.glRotatef(-18, 1, 0, 0);
             } else if (item instanceof BowItem bow && bow.isDrawing(player)) {
@@ -145,6 +155,21 @@ public final class HeldItemRenderer {
         } finally {
             GL11.glPopMatrix();
         }
+    }
+
+    public static float eatingTime(Player player, float partial) {
+        return player == null || player.minecraft == null || player.minecraft.input == null
+                ? -1
+                : player.minecraft.input.eatingTime(player, partial);
+    }
+
+    public static float eatingLift(float elapsed) {
+        float remaining = Math.max(0, 1 - elapsed / FoodItem.EAT_TICKS);
+        return 1 - (float) Math.pow(remaining, 27);
+    }
+
+    public static float eatingBob(float elapsed) {
+        return elapsed < 7 ? 0 : .08f * (float) Math.abs(Math.cos(elapsed * Math.PI / 4));
     }
 
     private static void renderKick(

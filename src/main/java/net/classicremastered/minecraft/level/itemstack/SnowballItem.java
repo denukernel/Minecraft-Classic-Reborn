@@ -10,10 +10,11 @@ public final class SnowballItem extends Item {
     }
 
     @Override
-    public void use(Player player, Level level) {
-        if (player == null || level == null || level.isNetworkMode()) return;
+    public boolean use(Player player, Level level) {
+        if (player == null || level == null || level.isNetworkMode()) return false;
 
         level.addEntity(new ThrownSnowball(level, player));
         consumeSelected(player, level);
+        return true;
     }
 }

@@ -51,6 +51,12 @@ public final class ModelManager {
     private IronmockModel ironmock = new IronmockModel();
     private HouseVandalizerModel houseVandalizer = new HouseVandalizerModel();
     private StickFigureModel stickFigure = new StickFigureModel();
+    private final FishModel cod = new FishModel("cod");
+    private final FishModel salmon = new FishModel("salmon");
+    private final FishModel tropicalFish = new FishModel("tropical_fish");
+    private final FishModel pufferfish = new FishModel("pufferfish");
+    private final FishModel pufferfishMid = new FishModel("pufferfish_mid");
+    private final FishModel pufferfishFull = new FishModel("pufferfish_full");
 
     public final Model getModel(String key) {
         if (key == null) return null;
@@ -93,6 +99,18 @@ public final class ModelManager {
 
             case "cow":
                 return cow;
+            case "cod":
+                return cod;
+            case "salmon":
+                return salmon;
+            case "tropical_fish":
+                return tropicalFish;
+            case "pufferfish":
+                return pufferfish;
+            case "pufferfish_mid":
+                return pufferfishMid;
+            case "pufferfish_full":
+                return pufferfishFull;
             case "pig":
                 return this.pig;
             case "sheep":

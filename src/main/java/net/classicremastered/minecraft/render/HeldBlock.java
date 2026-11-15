@@ -15,6 +15,11 @@ public class HeldBlock
 	public Block block = null;
     private int renderedId = Integer.MIN_VALUE;
 
+    public void swing() {
+        offset = -1;
+        moving = true;
+    }
+
     public int getRenderedId(int selected) {
         return renderedId == Integer.MIN_VALUE ? selected : renderedId;
     }

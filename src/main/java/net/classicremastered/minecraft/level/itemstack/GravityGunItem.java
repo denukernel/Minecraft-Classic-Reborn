@@ -116,12 +116,12 @@ public final class GravityGunItem extends ToolItem {
     }
 
     @Override
-    public void use(Player p, Level level) {
-        if (!canFire(p, level)) return;
+    public boolean use(Player p, Level level) {
+        if (!canFire(p, level)) return false;
         if (isHoldingAnything(p)) {
             dropGently(p);
             level.playSound(SOUND + "drop", p, .8f, 1f);
-            return;
+            return true;
         }
         Vec3D start = eye(p), d = look(p);
         MovingObjectPosition wall = pickWall(level, start, d);
@@ -148,7 +148,7 @@ public final class GravityGunItem extends ToolItem {
         if (loose != null) {
             GunEntityDrag.grab(p, loose, RAW_ID);
             level.playSound(SOUND + "grab", p, .8f, 1f);
-            return;
+            return true;
         }
         if (hit != null) {
             Mob target = hit.body();
@@ -158,7 +158,7 @@ public final class GravityGunItem extends ToolItem {
             target.xd = target.yd = target.zd = 0;
             holdDists.put(p, Math.max(2.5f, nearest));
             level.playSound(SOUND + "grab", p, .8f, 1f);
-            return;
+            return true;
         }
         if (wall != null && canGrabBlock(level.getTile(wall.x, wall.y, wall.z))) {
             int id = level.getTile(wall.x, wall.y, wall.z);
@@ -174,7 +174,7 @@ public final class GravityGunItem extends ToolItem {
                             || wall.x == level.width - 1
                             || wall.z == level.height - 1)
                     && wall.y >= level.getGroundLevel()
-                    && wall.y < level.getWaterLevel()) return;
+                    && wall.y < level.getWaterLevel()) return false;
             // Neighbor updates can immediately refill the cell with falling sand or liquid.
             if (level.setTile(wall.x, wall.y, wall.z, 0)) {
                 HeldBlockEntity block = new HeldBlockEntity(level, p, id, wall.x, wall.y, wall.z);
@@ -184,8 +184,10 @@ public final class GravityGunItem extends ToolItem {
                 grabbedBlocks.put(p, block);
                 level.addEntity(block);
                 level.playSound(SOUND + "grab", p, .8f, 1f);
+                return true;
             }
         }
+        return false;
     }
 
     public static void launch(Player p, Level level) {
