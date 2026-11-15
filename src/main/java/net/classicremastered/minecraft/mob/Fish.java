@@ -1,6 +1,10 @@
 package net.classicremastered.minecraft.mob;
 
+import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.phys.AABB;
 
@@ -73,6 +77,24 @@ public abstract class Fish extends Mob {
 
     @Override
     protected final void causeFallDamage(float distance) {}
+
+    @Override
+    public final void die(Entity killer) {
+        if (dead) return;
+        super.die(killer);
+        if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
+
+        ItemRegistry.bootstrap();
+        Item drop =
+                switch (getRegistryId()) {
+                    case Cod.REGISTRY_ID -> Item.RAW_COD;
+                    case Salmon.REGISTRY_ID -> Item.RAW_SALMON;
+                    case TropicalFish.REGISTRY_ID -> Item.TROPICAL_FISH;
+                    case Pufferfish.REGISTRY_ID -> Item.PUFFERFISH;
+                    default -> null;
+                };
+        if (drop != null) level.addEntity(new DroppedItem(level, x, y, z, drop.id));
+    }
 
     @Override
     public void aiStep() {

@@ -47,6 +47,10 @@ public final class ItemRegistry {
             new StructureLocatorItem(filter);
         Item.RAW_PORKCHOP = new RawMeatItem(225, "Raw Porkchop", "/items/porkchop.png", 2);
         Item.RAW_BEEF = new RawMeatItem(226, "Raw Beef", "/items/beef.png", 3);
+        Item.RAW_COD = new RawMeatItem(235, "Raw Cod", "/items/cod.png", 2);
+        Item.RAW_SALMON = new RawMeatItem(236, "Raw Salmon", "/items/salmon.png", 2);
+        Item.TROPICAL_FISH = new RawMeatItem(237, "Tropical Fish", "/items/tropical_fish.png", 1);
+        Item.PUFFERFISH = new RawMeatItem(238, "Pufferfish", "/items/pufferfish.png", 1);
         new BoatItem();
 
         Equipment.register();
