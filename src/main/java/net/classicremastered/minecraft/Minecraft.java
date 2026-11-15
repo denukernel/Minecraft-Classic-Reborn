@@ -1339,7 +1339,7 @@ public final class Minecraft implements Runnable {
 
                     mob.yRot = s.yRot;
                     mob.xRot = s.xRot;
-                    mob.health = s.health;
+                    mob.restoreHealth(s.health);
                     var1.addEntity(mob);
                 }
             } catch (Throwable t) {

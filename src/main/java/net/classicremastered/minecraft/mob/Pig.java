@@ -10,10 +10,16 @@ public class Pig extends QuadrupedMob {
 
     public Pig(Level var1, float var2, float var3, float var4) {
         super(var1, var2, var3, var4);
+        this.health = this.lastHealth = healthLimit();
         this.heightOffset = 1.72F;
         this.modelName = "pig";
         this.textureName = "/mob/pig.png";
         initSounds();
+    }
+
+    @Override
+    protected final int healthLimit() {
+        return 10;
     }
 
     private void initSounds() {

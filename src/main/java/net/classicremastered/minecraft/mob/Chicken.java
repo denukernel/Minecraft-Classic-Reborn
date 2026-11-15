@@ -31,7 +31,12 @@ public class Chicken extends Mob {
         this.textureName = "/mob/chicken.png";
         this.setSize(WIDTH, HEIGHT);
         this.setPos(x, y, z);
-        this.health = 4;
+        this.health = this.lastHealth = healthLimit();
+    }
+
+    @Override
+    protected final int healthLimit() {
+        return 4;
     }
 
     private void readObject(java.io.ObjectInputStream in)

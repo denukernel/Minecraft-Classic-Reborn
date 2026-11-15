@@ -337,7 +337,7 @@ public class Level implements Serializable {
                     if (s.extraData != null) m.loadPersistence(s.extraData);
                     VillagerDoorManager.loadHome(m, s.extraData);
                     restoreMobPosition(m, s.extraData, s.x, s.y, s.z, s.yRot, s.xRot);
-                    m.health = m.lastHealth = s.health;
+                    m.restoreHealth(s.health);
                     this.addEntity(m);
                     ridingLinks.read(m, s.extraData);
                 }

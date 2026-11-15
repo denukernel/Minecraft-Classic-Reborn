@@ -20,11 +20,16 @@ public final class Cow extends QuadrupedMob {
         setSize(.9f, 1.4f);
         heightOffset = .9f;
         setPos(x, y, z);
-        health = 10;
+        health = lastHealth = healthLimit();
         persistent = true;
         modelName = "cow";
         textureName = "/mob/cow.png";
         initSounds();
+    }
+
+    @Override
+    protected int healthLimit() {
+        return 10;
     }
 
     private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {

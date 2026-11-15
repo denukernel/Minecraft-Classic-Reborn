@@ -211,7 +211,7 @@ final class InfiniteLevelNbtCodec {
                 net.classicremastered.minecraft.level.itemstack.Equipment.load(mob, mobTag);
                 VillagerDoorManager.loadHome(mob, mobTag);
                 Level.restoreMobPosition(mob, mobTag, mx, my, mz, myRot, mxRot);
-                mob.health = mob.lastHealth = health;
+                mob.restoreHealth(health);
                 mob.loadPersistence(mobTag);
                 level.addEntity(mob);
                 ridingLinks.read(mob, mobTag);

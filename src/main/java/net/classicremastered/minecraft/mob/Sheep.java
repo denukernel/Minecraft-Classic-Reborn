@@ -22,6 +22,7 @@ public class Sheep extends QuadrupedMob {
 
     public Sheep(Level var1, float var2, float var3, float var4) {
         super(var1, var2, var3, var4);
+        this.health = this.lastHealth = healthLimit();
         this.setSize(1.4F, 1.72F);
         this.setPos(var2, var3, var4);
         this.heightOffset = 1.72F;
@@ -32,6 +33,11 @@ public class Sheep extends QuadrupedMob {
         this.textureName = "/mob/sheep.png";
         this.ai = new net.classicremastered.minecraft.mob.ai.sheep.SheepAI();
         this.random = new Random(); // <--- fix
+    }
+
+    @Override
+    protected final int healthLimit() {
+        return 8;
     }
 
     private void readObject(java.io.ObjectInputStream in)

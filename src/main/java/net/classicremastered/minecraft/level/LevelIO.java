@@ -472,7 +472,7 @@ public final class LevelIO {
             var mob = net.classicremastered.minecraft.mob.MobRegistry.create(id, inf, x, y, z);
             if (mob == null || mob.getRegistryId() != id) continue;
             mob.moveTo(x, y, z, yRot, xRot);
-            mob.health = mob.lastHealth = health;
+            mob.restoreHealth(health);
             inf.addEntity(mob);
         }
         inf.updateDayNightColorsSmooth();

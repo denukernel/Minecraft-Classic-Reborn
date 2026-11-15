@@ -177,6 +177,8 @@ public abstract class Mob extends Entity {
         // Older saves can contain a stale box left over from the superclass
         // constructor.
         setSize(bbWidth, bbHeight);
+        health = Math.min(health, healthLimit());
+        lastHealth = Math.min(lastHealth, healthLimit());
     }
 
     // Mob.java (inside class)
@@ -804,10 +806,19 @@ public abstract class Mob extends Entity {
         }
     }
 
+    protected int healthLimit() {
+        // Mobs with a fixed species limit opt in without capping legacy boss health.
+        return Integer.MAX_VALUE;
+    }
+
+    public final void restoreHealth(int savedHealth) {
+        health = lastHealth = Math.min(savedHealth, healthLimit());
+    }
+
     public void heal(int amt) {
         if (this.health > 0) {
             this.health += amt;
-            if (this.health > 20) this.health = 20;
+            this.health = Math.min(this.health, Math.min(20, healthLimit()));
             this.invulnerableTime = this.invulnerableDuration / 2;
         }
     }
