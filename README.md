@@ -26,6 +26,7 @@ java -jar minecraft-classic-reborn.jar
 ```
 
 The launcher downloads native libraries and game resources on the first run. Keep an internet connection available and allow the downloads to finish, including the audio resources.
+[survival guide](docs/survival-guide.md)
 
 ## Features
 
