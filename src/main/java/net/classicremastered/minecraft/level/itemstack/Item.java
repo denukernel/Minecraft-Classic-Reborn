@@ -19,7 +19,7 @@ public class Item {
     // Handy handles (filled by ItemRegistry.bootstrap())
     public static Item EMPTY, APPLE, SWORD, MINING_AXE, SHOVEL;
     public static Item BEETROOT;
-    public static Item RAW_PORKCHOP, RAW_BEEF;
+    public static Item RAW_PORKCHOP, RAW_BEEF, RAW_MUTTON, RAW_CHICKEN;
     public static Item RAW_COD, RAW_SALMON, TROPICAL_FISH, PUFFERFISH;
     public static Item BOW;
     public static Item FLINT_AND_STEEL;

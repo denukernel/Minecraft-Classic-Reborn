@@ -51,6 +51,8 @@ public final class ItemRegistry {
         Item.RAW_SALMON = new RawMeatItem(236, "Raw Salmon", "/items/salmon.png", 2);
         Item.TROPICAL_FISH = new RawMeatItem(237, "Tropical Fish", "/items/tropical_fish.png", 1);
         Item.PUFFERFISH = new RawMeatItem(238, "Pufferfish", "/items/pufferfish.png", 1);
+        Item.RAW_MUTTON = new RawMeatItem(239, "Raw Mutton", "/items/mutton.png", 2);
+        Item.RAW_CHICKEN = new RawMeatItem(240, "Raw Chicken", "/items/chicken.png", 2);
         new BoatItem();
 
         Equipment.register();

@@ -492,8 +492,6 @@ public final class Minecraft implements Runnable {
                             // Let mods tick once per frame (after LWJGL is ready)
                             com.mcraft.api.hooks.Hooks.onClientTick(this);
                             if (this.soundPC != null && this.player != null) {
-                                this.soundPC.setListener(this.player, worldRenderPartial());
-
                                 // Update distance for Far Lands checks
                                 long dist =
                                         (long)

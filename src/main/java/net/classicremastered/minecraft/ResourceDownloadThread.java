@@ -104,6 +104,12 @@ public class ResourceDownloadThread extends Thread {
                         }); // <--- added
                 registerBundledSound(sm, "mob/cow/classic_idle.ogg");
                 registerBundledSound(sm, "mob/cow/classic_hurt.ogg");
+                for (String clip :
+                        new String[] {"say1", "say2", "say3", "hurt1", "hurt2", "step1", "step2"}) {
+                    String path = "mob/chicken/" + clip + ".ogg";
+                    if (!new File(resDir, "sound3/" + path).isFile())
+                        registerBundledSound(sm, path);
+                }
                 registerBundledSound(sm, "mob/enderman/teleport1.ogg");
                 registerBundledSound(sm, "mob/enderman/teleport2.ogg");
                 for (int i = 1; i <= 3; i++)
@@ -115,6 +121,10 @@ public class ResourceDownloadThread extends Thread {
                 registerBundledSound(sm, "item/ender_pearl/teleport.ogg");
                 for (int i = 1; i <= 3; i++) registerBundledSound(sm, "item/food/eat" + i + ".ogg");
                 registerBundledSound(sm, "item/food/burp.ogg");
+                for (int i = 1; i <= 3; i++) {
+                    registerBundledSound(sm, "item/bucket/fill" + i + ".ogg");
+                    registerBundledSound(sm, "item/bucket/empty" + i + ".ogg");
+                }
                 registerBundledSound(sm, "block/glass/break.wav");
                 registerBundledSound(sm, "item/gravity_gun/grab.wav");
                 registerBundledSound(sm, "item/gravity_gun/drop.wav");

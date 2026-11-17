@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.mob.Enderman;
+import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.goal.GoalSelector;
 import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanMeleeGoal;
@@ -13,12 +14,14 @@ import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanTargetGoal;
 import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanTeleportation;
 import net.classicremastered.minecraft.mob.ai.goal.enderman.EndermanWaterEscapeGoal;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.player.DeathMessages;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 public final class EndermanAI extends BasicAI {
 
     private static final long serialVersionUID = 1L;
     public boolean angry;
+    private transient Mob angerTarget;
     public int teleportCooldown;
     public int sunTeleportCooldown;
     public int waterDamageTimer;
@@ -63,11 +66,22 @@ public final class EndermanAI extends BasicAI {
 
     public void clearTarget() {
         angry = false;
+        angerTarget = null;
         farFromTargetTicks = 0;
         clearPlayerSearch();
         if (mob instanceof Enderman) ((Enderman) mob).isAttacking = false;
         running = false;
         if (navigation != null) navigation.clear();
+    }
+
+    public Mob angerTarget() {
+        return angerTarget;
+    }
+
+    public void becomeAngryAt(Mob target) {
+        if (angerTarget != target) navigation().clear();
+        angerTarget = target;
+        angry = true;
     }
 
     public EndermanTeleportation teleportation() {
@@ -83,8 +97,14 @@ public final class EndermanAI extends BasicAI {
     @Override
     public void hurt(Entity src, int dmg) {
         super.hurt(src, dmg);
-        if (CreativeModeHelper.shouldIgnoreTarget(src)
-                || src instanceof Player && level != null && Player.creativeInvulnerable) return;
-        angry = true;
+        Entity attacker = DeathMessages.resolveAttacker(src);
+        if (dmg > 0
+                && attacker instanceof Mob target
+                && target != mob
+                && target.level == level
+                && !CreativeModeHelper.shouldIgnoreTarget(attacker)
+                && !(attacker instanceof Player && Player.creativeInvulnerable)) {
+            becomeAngryAt(target);
+        }
     }
 }

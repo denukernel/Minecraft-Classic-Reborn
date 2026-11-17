@@ -1,10 +1,12 @@
 package net.classicremastered.minecraft.mob.ai.movement;
 
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
+import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.model.Vec3D;
 
 /**
@@ -36,7 +38,9 @@ public final class MobLookControl {
         if (mob.health <= 0 || mob.removed)
             return;
         Entity target = mob.ai instanceof BasicAI ai ? ai.attackTarget : null;
-        if (!alive(target) || target.level != mob.level)
+        if (!alive(target)
+                || target.level != mob.level
+                || mob instanceof Defender && !HostileTargets.hasLineOfSight(mob, target))
             target = null;
         if (target == null) {
             if (--idleTicks <= 0 || !visible(mob, idleTarget) || distance(mob, idleTarget) > 64)

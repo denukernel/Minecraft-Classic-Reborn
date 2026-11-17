@@ -12,6 +12,14 @@ public abstract class FoodItem extends Item {
         this.healing = healing;
     }
 
+    public final int healing() {
+        return healing;
+    }
+
+    public static boolean isBiteTick(int elapsed) {
+        return elapsed >= 8 && elapsed % 4 == 0;
+    }
+
     public final boolean canEat(Player player) {
         return player != null
                 && player.health > 0

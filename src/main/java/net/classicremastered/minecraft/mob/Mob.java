@@ -44,6 +44,11 @@ public abstract class Mob extends Entity {
         tag.putBoolean("TurretDefender", corruptedToDefendPlayer);
         tag.putString("CustomName", customName == null ? "" : customName);
         tag.putInt("DespawnIdleTicks", despawnIdleTicks);
+        if (poisonRemaining > 0) {
+            tag.putInt("PoisonRemaining", poisonRemaining);
+            tag.putInt("PoisonInterval", poisonInterval);
+            tag.putInt("PoisonElapsed", poisonElapsed);
+        }
     }
 
     public float movementClearanceHeight() {
@@ -59,10 +64,18 @@ public abstract class Mob extends Entity {
         if (tag.getBoolean("TurretDefender")) DefenderAI.restore(this);
         customName = tag.hasKey("CustomName") ? tag.getString("CustomName") : "";
         despawnIdleTicks = Math.max(0, tag.getInt("DespawnIdleTicks"));
+        poisonRemaining = Math.max(0, tag.getInt("PoisonRemaining"));
+        poisonInterval = Math.max(1, tag.getInt("PoisonInterval"));
+        poisonElapsed = Math.max(0, tag.getInt("PoisonElapsed"));
     }
 
     public static final long serialVersionUID = 0L;
     public static final int ATTACK_DURATION = 5;
+    private static final int HAND_SWING_DURATION = 6;
+    private transient int handSwingTicks, previousHandSwingTicks;
+    private int poisonRemaining;
+    private int poisonInterval;
+    private int poisonElapsed;
     public static final int TOTAL_AIR_SUPPLY = 300;
     public static ModelManager modelCache;
 
@@ -100,6 +113,19 @@ public abstract class Mob extends Entity {
 
     public float renderHeadPitch(float partial) {
         return lookControl == null ? xRotO + (xRot - xRotO) * partial : lookControl.pitch(partial);
+    }
+
+    public final void swingHand() {
+        if (health > 0 && !removed && handSwingTicks <= HAND_SWING_DURATION / 2) {
+            handSwingTicks = previousHandSwingTicks = HAND_SWING_DURATION;
+        }
+    }
+
+    public final float handSwingProgress(float partial) {
+        if (health <= 0 || removed || previousHandSwingTicks == 0) return 0;
+        float remaining =
+                previousHandSwingTicks + (handSwingTicks - previousHandSwingTicks) * partial;
+        return 1 - remaining / HAND_SWING_DURATION;
     }
 
     public int tickCount = 0;
@@ -264,6 +290,20 @@ public abstract class Mob extends Entity {
         return previousFeetY + (bb.y0 - previousFeetY) * partial;
     }
 
+    public void applyPoison(int ticks, int everyNTicks) {
+        poisonRemaining = Math.max(poisonRemaining, ticks);
+        poisonInterval = Math.max(1, everyNTicks);
+    }
+
+    private void tickPoison() {
+        if (poisonRemaining == 0 || health <= 0 || level == null || level.isNetworkMode()) return;
+        poisonRemaining--;
+        if (++poisonElapsed >= poisonInterval) {
+            poisonElapsed = 0;
+            if (health > 1) hurt(null, 1, "magic");
+        }
+    }
+
     @Override
     public void tick() {
         previousFeetY = bb.y0;
@@ -287,8 +327,11 @@ public abstract class Mob extends Entity {
         }
         this.oTilt = this.tilt;
         if (this.attackTime > 0) --this.attackTime;
+        previousHandSwingTicks = handSwingTicks;
+        if (handSwingTicks > 0) handSwingTicks--;
         if (this.hurtTime > 0) --this.hurtTime;
         if (this.invulnerableTime > 0) --this.invulnerableTime;
+        tickPoison();
 
         // ===== Death countdown & corpse physics =====
         if (this.health <= 0) {
@@ -793,14 +836,21 @@ public abstract class Mob extends Entity {
             var bow =
                     (net.classicremastered.minecraft.level.itemstack.BowItem)
                             net.classicremastered.minecraft.level.itemstack.Item.BOW;
-            humanoid.renderHoldingBow(yaw, pitch, scale, bow.isDrawing(player));
+            humanoid.renderHoldingBow(
+                    yaw, pitch, scale, bow.isDrawing(player), handSwingProgress(partial));
+        } else if (m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
+                && this instanceof Defender defender) {
+            defender.renderHandAction(humanoid, yaw, pitch, scale, partial);
         } else if (this instanceof net.classicremastered.minecraft.player.Player player
-                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
-                && player.inventory.getSelected() > 0) {
-            humanoid.renderHoldingItem(
+                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid) {
+            int selected = player.inventory.getSelected();
+            humanoid.renderHandAction(
                     scale,
-                    player.developerPowers()
-                            .swordPose(player, player.inventory.getSelected(), partial));
+                    selected > 0,
+                    handSwingProgress(partial),
+                    player.developerPowers().swordPose(player, selected, partial),
+                    net.classicremastered.minecraft.render.HeldItemRenderer.eatingTime(
+                            player, partial));
         } else {
             m.render(anim, runAmt, ageInTicks, yaw, pitch, scale);
         }
@@ -838,8 +888,8 @@ public abstract class Mob extends Entity {
                         || this instanceof CrossbowTurret
                         || this instanceof Defender
                         || corruptedToDefendPlayer
-                        || (ally instanceof Defender
-                                ? !Defender.isEnemy(this)
+                        || (ally instanceof Defender defender
+                                ? !defender.canAttack(this)
                                 : !MobRegistry.isTurretHostile(this)))) return;
         if (this.health <= 0 || this.dead || this.removed) return;
 
@@ -862,17 +912,21 @@ public abstract class Mob extends Entity {
                 if (this instanceof net.classicremastered.minecraft.player.Player
                         && net.classicremastered.minecraft.CombatRules.difficulty(level)
                                 == net.classicremastered.minecraft.Difficulty.PEACEFUL) return;
-                if (attacker instanceof Zombie
+                if (attacker instanceof StickFigure boss) {
+                    dmg = boss.attackDamage(dmg);
+                } else if (attacker instanceof Zombie
                         || attacker instanceof Skeleton
-                        || attacker instanceof Spider)
+                        || attacker instanceof Spider) {
                     dmg =
                             net.classicremastered.minecraft.CombatRules.undeadDamage(
                                     level,
                                     dmg,
                                     (Mob) attacker,
                                     src instanceof net.classicremastered.minecraft.entity.Arrow);
+                }
             }
             armorDamage = dmg;
+            if (this instanceof Defender defender) dmg = defender.guardDamage(dmg);
             if (freshHit) {
                 dmg = Equipment.reduce(this, dmg);
                 if (dmg <= 0) {
@@ -900,6 +954,8 @@ public abstract class Mob extends Entity {
         }
 
         Equipment.damageArmor(this, armorDamage);
+        if (DeathMessages.resolveAttacker(src) instanceof Player player)
+            player.recordMobAttack(this);
         if (freshHit) playHurtSound();
 
         this.hurtDir = 0.0F;
@@ -1011,9 +1067,10 @@ public abstract class Mob extends Entity {
                                     level, x, y, z, item.id, 1 + level.random.nextInt(2)));
             }
         }
-        // Keep damage attribution separate so turret victims retaliate against the turret.
+        // Credit the companion owner while keeping the companion as the combat target.
         Entity credited = DeathMessages.resolveAttacker(killer);
         if (credited instanceof CrossbowTurret turret) credited = turret.creditedOwner();
+        if (credited instanceof Defender defender) credited = defender.ownerPlayer();
         int points = killScore();
         if (credited instanceof net.classicremastered.minecraft.player.Player p) {
             int coins = legacyCoinBonus();

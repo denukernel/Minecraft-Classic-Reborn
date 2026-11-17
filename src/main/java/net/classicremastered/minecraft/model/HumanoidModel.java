@@ -12,6 +12,8 @@ public class HumanoidModel extends Model {
     private final boolean tallSkin;
     private float sneakProgress;
     private boolean ridingPose;
+    private boolean swungShoulders;
+    private float restBodyYaw, restRightX, restRightZ, restLeftX, restLeftZ;
     private net.classicremastered.minecraft.player.Player developerPlayer;
     private float renderPartial;
     private net.classicremastered.minecraft.render.TextureManager attachmentTextures;
@@ -198,17 +200,47 @@ public class HumanoidModel extends Model {
         rightArm.roll += Math.max(0, pose) * .5f;
     }
 
-    public void renderHoldingItem(float scale, float pose) {
-        rightArm.pitch = rightArm.pitch * .5f - (float) Math.PI / 10;
-        applySwordPose(pose);
-        float eating = HeldItemRenderer.eatingTime(developerPlayer, renderPartial);
+    public void renderHandAction(
+            float scale, boolean holdingItem, float swing, float swordPose, float eating) {
+        if (holdingItem) rightArm.pitch = rightArm.pitch * .5f - (float) Math.PI / 10;
+        applySwordPose(swordPose);
         if (eating >= 0) {
             float lift = HeldItemRenderer.eatingLift(eating);
             float bitePitch = -1.75f + head.pitch * .45f - HeldItemRenderer.eatingBob(eating);
             rightArm.pitch += (bitePitch - rightArm.pitch) * lift;
             rightArm.yaw -= .45f * lift;
+        } else if (swordPose == 0
+                && (developerPlayer == null
+                        || !developerPlayer.developerPowers().fastPunch(developerPlayer))) {
+            applyHandSwing(swing);
         }
         renderParts(scale);
+    }
+
+    private void applyHandSwing(float progress) {
+        if (progress <= 0 || progress >= 1) return;
+        swungShoulders = true;
+        restBodyYaw = body.yaw;
+        restRightX = rightArm.x;
+        restRightZ = rightArm.z;
+        restLeftX = leftArm.x;
+        restLeftZ = leftArm.z;
+        float twist = MathHelper.sin((float) Math.sqrt(progress) * (float) (2 * Math.PI)) * .2f;
+        body.yaw += twist;
+        float sin = MathHelper.sin(twist), cos = MathHelper.cos(twist);
+        rightArm.x = restRightX * cos + restRightZ * sin;
+        rightArm.z = restRightZ * cos - restRightX * sin;
+        leftArm.x = restLeftX * cos + restLeftZ * sin;
+        leftArm.z = restLeftZ * cos - restLeftX * sin;
+        float remaining = 1 - progress;
+        float eased = 1 - remaining * remaining * remaining * remaining;
+        float reach = MathHelper.sin(progress * (float) Math.PI);
+        rightArm.pitch -=
+                MathHelper.sin(eased * (float) Math.PI) * 1.2f + reach * (.7f - head.pitch) * .75f;
+        rightArm.yaw += twist * 3;
+        rightArm.roll -= reach * .4f;
+        leftArm.yaw += twist;
+        leftArm.pitch += twist;
     }
 
     public void renderHoldingGun(
@@ -221,11 +253,7 @@ public class HumanoidModel extends Model {
         setRotationAngles(limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch, scale);
         float rp = rightArm.pitch, lp = leftArm.pitch, ry = rightArm.yaw, ly = leftArm.yaw;
         try {
-            rightArm.pitch = -1.3f + headPitch / 57.295776f;
-            leftArm.pitch = -1.15f + headPitch / 57.295776f;
-            rightArm.yaw = -.12f;
-            leftArm.yaw = .30f;
-            renderParts(scale);
+            renderHoldingGun(headPitch, scale);
         } finally {
             rightArm.pitch = rp;
             leftArm.pitch = lp;
@@ -234,8 +262,41 @@ public class HumanoidModel extends Model {
         }
     }
 
-    public void renderHoldingBow(float yaw, float pitch, float scale, boolean aiming) {
+    public void renderHoldingGun(float headPitch, float scale) {
+        rightArm.pitch = -1.3f + headPitch / 57.295776f;
+        leftArm.pitch = -1.15f + headPitch / 57.295776f;
+        rightArm.yaw = -.12f;
+        leftArm.yaw = .30f;
+        renderParts(scale);
+    }
+
+    public void renderHoldingBow(float yaw, float pitch, float scale, boolean aiming, float swing) {
         BowPose.apply(this, yaw / 57.295776f, pitch / 57.295776f, aiming);
+        if (!aiming) applyHandSwing(swing);
+        renderParts(scale);
+    }
+
+    public void renderUsingBucket(float scale, float reach) {
+        rightArm.pitch = -.95f + .8f * reach;
+        rightArm.yaw = -.17f;
+        rightArm.roll = -.14f * reach;
+        renderParts(scale);
+    }
+
+    public void renderThrowingPearl(
+            float scale, float yaw, float pitch, float windup, float followThrough) {
+        float aimPitch = pitch / 57.295776f;
+        float drawBack = -2.55f + aimPitch * .45f;
+        float release = -(float) Math.PI / 2 + aimPitch;
+        if (windup < 2f / 3) {
+            rightArm.pitch = -.3f + (drawBack + .3f) * windup * 1.5f;
+        } else if (windup < 1) {
+            rightArm.pitch = drawBack + (release - drawBack) * (windup * 3 - 2);
+        } else {
+            rightArm.pitch = release * (1 - followThrough);
+        }
+        rightArm.yaw = yaw / 57.295776f - .12f;
+        rightArm.roll = -.17f * (1 - Math.max(0, followThrough));
         renderParts(scale);
     }
 
@@ -261,6 +322,14 @@ public class HumanoidModel extends Model {
             float netHeadYaw,
             float headPitch,
             float scale) {
+        if (swungShoulders) {
+            body.yaw = restBodyYaw;
+            rightArm.x = restRightX;
+            rightArm.z = restRightZ;
+            leftArm.x = restLeftX;
+            leftArm.z = restLeftZ;
+            swungShoulders = false;
+        }
         renderPartial = ageInTicks - (float) Math.floor(ageInTicks);
         // Head follows look direction
         head.yaw = netHeadYaw / 57.295776F;

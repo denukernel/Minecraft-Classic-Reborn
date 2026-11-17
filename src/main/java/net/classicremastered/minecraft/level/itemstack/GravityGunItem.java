@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.entity.HeldBlockEntity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.Creeper;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.StairBlock;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -218,11 +219,33 @@ public final class GravityGunItem extends ToolItem {
         MovingObjectPosition wall = pickWall(level, start, d);
         MobHit hit = pickMob(p, level, start, d, wall == null ? RANGE : start.distance(wall.vec));
         if (hit != null) {
-            Mob target = hit.body();
-            applyImpulse(target, d, 1.35f);
-            target.yd = Math.max(.32f, target.yd);
-            target.markForcedFall(p);
+            pushMob(p, hit.body(), d);
         }
+    }
+
+    public static void defenderPulse(Defender defender, Mob target) {
+        Level level = defender.level;
+        if (level == null
+                || level.isNetworkMode()
+                || target.level != level
+                || !defender.hasGravityGun()
+                || !defender.canAttack(target)) return;
+        target.hurt(defender, defender.weaponDamage(4));
+        Mob body = JockeyToolTarget.body(target, level);
+        if (defender.canAttack(body)
+                && !grabbedMobs.containsValue(body)
+                && !JockeyToolTarget.isGrappled(body, level)) {
+            float dx = body.x - defender.x;
+            float dz = body.z - defender.z;
+            if (dx != 0 || dz != 0) pushMob(defender, body, new Vec3D(dx, 0, dz).normalize());
+        }
+        level.playSound(SOUND + "launch", defender, .9f, 1f);
+    }
+
+    private static void pushMob(Entity source, Mob target, Vec3D direction) {
+        applyImpulse(target, direction, 1.35f);
+        target.yd = Math.max(.32f, target.yd);
+        target.markForcedFall(source);
     }
 
     public static Vec3D launchDirection(Player player, Entity projectile) {

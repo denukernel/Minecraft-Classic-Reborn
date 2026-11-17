@@ -3,7 +3,9 @@ package net.classicremastered.minecraft.level.itemstack;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.FlowerBlock;
 import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.ShapeRenderer;
@@ -49,79 +51,113 @@ public class BucketItem extends ToolItem {
 
     @Override
     public boolean use(Player player, Level level) {
-        if (player == null || level == null) return false;
-
-        // Custom raycast that checks for liquid blocks
-        float yaw = player.aimYaw(1f), pitch = player.xRot;
-        float cy = net.classicremastered.util.MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
-        float sy = net.classicremastered.util.MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
-        float cp = net.classicremastered.util.MathHelper.cos(-pitch * 0.017453292F);
-        float sp = net.classicremastered.util.MathHelper.sin(-pitch * 0.017453292F);
-        float lx = sy * cp, ly = sp, lz = cy * cp;
-
+        if (player == null
+                || level == null
+                || player.level != level
+                || level.isNetworkMode()
+                || player.removed
+                || player.health <= 0
+                || player.isSpectator()
+                || player.minecraft == null
+                || player.minecraft.gamemode == null
+                || player.inventory.getSelected() != id + 256
+                || player.inventory.getCount(player.inventory.selected) <= 0) return false;
         float reach = player.minecraft.gamemode.getReachDistance();
         Vec3D start = new Vec3D(player.x, player.y, player.z);
-        Vec3D end = start.add(lx * reach, ly * reach, lz * reach);
-
-        MovingObjectPosition sel = level.clip(start, end, false, true);
-        if (sel == null || sel.entityPos != 0) return false; // Must hit a block or liquid
-
-        int x = sel.x;
-        int y = sel.y;
-        int z = sel.z;
-        int side = sel.face;
-
-        int slot = player.inventory.selected;
-
+        Vec3D aim = player.aimDirection(1);
+        Vec3D end = start.add(aim.x * reach, aim.y * reach, aim.z * reach);
+        MovingObjectPosition hit =
+                bucketType == 0 ? level.clipLiquidSources(start, end) : level.clip(start, end);
+        if (hit == null) return false;
+        int result;
         if (bucketType == 0) {
-            // Scoop up liquid
-            int tile = level.getTile(x, y, z);
-            if ((tile == Block.WATER.id || tile == Block.STATIONARY_WATER.id)
-                    && (!LiquidBlock.usesLevelledFlow(level) || level.getFlowLevel(x, y, z) == 0)) {
-                if (!level.setTile(x, y, z, 0)) return false;
-                level.playSound("random/pop", player, 0.5f, 1.0f);
-                if (!level.creativeMode)
-                    player.inventory.slots[slot] = Item.BUCKET_WATER.id + 256;
-                return true;
-            } else if (tile == Block.LAVA.id || tile == Block.STATIONARY_LAVA.id) {
-                if (!level.setTile(x, y, z, 0)) return false;
-                level.playSound("random/pop", player, 0.5f, 0.8f);
-                if (!level.creativeMode)
-                    player.inventory.slots[slot] = Item.BUCKET_LAVA.id + 256;
-                return true;
-            }
+            result = scoopSource(level, hit.x, hit.y, hit.z);
+            if (result <= 0) return false;
         } else {
-            // Place liquid
-            int nx = x;
-            int ny = y;
-            int nz = z;
-            if (side == 0)
-                ny--;
-            if (side == 1)
-                ny++;
-            if (side == 2)
-                nz--;
-            if (side == 3)
-                nz++;
-            if (side == 4)
-                nx--;
-            if (side == 5)
-                nx++;
+            if (!pour(player, level, hit)) return false;
+            result = Item.BUCKET_EMPTY.id + 256;
+        }
+        player.inventory.setIdCount(player.inventory.selected, result, 1);
+        return true;
+    }
 
-            if (level.isInBounds(nx, ny, nz) && level.getTile(nx, ny, nz) == 0) {
-                int placeTile = bucketType == 1
-                        ? (LiquidBlock.usesLevelledFlow(level) ? Block.STATIONARY_WATER.id : Block.WATER.id)
-                        : Block.LAVA.id;
-                if (!level.setTile(nx, ny, nz, placeTile)) {
-                    return false;
-                }
-
-                level.playSound("random/pop", player, 0.5f, 1.0f);
-                if (!level.creativeMode)
-                    player.inventory.slots[slot] = Item.BUCKET_EMPTY.id + 256;
-                return true;
+    private boolean pour(Player player, Level level, MovingObjectPosition hit) {
+        int x = hit.x, y = hit.y, z = hit.z;
+        int clicked = level.getTile(x, y, z);
+        if (bucketType == 1
+                && (clicked == Block.SNOW_LAYER.id || clicked == Block.GLASS.id && !player.sneaking)
+                && placeWater(level, x, y, z)) return true;
+        switch (hit.face) {
+            case 0 -> y--;
+            case 1 -> y++;
+            case 2 -> z--;
+            case 3 -> z++;
+            case 4 -> x--;
+            case 5 -> x++;
+            default -> {
+                return false;
             }
         }
-        return false;
+        if (bucketType == 1) return placeWater(level, x, y, z);
+        if (!level.isInBounds(x, y, z)
+                || level.getTile(x, y, z) != 0
+                || !level.setTile(x, y, z, Block.LAVA.id)) return false;
+        level.playSound("random/pop", x + .5f, y + .5f, z + .5f, .5f, 1);
+        return true;
+    }
+
+    public static boolean canPlaceWaterSource(Level level, int x, int y, int z) {
+        if (level.isNetworkMode() || !level.isInBounds(x, y, z)) return false;
+        int tile = level.getTile(x, y, z);
+        return tile == 0 || level.isWater(x, y, z) || LiquidBlock.canWashAway(tile);
+    }
+
+    public static boolean placeWater(Level level, int x, int y, int z) {
+        if (level.isNetworkMode() || !level.isInBounds(x, y, z)) return false;
+        int tile = level.getTile(x, y, z);
+        if (tile == Block.GLASS.id) {
+            if (level.isWaterloggedGlass(x, y, z)) {
+                if (level.getFlowLevel(x, y, z) == 0) return false;
+                level.setWaterFlowLevel(x, y, z, 0);
+            } else if (!level.setTile(x, y, z, Block.WATERLOGGED_GLASS.id)) return false;
+        } else if (level.isWater(x, y, z)) {
+            if (level.getFlowLevel(x, y, z) != 0) {
+                level.setWaterFlowLevel(x, y, z, 0);
+                level.addToTickNextTick(x, y, z, tile);
+            }
+        } else {
+            if (tile != 0 && !LiquidBlock.canWashAway(tile)) return false;
+            int source =
+                    LiquidBlock.usesLevelledFlow(level)
+                            ? Block.STATIONARY_WATER.id
+                            : Block.WATER.id;
+            if (!level.setTile(x, y, z, source)) return false;
+            if (Block.blocks[tile] instanceof FlowerBlock && !level.creativeMode)
+                Block.blocks[tile].dropItems(level, x, y, z, 1);
+        }
+        playWaterSound(level, "empty", x, y, z);
+        return true;
+    }
+
+    public static int scoopSource(Level level, int x, int y, int z) {
+        if (level.isNetworkMode() || !level.isInBounds(x, y, z) || level.getFlowLevel(x, y, z) != 0)
+            return 0;
+        boolean waterlogged = level.isWaterloggedGlass(x, y, z);
+        LiquidType liquid = level.getLiquid(x, y, z);
+        if (!waterlogged && liquid == LiquidType.NOT_LIQUID) return 0;
+        int replacement = waterlogged ? Block.GLASS.id : 0;
+        if (!level.setTile(x, y, z, replacement)
+                || (waterlogged ? level.isWaterloggedGlass(x, y, z) : level.getTile(x, y, z) != 0))
+            return 0;
+        if (waterlogged || liquid == LiquidType.WATER) {
+            playWaterSound(level, "fill", x, y, z);
+            return Item.BUCKET_WATER.id + 256;
+        }
+        level.playSound("random/pop", x + .5f, y + .5f, z + .5f, .5f, .8f);
+        return Item.BUCKET_LAVA.id + 256;
+    }
+
+    private static void playWaterSound(Level level, String action, int x, int y, int z) {
+        level.playSound("item/bucket/" + action, x + .5f, y + .5f, z + .5f, 1, 1);
     }
 }

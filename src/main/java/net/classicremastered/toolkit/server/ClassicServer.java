@@ -1,5 +1,8 @@
 package net.classicremastered.toolkit.server;
 
+import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.GlassBlock;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -370,11 +373,15 @@ public final class ClassicServer implements AutoCloseable {
         out.write(val & 0xFF);
     }
 
-    private synchronized void updateBlock(int x, int y, int z, byte blockType) {
-        if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && z >= 0 && z < DEPTH) {
-            int index = (y * DEPTH + z) * WIDTH + x;
-            blocks[index] = blockType;
-        }
+    private synchronized int updateBlock(int x, int y, int z, int blockType) {
+        int index = (y * DEPTH + z) * WIDTH + x;
+        int previous = blocks[index] & 255;
+        int placed =
+                blockType == 0 && previous == Block.WATERLOGGED_GLASS.id
+                        ? Block.STATIONARY_WATER.id
+                        : GlassBlock.retainWater(previous, blockType);
+        blocks[index] = (byte) placed;
+        return placed;
     }
 
     private void broadcast(byte[] packet) {
@@ -804,12 +811,23 @@ public final class ClassicServer implements AutoCloseable {
                             short bz = readShort(in);
                             byte mode = (byte) readByte(in);
                             byte blockType = (byte) readByte(in);
-                            
-                            if (mode < 0 || mode > 1 || bx < 0 || bx >= WIDTH || by < 0 || by >= HEIGHT
-                                    || bz < 0 || bz >= DEPTH || (mode == 1 && ((blockType & 255) == 0
-                                    || net.classicremastered.minecraft.level.tile.Block.blocks[blockType & 255] == null))) continue;
-                            byte finalBlock = (mode == 0) ? (byte) 0 : blockType;
-                            updateBlock(bx, by, bz, finalBlock);
+
+                                if (mode < 0
+                                        || mode > 1
+                                        || bx < 0
+                                        || bx >= WIDTH
+                                        || by < 0
+                                        || by >= HEIGHT
+                                        || bz < 0
+                                        || bz >= DEPTH
+                                        || (mode == 1
+                                                && ((blockType & 255) == 0
+                                                        || Block.blocks[blockType & 255] == null
+                                                        || (blockType & 255)
+                                                                == Block.WATERLOGGED_GLASS.id)))
+                                    continue;
+                                int finalBlock =
+                                        updateBlock(bx, by, bz, mode == 0 ? 0 : blockType & 255);
 
                             // Broadcast BLOCK_CHANGE
                             ByteArrayOutputStream blockChange = new ByteArrayOutputStream();

@@ -9,6 +9,7 @@ import net.classicremastered.minecraft.ProgressBarDisplay;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.CactusBlock;
 import net.classicremastered.minecraft.mob.*;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
@@ -379,6 +380,7 @@ public final class MobSpawner {
                 continue;
             Mob mob = MobRegistry.create(id, level, sx + .5f, y + .5f, sz + .5f);
             if (!(mob instanceof Fish fish)
+                    || CactusBlock.nearSpawn(level, fish.bb)
                     || !level.getCubes(fish.bb).isEmpty()
                     || !level.isFree(fish.bb)) continue;
             if (leader == null) leader = fish;
@@ -466,6 +468,7 @@ public final class MobSpawner {
         return range(mob.x, mob.y, mob.z, near)
                 && level.getLiquid(x, feetY, z) == LiquidType.NOT_LIQUID
                 && dry(mob.bb)
+                && !CactusBlock.nearSpawn(level, mob.bb)
                 && level.getCubes(mob.bb).isEmpty()
                 && level.isFree(mob.bb)
                 && level.findEntities(mob, mob.bb).isEmpty();

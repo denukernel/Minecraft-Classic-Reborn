@@ -111,14 +111,20 @@ final class ClientNetworkHandler {
                                             short bx = ((Short) var7[0]).shortValue();
                                             short by = ((Short) var7[1]).shortValue();
                                             short bz = ((Short) var7[2]).shortValue();
-                                            byte blockId = ((Byte) var7[3]).byteValue();
+                                            int blockId = ((Byte) var7[3]).byteValue() & 255;
 
                                             int oldBlockId =
                                                     var42.minecraft.level.getTile(bx, by, bz);
+                                            boolean releasedWater =
+                                                    oldBlockId == Block.GLASS.id
+                                                            && var42.minecraft.level
+                                                                    .isWaterloggedGlass(bx, by, bz)
+                                                            && blockId == Block.STATIONARY_WATER.id;
 
                                             if (var42.minecraft.level.netSetTile(
                                                     bx, by, bz, blockId)) {
-                                                if (oldBlockId > 0 && blockId == 0) { // Broken
+                                                if (oldBlockId > 0
+                                                        && (blockId == 0 || releasedWater)) {
                                                     Block block = Block.blocks[oldBlockId];
                                                     if (block != null) {
                                                         if (block.stepsound != null

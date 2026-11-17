@@ -172,7 +172,7 @@ public class GameMode {
         }
 
         if (minecraft.isOnline() && minecraft.networkManager != null) {
-            minecraft.networkManager.sendBlockChange(x, y, z, -1, blockId);
+            minecraft.networkManager.sendBlockChange(x, y, z, 1, blockId);
             return true;
         }
 
@@ -197,8 +197,7 @@ public class GameMode {
         Block placed = Block.blocks[blockId];
         if (placed != null) {
             if (minecraft.isOnline() && minecraft.networkManager != null) {
-                // correct packet: face = -1
-                minecraft.networkManager.sendBlockChange(x, y, z, -1, blockId);
+                minecraft.networkManager.sendBlockChange(x, y, z, 1, blockId);
             }
             if (placed.stepsound != null && placed.stepsound != Tile$SoundType.none) {
                 float vol = (placed.stepsound.getVolume() + 1.0F) / 2.0F;
@@ -286,11 +285,13 @@ public class GameMode {
         net.classicremastered.minecraft.level.itemstack.Item it =
                 net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
         if (it == null || !it.use(player, player.level)) return false;
-        if (!(it instanceof net.classicremastered.minecraft.level.itemstack.FoodItem)
-                && player.minecraft != null
-                && player.minecraft.renderer != null
-                && player.minecraft.renderer.heldBlock != null) {
-            player.minecraft.renderer.heldBlock.swing();
+        if (!(it instanceof net.classicremastered.minecraft.level.itemstack.FoodItem)) {
+            player.swingHand();
+            if (player.minecraft != null
+                    && player.minecraft.renderer != null
+                    && player.minecraft.renderer.heldBlock != null) {
+                player.minecraft.renderer.heldBlock.swing();
+            }
         }
 
         if (player.inventory.count[slot] <= 0) {

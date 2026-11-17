@@ -25,12 +25,44 @@ import java.util.List;
 import java.util.Random;
 
 public class Player extends Mob {
+    private static final int RECENT_MOB_COMBAT_TICKS = 200;
+
     public transient java.util.Map<Integer, java.util.List<Mob>> mobWandSelections;
 
     private transient boolean deathMessageSent;
     private transient int frostbiteSlowTicks;
     private transient net.classicremastered.minecraft.mob.Zombie environmentalDeathAttacker;
     private transient int environmentalDeathCreditTicks;
+    private transient Mob lastAttackedMob;
+    private transient int lastMobAttackTick;
+    private transient Mob lastMobAttacker;
+    private transient int lastMobHurtTick;
+
+    public void recordMobAttack(Mob target) {
+        if (target != this && level == target.level) {
+            lastAttackedMob = target;
+            lastMobAttackTick = tickCount;
+        }
+    }
+
+    public Mob recentMobAttack() {
+        return recentCombatMob(lastAttackedMob, lastMobAttackTick);
+    }
+
+    public Mob recentMobAttacker() {
+        return recentCombatMob(lastMobAttacker, lastMobHurtTick);
+    }
+
+    private Mob recentCombatMob(Mob mob, int combatTick) {
+        return mob != null
+                        && mob.level == level
+                        && mob.health > 0
+                        && !mob.removed
+                        && tickCount - combatTick <= RECENT_MOB_COMBAT_TICKS
+                ? mob
+                : null;
+    }
+
     public transient net.classicremastered.minecraft.mob.StickFigure bossComboOwner;
 
     public Player(Level var1) {
@@ -745,6 +777,7 @@ public class Player extends Mob {
         if (ticks > frozenTicks) frozenTicks = ticks;
     }
 
+    @Override
     public void applyPoison(int ticks, int everyNTicks) {
         poisonTicks = Math.max(poisonTicks, ticks);
         poisonEvery = Math.max(1, everyNTicks);
@@ -971,6 +1004,10 @@ public class Player extends Mob {
             }
             Entity owner = DeathMessages.resolveAttacker(attacker);
             if (owner != null && this.health > 0 && this.health < previousHealth) {
+                if (owner instanceof Mob mob && mob != this && mob.level == this.level) {
+                    lastMobAttacker = mob;
+                    lastMobHurtTick = tickCount;
+                }
                 environmentalDeathAttacker =
                         owner instanceof net.classicremastered.minecraft.mob.Zombie zombie
                                 ? zombie

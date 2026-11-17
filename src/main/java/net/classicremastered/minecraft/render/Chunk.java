@@ -82,6 +82,10 @@ public final class Chunk {
                         if (pass >= 0 && pass < PASS_COUNT)
                             passBlocks[pass][counts[pass]++] =
                                     (id << 12) | (ly << 8) | (lz << 4) | lx;
+                        if (block == Block.GLASS
+                                && level.isWaterloggedGlass(x0 + lx, y0 + ly, z0 + lz))
+                            passBlocks[1][counts[1]++] =
+                                    (Block.STATIONARY_WATER.id << 12) | (ly << 8) | (lz << 4) | lx;
                     }
 
             // initialize passes

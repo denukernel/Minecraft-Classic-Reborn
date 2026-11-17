@@ -221,7 +221,10 @@ public class InventoryScreen extends CraftingContainerScreen {
     }
 
     protected final void placeCarriedStackInSlot(int slot) {
-        Inventory inventory = minecraft.player.inventory;
+        placeCarriedStackInSlot(minecraft.player.inventory, slot);
+    }
+
+    protected final void placeCarriedStackInSlot(Inventory inventory, int slot) {
         if (slot >= 0 && slot < inventory.totalSize()) placeAllOrMerge(inventory, slot);
     }
 

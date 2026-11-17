@@ -105,6 +105,8 @@ public class Block {
     public static final Block LEAVES;
     public static final Block SPONGE;
     public static final Block GLASS;
+    // Stored in world data. Level.getTile exposes both glass states as GLASS.
+    public static final Block WATERLOGGED_GLASS;
     public static final Block STRUCTURE_ALPHA;
     public static final Block STRUCTURE_BETA;
     public static final Block STRUCTURE_GAMMA;
@@ -717,7 +719,8 @@ public class Block {
         LOG = (new WoodBlock(17)).setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.5F);
         LEAVES = (new LeavesBlock(18, 22)).setData(Tile$SoundType.grass, 1.0F, 0.4F, 0.2F);
         SPONGE = (new SpongeBlock(19)).setData(Tile$SoundType.cloth, 1.0F, 0.9F, 0.6F);
-        GLASS = (new GlassBlock(20, 49, false)).setData(Tile$SoundType.metal, 1.0F, 1.0F, 0.3F);
+        GLASS = new GlassBlock(20).setData(Tile$SoundType.metal, 1.0F, 1.0F, 0.3F);
+        WATERLOGGED_GLASS = new GlassBlock(77).setData(Tile$SoundType.metal, 1.0F, 1.0F, 0.3F);
         RED_WOOL = (new Block(21, 64, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         ORANGE_WOOL = (new Block(22, 65, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);
         YELLOW_WOOL = (new Block(23, 66, "Wool")).setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.8F);

@@ -10,6 +10,9 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.StickFigure;
+import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
+import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers;
 import net.classicremastered.minecraft.player.Inventory;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.ShapeRenderer;
@@ -246,8 +249,7 @@ public final class HUDScreen extends Screen {
         FontRenderer font = this.mc.fontRenderer;
         this.mc.renderer.enableGuiMode();
         boolean showDebug = mc.debugOverlay && mc.currentScreen == null;
-        if (!showDebug)
-            renderBossBar(font);
+        if (!showDebug) renderBossBars(font);
 
         TextureManager tm = this.mc.textureManager;
         ShapeRenderer sr = ShapeRenderer.instance;
@@ -487,75 +489,74 @@ public final class HUDScreen extends Screen {
         }
     }
 
-    public void renderBossBar(FontRenderer font) {
-        net.classicremastered.minecraft.mob.StickFigure boss =
-                net.classicremastered.minecraft.mob.StickFigure.nearestBoss(mc.level, mc.player);
-        if (boss == null) return;
+    public void renderBossBars(FontRenderer font) {
+        List<StickFigure> bosses = StickFigure.nearbyBosses(mc.level, mc.player);
+        if (bosses.isEmpty()) return;
+        int rowHeight = 23;
+        int rows = Math.min(bosses.size(), Math.max(1, (height / 2 - 8) / rowHeight));
+        int barWidth = Math.min(182, width - 20), left = (width - barWidth) / 2;
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         try {
             GL11.glDisable(GL11.GL_DEPTH_TEST);
             GL11.glDisable(GL11.GL_CULL_FACE);
             GL11.glDisable(GL11.GL_FOG);
-            int barWidth = Math.min(182, width - 20), left = (width - barWidth) / 2;
-            boolean enraged = boss.isEnraged();
-            drawBox(left - 1, 14, left + barWidth + 1, 22, 0xff111111);
-            drawBox(left, 15, left + barWidth, 21, 0xff402030);
-            drawBox(
-                    left,
-                    15,
-                    left
-                            + Math.round(
-                                    barWidth
-                                            * Math.max(
-                                                    0,
-                                                    Math.min(
-                                                            1,
-                                                            boss.health
-                                                                    / (float)
-                                                                            net.classicremastered
-                                                                                    .minecraft.mob
-                                                                                    .StickFigure
-                                                                                    .MAX_HEALTH))),
-                    21,
-                    enraged ? 0xffed5432 : 0xffc82c4c);
-            int rageMarker = left + Math.round(barWidth * .25f);
-            drawBox(rageMarker, 14, rageMarker + 1, 22, 0xffffbe70);
-            String cue = enraged ? "Enraged" : "";
-            if (boss.ai
-                    instanceof
-                    net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI ai) {
-                cue =
-                        switch (ai.powers.phase) {
-                            case IDLE -> cue;
-                            case THROW -> {
-                                if (ai.powers.phaseTicks
-                                        >= net.classicremastered.minecraft.mob.ai.stickfigure
-                                                .StickFigurePowers.THROW_RELEASE_TICK)
-                                    yield "Recovering";
-                                yield ai.powers.heldBlockId() > 0
-                                        ? "Block incoming"
-                                        : "Throw incoming";
-                            }
-                            case FIREBALL -> "Fireball incoming";
-                            case UPPERCUT -> "Uppercut incoming";
-                            case BARRAGE ->
-                                    ai.powers.canPlayerEscape(mc.player)
-                                            ? "Press Jump to escape"
-                                            : "Aerial barrage";
-                            case SLAM -> "Slam incoming";
-                            case PHYSICS_GUN -> "Physics gun hold";
-                            case RAGE_TRANSITION -> "Entering rage";
-                            case RUSH_WINDUP -> "Charge incoming";
-                            case RUSH -> "Charging";
-                            case STAGGER -> "Staggered";
-                        };
+            for (int i = 0; i < rows; i++) {
+                renderBossBar(font, bosses.get(i), left, barWidth, 4 + i * rowHeight);
             }
-            drawCenteredString(font, "Stick Figure", width / 2, 4, 0xffffff);
-            if (!cue.isEmpty())
-                drawCenteredString(font, cue, width / 2, 25, enraged ? 0xffffbe70 : 0xffffff);
+            if (rows < bosses.size()) {
+                String overflow = "+" + (bosses.size() - rows) + " more";
+                drawString(
+                        font, overflow, left + barWidth + 5, 14 + (rows - 1) * rowHeight, 0xffffff);
+            }
         } finally {
             GL11.glPopAttrib();
         }
+    }
+
+    private void renderBossBar(FontRenderer font, StickFigure boss, int left, int barWidth, int y) {
+        boolean enraged = boss.isEnraged();
+        int fill = Math.round(barWidth * Math.min(1, boss.health / (float) StickFigure.MAX_HEALTH));
+        drawBox(left - 1, y + 10, left + barWidth + 1, y + 18, 0xff111111);
+        drawBox(left, y + 11, left + barWidth, y + 17, 0xff402030);
+        if (fill > 0) drawBox(left, y + 11, left + fill, y + 17, enraged ? 0xffed5432 : 0xffc82c4c);
+        int rageMarker = left + Math.round(barWidth * .25f);
+        drawBox(rageMarker, y + 10, rageMarker + 1, y + 18, 0xffffbe70);
+        String name =
+                boss.customName == null || boss.customName.isBlank()
+                        ? "Stick Figure"
+                        : boss.customName;
+        String cue = bossCue(boss);
+        drawCenteredString(
+                font,
+                cue.isEmpty() ? name : name + " - " + cue,
+                width / 2,
+                y,
+                enraged ? 0xffffbe70 : 0xffffff);
+    }
+
+    private String bossCue(StickFigure boss) {
+        String idle = boss.isEnraged() ? "Enraged" : "";
+        if (!(boss.ai instanceof StickFigureAI ai)) return idle;
+        return switch (ai.powers.phase) {
+            case IDLE -> idle;
+            case THROW -> {
+                if (ai.powers.phaseTicks >= StickFigurePowers.THROW_RELEASE_TICK)
+                    yield "Recovering";
+                yield ai.powers.heldBlockId() > 0 ? "Block incoming" : "Throw incoming";
+            }
+            case FIREBALL -> "Fireball incoming";
+            case UPPERCUT -> "Uppercut incoming";
+            case BARRAGE ->
+                    ai.powers.canPlayerEscape(mc.player)
+                            ? "Press Jump to escape"
+                            : "Aerial barrage";
+            case SLAM -> "Slam incoming";
+            case PHYSICS_GUN -> "Physics gun hold";
+            case RAGE_TRANSITION -> "Entering rage";
+            case RUSH_WINDUP -> "Charge incoming";
+            case RUSH -> "Charging";
+            case STAGGER -> "Staggered";
+        };
     }
 
     public void onMouseClick(int x, int y, int button) {

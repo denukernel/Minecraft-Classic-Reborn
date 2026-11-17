@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.level.itemstack;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.nbt.*;
@@ -333,7 +334,11 @@ public final class Equipment {
         for (int s = 0; s < 5; s++) {
             int raw = e.getInt("Slot" + s);
             Gear g = gear(raw);
-            int equipped = g != null && (s == 4 ? g.slot < 0 : g.slot == s) ? raw : 0;
+            boolean valid =
+                    m instanceof Defender
+                            ? Defender.equipmentSlot(raw) == s
+                            : g != null && (s == 4 ? g.slot < 0 : g.slot == s);
+            int equipped = valid ? raw : 0;
             equip(m, s, equipped, e.getInt("Wear" + s));
         }
         m.equipmentRolled = true;

@@ -1,12 +1,12 @@
 {
   "name": "salmon",
-  "atlasW": 64,
-  "atlasH": 64,
+  "atlasW": 32,
+  "atlasH": 32,
   "parts": [
-    {"name":"body","x":-1.5,"y":-2.5,"z":0,"w":3,"h":5,"d":8,"posX":0,"posY":0,"posZ":-7.2,"pitch":0,"yaw":0,"roll":0,"children":[{"name":"top_front_fin","x":0,"y":0,"z":0,"w":0,"h":2,"d":3,"posX":0,"posY":-4.5,"posZ":5,"pitch":0,"yaw":0,"roll":0,"u":22,"v":0}],"u":0,"v":0},
-    {"name":"tail","x":-1.5,"y":-2.5,"z":0,"w":3,"h":5,"d":8,"posX":0,"posY":0,"posZ":0.8000002,"pitch":0,"yaw":0,"roll":0,"animYaw":"0.42 * sin(ageInTicks * 0.6)","children":[{"name":"back_fin","x":0,"y":-2.5,"z":0,"w":0,"h":5,"d":6,"posX":0,"posY":0,"posZ":8,"pitch":0,"yaw":0,"roll":0,"u":50,"v":0},{"name":"top_back_fin","x":0,"y":0,"z":0,"w":0,"h":2,"d":4,"posX":0,"posY":-4.5,"posZ":-1,"pitch":0,"yaw":0,"roll":0,"u":0,"v":13}],"u":28,"v":0},
-    {"name":"head","x":-1,"y":-2,"z":-3,"w":2,"h":4,"d":3,"posX":0,"posY":0,"posZ":-7.2,"pitch":0,"yaw":0,"roll":0,"u":8,"v":13},
-    {"name":"right_fin","x":-2,"y":0,"z":0,"w":2,"h":0,"d":2,"posX":-1.5,"posY":1.5,"posZ":-7.2,"pitch":0,"yaw":0,"roll":-0.7853982,"animRoll":"-0.7853982 - 0.35 * sin(ageInTicks * 0.45)","u":18,"v":13},
-    {"name":"left_fin","x":0,"y":0,"z":0,"w":2,"h":0,"d":2,"posX":1.5,"posY":1.5,"posZ":-7.2,"pitch":0,"yaw":0,"roll":0.7853982,"animRoll":"0.7853982 + 0.35 * sin(ageInTicks * 0.45)","u":26,"v":13}
+    {"name":"body","x":-1.5,"y":-2.5,"z":0,"w":3,"h":5,"d":8,"posX":0,"posY":0,"posZ":-7.2,"pitch":0,"yaw":0,"roll":0,"children":[{"name":"top_front_fin","x":0,"y":0,"z":0,"w":0,"h":2,"d":3,"posX":0,"posY":-4.5,"posZ":5,"pitch":0,"yaw":0,"roll":0,"u":5,"v":1}],"u":0,"v":0},
+    {"name":"tail","x":-1.5,"y":-2.5,"z":0,"w":3,"h":5,"d":8,"posX":0,"posY":0,"posZ":0.8000002,"pitch":0,"yaw":0,"roll":0,"animYaw":"0.42 * sin(ageInTicks * 0.6)","children":[{"name":"back_fin","x":0,"y":-2.5,"z":0,"w":0,"h":5,"d":6,"posX":0,"posY":0,"posZ":8,"pitch":0,"yaw":0,"roll":0,"u":26,"v":10},{"name":"top_back_fin","x":0,"y":0,"z":0,"w":0,"h":2,"d":4,"posX":0,"posY":-4.5,"posZ":-1,"pitch":0,"yaw":0,"roll":0,"u":4,"v":2}],"u":0,"v":13},
+    {"name":"head","x":-1,"y":-2,"z":-3,"w":2,"h":4,"d":3,"posX":0,"posY":0,"posZ":-7.2,"pitch":0,"yaw":0,"roll":0,"u":22,"v":0},
+    {"name":"right_fin","x":-2,"y":0,"z":0,"w":2,"h":0,"d":2,"posX":-1.5,"posY":1.5,"posZ":-7.2,"pitch":0,"yaw":0,"roll":-0.7853982,"animRoll":"-0.7853982 - 0.35 * sin(ageInTicks * 0.45)","u":-2,"v":0},
+    {"name":"left_fin","x":0,"y":0,"z":0,"w":2,"h":0,"d":2,"posX":1.5,"posY":1.5,"posZ":-7.2,"pitch":0,"yaw":0,"roll":0.7853982,"animRoll":"0.7853982 + 0.35 * sin(ageInTicks * 0.45)","u":2,"v":0}
   ]
 }

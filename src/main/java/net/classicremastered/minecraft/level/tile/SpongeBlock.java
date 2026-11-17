@@ -13,7 +13,9 @@ public final class SpongeBlock extends Block {
         for (int var7 = x - 2; var7 <= x + 2; ++var7) {
             for (int var5 = y - 2; var5 <= y + 2; ++var5) {
                 for (int var6 = z - 2; var6 <= z + 2; ++var6) {
-                    if (level.isWater(var7, var5, var6)) {
+                    if (level.isWaterloggedGlass(var7, var5, var6)) {
+                        level.setTileNoNeighborChange(var7, var5, var6, Block.GLASS.id);
+                    } else if (level.isWater(var7, var5, var6)) {
                         level.setTileNoNeighborChange(var7, var5, var6, 0);
                     }
                 }

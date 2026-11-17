@@ -1,45 +1,35 @@
 package net.classicremastered.minecraft.path;
 
-import java.util.*;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.*;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.phys.AABB;
+
+import java.util.*;
 
 /** Bounded surface-water search for a body-clear, reachable bank, including side exits. */
 public final class ShoreNavigator {
-    private ShoreNavigator() {
-    }
-    public record Step(float x, float feetY, float z) {
-    }
+    private ShoreNavigator() {}
 
-    private record Cell(int x, int z, int surface, Cell parent, int distance) {
-    }
+    public record Step(float x, float feetY, float z) {}
+
+    private record Cell(int x, int z, int surface, Cell parent, float distance) {}
+
     private static boolean loaded(Level level, int x, int z) {
         if (level instanceof LevelInfiniteTerrain t)
             return t.chunks().isChunkLoaded(x >> 4, z >> 4);
-        if (level instanceof LevelInfiniteFlat f)
-            return f.chunks.isChunkLoaded(x >> 4, z >> 4);
+        if (level instanceof LevelInfiniteFlat f) return f.chunks.isChunkLoaded(x >> 4, z >> 4);
         return level.isInBounds(x, 1, z);
     }
 
-    private static int surface(Level level, Mob mob, int x, int z, int near) {
+    private static int surface(Level level, GroundClearance swim, int x, int z, int near) {
         if (!loaded(level, x, z)) return -1;
         int top = Math.min(level.depth - 2, near + 4);
         while (top < level.depth - 2 && level.isWater(x, top, z)) top++;
-        for (int y = top; y >= Math.max(0, near - 5); y--)
-            if (level.isWater(x, y, z) && !level.isWater(x, y + 1, z)) {
-                float half = mob.bbWidth * .5f - .002f, px = x + .5f, pz = z + .5f, feet = y + .4f;
-                if (level.getCubes(
-                                new AABB(
-                                        px - half,
-                                        feet,
-                                        pz - half,
-                                        px + half,
-                                        feet + mob.bbHeight,
-                                        pz + half))
-                        .isEmpty()) return y + 1;
-            }
+        for (int y = top; y >= Math.max(0, near - 5); y--) {
+            if (level.isWater(x, y, z)
+                    && !level.isWater(x, y + 1, z)
+                    && swim.bodyClear(x + swim.offset, y + .4f, z + swim.offset)) return y + 1;
+        }
         return -1;
     }
 
@@ -48,60 +38,97 @@ public final class ShoreNavigator {
     }
 
     public static List<Step> find(Level level, Mob mob, Entity target, Step blockedExit) {
-        int sx = (int) Math.floor(mob.x), sz = (int) Math.floor(mob.z);
+        return find(level, mob, target, blockedExit, false);
+    }
+
+    public static List<Step> findWater(Level level, Mob mob, Entity target) {
+        return find(level, mob, target, null, true);
+    }
+
+    private static List<Step> find(
+            Level level, Mob mob, Entity target, Step blockedExit, boolean waterGoal) {
+        int sx = Pathfinder.cell(mob.x, mob.bbWidth), sz = Pathfinder.cell(mob.z, mob.bbWidth);
         int near = (int) Math.floor(mob.bb.y0);
         float standingHeight =
                 mob instanceof net.classicremastered.minecraft.mob.StickFigure
                         ? net.classicremastered.minecraft.mob.StickFigure.STANDING_HEIGHT
                         : mob.bbHeight;
         GroundClearance dry = new GroundClearance(level, mob.bbWidth, standingHeight);
+        GroundClearance swim = new GroundClearance(level, mob.bbWidth, mob.bbHeight, true);
+        float offset = swim.offset;
+        float bankInset = Math.max(0, mob.bbWidth * .5f - offset + .05f);
         ArrayDeque<Cell> queue = new ArrayDeque<>();
         Set<Long> seen = new HashSet<>();
         Cell best = null;
         Step exit = null;
         float bestScore = Float.MAX_VALUE;
-        for (int x = (int) Math.floor(mob.bb.x0); x <= (int) Math.floor(mob.bb.x1); x++) {
-            for (int z = (int) Math.floor(mob.bb.z0); z <= (int) Math.floor(mob.bb.z1); z++) {
-                int startSurface = surface(level, mob, x, z, near);
-                if (startSurface < 0) continue;
-                queue.add(new Cell(x, z, startSurface, null, 0));
+        for (int x = sx - 1; x <= sx + 1; x++) {
+            for (int z = sz - 1; z <= sz + 1; z++) {
+                int startSurface = surface(level, swim, x, z, near);
+                float feet = Math.max(mob.bb.y0, startSurface - .6f);
+                if (startSurface < 0
+                        || !swim.bodyLineClear(mob.x, feet, mob.z, x + offset, z + offset))
+                    continue;
+                float approach = (float) Math.hypot(x + offset - mob.x, z + offset - mob.z);
+                queue.add(new Cell(x, z, startSurface, null, approach));
                 seen.add(Level.getCoordKey(x, 0, z));
             }
         }
         int[][] directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         int radius = 24;
+        int targetX = waterGoal ? Pathfinder.cell(target.x, mob.bbWidth) : 0;
+        int targetZ = waterGoal ? Pathfinder.cell(target.z, mob.bbWidth) : 0;
         while (!queue.isEmpty()) {
             Cell current = queue.remove();
+            if (waterGoal && current.x == targetX && current.z == targetZ) {
+                best = current;
+                break;
+            }
+            if (target == null && current.distance + 1 >= bestScore) continue;
             for (int[] dir : directions) {
                 int x = current.x + dir[0], z = current.z + dir[1];
                 if (Math.abs(x - sx) > radius || Math.abs(z - sz) > radius || !loaded(level, x, z))
                     continue;
-                int water = surface(level, mob, x, z, current.surface);
+                float px = x + offset, pz = z + offset;
+                int water = surface(level, swim, x, z, current.surface);
                 if (water >= 0 && Math.abs(water - current.surface) <= 1) {
-                    if (seen.add(Level.getCoordKey(x, 0, z)))
+                    long key = Level.getCoordKey(x, 0, z);
+                    if (!seen.contains(key)
+                            && swim.bodyLineClear(
+                                    current.x + offset,
+                                    Math.max(water, current.surface) - .6f,
+                                    current.z + offset,
+                                    px,
+                                    pz)) {
+                        seen.add(key);
                         queue.add(new Cell(x, z, water, current, current.distance + 1));
+                    }
                     continue;
                 }
+                if (waterGoal) continue;
+                // Land far enough past the lip that the whole footprint clears the water.
+                px += dir[0] * bankInset;
+                pz += dir[1] * bankInset;
                 for (float rise : new float[] {0, .5f, 1, -.5f, -1}) {
                     float feet = current.surface + rise;
                     if (blockedExit != null
-                            && blockedExit.x() == x + .5f
-                            && blockedExit.z() == z + .5f
+                            && blockedExit.x() == px
+                            && blockedExit.z() == pz
                             && blockedExit.feetY() == feet) continue;
-                    if (!dry.supportedAt(x + .5f, feet, z + .5f)
-                            || !dry.bodyLineClear(
-                                    current.x + .5f,
+                    if (!dry.supportedAt(px, feet, pz)
+                            || !swim.bodyLineClear(
+                                    current.x + offset,
                                     Math.max(feet, current.surface),
-                                    current.z + .5f,
-                                    x + .5f,
-                                    z + .5f)) continue;
+                                    current.z + offset,
+                                    px,
+                                    pz)) continue;
                     float score = current.distance + 1;
                     if (target != null)
-                        score += (float) Math.hypot(x + .5f - target.x, z + .5f - target.z) * 1.5f;
+                        score += (float) Math.hypot(px - target.x, pz - target.z) * 1.5f;
                     if (score < bestScore) {
                         bestScore = score;
                         best = current;
-                        exit = new Step(x + .5f, feet, z + .5f);
+                        exit = new Step(px, feet, pz);
                     }
                     break;
                 }
@@ -110,8 +137,8 @@ public final class ShoreNavigator {
         if (best == null) return List.of();
         LinkedList<Step> route = new LinkedList<>();
         for (Cell node = best; node != null; node = node.parent)
-            route.addFirst(new Step(node.x + .5f, node.surface - .6f, node.z + .5f));
-        route.add(exit);
+            route.addFirst(new Step(node.x + offset, node.surface - .6f, node.z + offset));
+        if (!waterGoal) route.add(exit);
         return route;
     }
 }

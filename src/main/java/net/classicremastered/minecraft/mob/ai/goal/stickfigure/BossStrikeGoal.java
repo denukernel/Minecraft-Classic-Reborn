@@ -32,7 +32,7 @@ public final class BossStrikeGoal extends MeleeAttackGoal {
         ai.nextKick = !ai.nextKick;
         boss.strikeTicks = 14;
         ai.mob.attackTime = 14;
-        ai.attackDelay = boss.kicking ? 32 : 24;
+        ai.attackDelay = boss.attackInterval(boss.kicking ? 32 : 24);
         ai.noActionTime = 0;
         return true;
     }

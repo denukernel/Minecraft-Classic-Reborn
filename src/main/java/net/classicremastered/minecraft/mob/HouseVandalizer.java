@@ -46,9 +46,10 @@ public final class HouseVandalizer extends Zombie {
             if (wall != null && (wall.x != x || wall.y != y || wall.z != z))
                 return false;
         }
+        boolean waterlogged = level.isWaterloggedGlass(x, y, z);
         if (!level.setTile(x, y, z, 0))
             return false;
-        if (level.getTile(x, y, z) != 0) {
+        if (level.getTile(x, y, z) != 0 && !(waterlogged && level.isWater(x, y, z))) {
             level.setTile(x, y, z, block.id);
             return false;
         }

@@ -152,6 +152,8 @@ public class Skeleton extends Zombie {
     }
 
     public void updateBowAttack(Entity target, boolean visible) {
+        Difficulty difficulty = CombatRules.difficulty(level);
+        int bowRange = difficulty.ordinal() >= Difficulty.VERY_HARD.ordinal() ? 30 : 20;
         previousBowDrawTicks = bowDrawTicks;
         boolean recovering = bowRecoveryTicks > 0;
         if (recovering) bowRecoveryTicks--;
@@ -164,7 +166,7 @@ public class Skeleton extends Zombie {
                 || target instanceof Mob m && m.health <= 0
                 || CreativeModeHelper.shouldIgnoreTarget(target)
                 || !visible
-                || distanceTo(target) > 20
+                || distanceTo(target) > bowRange
                 || net.classicremastered.minecraft.level.itemstack.PhysicsGunItem.isHeld(this)) {
             cancelBowAttack();
             return;
@@ -178,7 +180,7 @@ public class Skeleton extends Zombie {
             drawingBow = false;
             bowDrawTicks = previousBowDrawTicks = 0;
             bowRecoveryTicks =
-                    CombatRules.difficulty(level).ordinal() >= Difficulty.HARD.ordinal()
+                    difficulty.ordinal() >= Difficulty.HARD.ordinal()
                             ? HARD_BOW_RECOVERY_TICKS
                             : BOW_RECOVERY_TICKS;
         }

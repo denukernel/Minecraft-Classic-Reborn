@@ -98,6 +98,7 @@ final class ClientFrameRenderer {
                     Renderer r2 = r;
                     ClientTargetPicker.pick(r, partial);
                     CameraView camera = r.prepareCamera(renderPartial, System.nanoTime());
+                    if (mc.soundPC != null) mc.soundPC.setListener(camera);
                     Vec3D eye = camera.position();
                     LiquidType cameraLiquid = mc.level.getLiquidAt(eye.x, eye.y, eye.z);
                     r2.updateWaterVision(cameraLiquid);

@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.MovingObjectPosition;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.GlassBlock;
 import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.mob.Creeper;
 import net.classicremastered.minecraft.mob.IronGolem;
@@ -142,11 +143,8 @@ public class Level implements Serializable {
     }
 
     public int getFlowLevel(int x, int y, int z) {
-        int tile = getTile(x, y, z);
-        if (tile != Block.WATER.id
-                && tile != Block.STATIONARY_WATER.id
-                && tile != Block.LAVA.id
-                && tile != Block.STATIONARY_LAVA.id) {
+        int tile = getStoredTile(x, y, z);
+        if (!storesLiquidLevel(tile)) {
             return -1;
         }
 
@@ -160,7 +158,9 @@ public class Level implements Serializable {
             return val.intValue();
         }
 
-        if (tile == Block.STATIONARY_WATER.id || tile == Block.STATIONARY_LAVA.id) {
+        if (tile == Block.STATIONARY_WATER.id
+                || tile == Block.STATIONARY_LAVA.id
+                || tile == Block.WATERLOGGED_GLASS.id) {
             return 0;
         }
         return (tile == Block.WATER.id) ? 7 : 3;
@@ -178,22 +178,38 @@ public class Level implements Serializable {
         }
     }
 
-    protected void updateFlowLevelMap(int x, int y, int z, int id) {
+    private static boolean storesLiquidLevel(int id) {
+        return id == Block.WATER.id
+                || id == Block.STATIONARY_WATER.id
+                || id == Block.LAVA.id
+                || id == Block.STATIONARY_LAVA.id
+                || id == Block.WATERLOGGED_GLASS.id;
+    }
+
+    protected void updateFlowLevelMap(int x, int y, int z, int id, int previousId) {
         if (id != Block.CACTUS.id && !cactusAges.isEmpty()) cactusAges.remove(getCoordKey(x, y, z));
         if (this.flowLevels == null) {
             this.flowLevels = new java.util.HashMap<>();
         }
-        if (id == Block.WATER.id
-                || id == Block.STATIONARY_WATER.id
-                || id == Block.LAVA.id
-                || id == Block.STATIONARY_LAVA.id) {
-            long key = getCoordKey(x, y, z);
-            if (!this.flowLevels.containsKey(key)) {
-                this.flowLevels.put(key, (byte) 0);
-            }
+        long key = getCoordKey(x, y, z);
+        boolean lavaReplacingGlass =
+                previousId == Block.WATERLOGGED_GLASS.id
+                        && (id == Block.LAVA.id || id == Block.STATIONARY_LAVA.id);
+        if (lavaReplacingGlass) this.flowLevels.remove(key);
+        if (storesLiquidLevel(id)) {
+            int initialLevel =
+                    id == Block.WATERLOGGED_GLASS.id && previousId == Block.WATER.id ? 7 : 0;
+            this.flowLevels.putIfAbsent(key, (byte) initialLevel);
         } else {
-            this.flowLevels.remove(getCoordKey(x, y, z));
+            this.flowLevels.remove(key);
         }
+    }
+
+    protected int retainGlassWater(int x, int y, int z, int previousId, int id) {
+        if (id == 0 && previousId == Block.WATERLOGGED_GLASS.id) {
+            return getFlowLevel(x, y, z) == 0 ? Block.STATIONARY_WATER.id : Block.WATER.id;
+        }
+        return GlassBlock.retainWater(previousId, id);
     }
 
     public Level() {
@@ -507,7 +523,9 @@ public class Level implements Serializable {
     }
 
     public boolean setTileNoNeighborChange(int var1, int var2, int var3, int var4) {
-        return this.networkMode ? false : this.netSetTileNoNeighborChange(var1, var2, var3, var4);
+        if (this.networkMode) return false;
+        int id = retainGlassWater(var1, var2, var3, getStoredTile(var1, var2, var3), var4);
+        return this.netSetTileNoNeighborChange(var1, var2, var3, id);
     }
 
     public boolean netSetTileNoNeighborChange(int var1, int var2, int var3, int var4) {
@@ -535,7 +553,7 @@ public class Level implements Serializable {
                 this.blocks[idx] = (byte) var4;
                 this.onBlockChanged(var1, var2, var3);
                 this.updateEmissiveSource(var1, var2, var3, prevId, var4);
-                this.updateFlowLevelMap(var1, var2, var3, var4);
+                this.updateFlowLevelMap(var1, var2, var3, var4, prevId);
                 if (prevId != 0) {
                     Block.blocks[prevId].onRemoved(this, var1, var2, var3);
                 }
@@ -562,7 +580,7 @@ public class Level implements Serializable {
         if (this.networkMode) {
             return false;
         } else if (this.setTileNoNeighborChange(x, y, z, id)) {
-            this.updateNeighborsAt(x, y, z, id);
+            this.updateNeighborsAt(x, y, z, getStoredTile(x, y, z));
 
             // === Iron Golem creation check ===
             if (id == Block.PUMPKIN.id) {
@@ -609,7 +627,7 @@ public class Level implements Serializable {
         }
 
         // Spawn golem
-        IronGolem g = new IronGolem(this, x + 0.5f, y - 1, z + 0.5f);
+        IronGolem g = new IronGolem(this, x + 0.5f, y - 2 + IronGolem.HEIGHT / 2 + .01f, z + 0.5f);
         g.builtByPlayer = true; // mark as defender
         this.addEntity(g);
 
@@ -665,7 +683,7 @@ public class Level implements Serializable {
             } else {
                 this.blocks[(var2 * this.height + var3) * this.width + var1] = (byte) var4;
                 this.onBlockChanged(var1, var2, var3);
-                this.updateFlowLevelMap(var1, var2, var3, var4);
+                this.updateFlowLevelMap(var1, var2, var3, var4, old);
                 this.updateEmissiveSource(var1, var2, var3, old, var4);
                 return true;
             }
@@ -695,6 +713,11 @@ public class Level implements Serializable {
     }
 
     public int getTile(int var1, int var2, int var3) {
+        int id = getStoredTile(var1, var2, var3);
+        return id == Block.WATERLOGGED_GLASS.id ? Block.GLASS.id : id;
+    }
+
+    protected int getStoredTile(int var1, int var2, int var3) {
         return var1 >= 0
                         && var2 >= 0
                         && var3 >= 0
@@ -1086,11 +1109,8 @@ public class Level implements Serializable {
                 var tag = (net.classicremastered.nbt.CompoundTag) flows.get(i);
                 long key = tag.getLong("Key");
                 int x = (int) (key >> 38), y = (int) (key & 4095), z = (int) (key << 26 >> 38);
-                int id = getTile(x, y, z);
-                if (id == Block.WATER.id
-                        || id == Block.STATIONARY_WATER.id
-                        || id == Block.LAVA.id
-                        || id == Block.STATIONARY_LAVA.id) {
+                int id = getStoredTile(x, y, z);
+                if (storesLiquidLevel(id)) {
                     flowLevels.put(key, tag.getByte("Depth"));
                 }
             }
@@ -1771,6 +1791,17 @@ public class Level implements Serializable {
                 && Block.blocks[var4].getLiquidType() == LiquidType.WATER;
     }
 
+    public boolean isWaterloggedGlass(int x, int y, int z) {
+        return getStoredTile(x, y, z) == Block.WATERLOGGED_GLASS.id;
+    }
+
+    public boolean hasVisibleWater(int x, int y, int z) {
+        int id = getStoredTile(x, y, z);
+        Block block = Block.blocks[id];
+        return id == Block.WATERLOGGED_GLASS.id
+                || block != null && block.getLiquidType() == LiquidType.WATER;
+    }
+
     public void setNetworkMode(boolean var1) {
         this.networkMode = var1;
     }
@@ -1790,6 +1821,19 @@ public class Level implements Serializable {
 
     public MovingObjectPosition clip(
             Vec3D var1, Vec3D var2, boolean checkSolidOnly, boolean checkLiquids) {
+        return clip(var1, var2, checkSolidOnly, checkLiquids, false);
+    }
+
+    public MovingObjectPosition clipLiquidSources(Vec3D start, Vec3D end) {
+        return clip(start, end, false, true, true);
+    }
+
+    private MovingObjectPosition clip(
+            Vec3D var1,
+            Vec3D var2,
+            boolean checkSolidOnly,
+            boolean checkLiquids,
+            boolean sourcesOnly) {
         if (!Float.isNaN(var1.x) && !Float.isNaN(var1.y) && !Float.isNaN(var1.z)) {
             if (!Float.isNaN(var2.x) && !Float.isNaN(var2.y) && !Float.isNaN(var2.z)) {
                 int var3 = (int) Math.floor((double) var2.x);
@@ -1800,8 +1844,9 @@ public class Level implements Serializable {
                 int var8 = (int) Math.floor((double) var1.z);
                 int initialTile = getTile(var6, var7, var8);
                 if (!checkSolidOnly
-                        && net.classicremastered.minecraft.level.tile.LadderBlock.isLadder(
-                                initialTile)) {
+                        && (net.classicremastered.minecraft.level.tile.LadderBlock.isLadder(
+                                        initialTile)
+                                || sourcesOnly && getFlowLevel(var6, var7, var8) == 0)) {
                     MovingObjectPosition hit =
                             Block.blocks[initialTile].clip(this, var6, var7, var8, var1, var2);
                     if (hit != null) return hit;
@@ -1921,7 +1966,10 @@ public class Level implements Serializable {
                     int var22 = this.getTile(var6, var7, var8);
                     Block var21 = Block.blocks[var22];
                     if (var22 > 0
-                            && (var21.getLiquidType() == LiquidType.NOT_LIQUID || checkLiquids)) {
+                            && (var21.getLiquidType() == LiquidType.NOT_LIQUID
+                                    || checkLiquids
+                                            && (!sourcesOnly
+                                                    || getFlowLevel(var6, var7, var8) == 0))) {
                         if (checkSolidOnly && var21.getCollisionBox(var6, var7, var8) == null) {
                             continue;
                         }

@@ -20,7 +20,10 @@ public class GiveCommand implements Command {
     private static boolean isDisallowedBlock(int id) {
         if (id <= 0 || id >= Block.blocks.length) return false;
         Block b = Block.blocks[id];
-        return b == Block.WATER || b == Block.LAVA || b == Block.FIRE;
+        return b == Block.WATER
+                || b == Block.LAVA
+                || b == Block.FIRE
+                || b == Block.WATERLOGGED_GLASS;
     }
 
     @Override

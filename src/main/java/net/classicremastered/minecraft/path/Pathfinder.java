@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.path;
 
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.model.Vec3D;
 
 import java.util.*;
 
@@ -34,9 +35,11 @@ public final class Pathfinder {
 
     public static boolean canEnterWater(Mob mob) {
         return supportsSwimming(mob)
-                && mob instanceof net.classicremastered.minecraft.mob.Zombie zombie
-                && !(mob instanceof net.classicremastered.minecraft.mob.Skeleton)
-                && zombie.canBurnInSunlight();
+                && mob.ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic
+                && !basic.isAvoidingWater()
+                && (mob instanceof net.classicremastered.minecraft.mob.Defender
+                        || mob instanceof net.classicremastered.minecraft.mob.Zombie
+                                && !(mob instanceof net.classicremastered.minecraft.mob.Skeleton));
     }
 
     public static boolean waterBetween(Level level, Mob mob, float x, float feetY, float z) {
@@ -97,6 +100,33 @@ public final class Pathfinder {
 
     public static boolean canWalkStraight(Level level, Mob mob, float x, float feetY, float z) {
         return new GroundClearance(level, mob).walkableLine(mob.x, mob.bb.y0, mob.z, x, feetY, z);
+    }
+
+    public static boolean canStandAt(Level level, Mob mob, float x, float feetY, float z) {
+        return new GroundClearance(level, mob).supportedAt(x, feetY, z);
+    }
+
+    public static boolean canReachFrom(Level level, Mob mob, Vec3D feet, Mob target) {
+        GroundClearance ground = new GroundClearance(level, mob);
+        float targetY = target.bb.y0;
+        if (ground.walkableLine(feet.x, feet.y, feet.z, target.x, targetY, target.z)) return true;
+        Node goal = ground.chaseGoal(target.x, targetY, target.z);
+        int x = cell(feet.x, ground.width), z = cell(feet.z, ground.width);
+        return goal != null
+                && ground.walkableLine(
+                        feet.x, feet.y, feet.z, x + ground.offset, feet.y, z + ground.offset)
+                && search(
+                                ground,
+                                x,
+                                feet.y,
+                                z,
+                                goal.x,
+                                goal.feetY,
+                                goal.z,
+                                256,
+                                SEARCH_RADIUS,
+                                false)
+                        != null;
     }
 
     public static boolean hasStandingRoom(Level level, Mob mob, float x, float feetY, float z) {
@@ -162,7 +192,7 @@ public final class Pathfinder {
         for (int x = sx - 16; x <= sx + 16; x++) {
             for (int z = sz - 16; z <= sz + 16; z++) {
                 for (int y = Math.min(level.depth - 2, sy + 2); y >= Math.max(0, sy - 8); y--) {
-                    if (ground.waterLanding(x, y + 1, z)) {
+                    if (ground.waterRefugeLanding(x, y + 1, z)) {
                         candidates.add(new Node(x, y + 1, z, null));
                         break;
                     }
@@ -351,23 +381,20 @@ public final class Pathfinder {
             }
             for (int[] direction : DIRECTIONS) {
                 int x = current.x + direction[0], z = current.z + direction[1];
-                float water = ground.waterLandingBelow(x, current.feetY, z);
-                float descent =
-                        Float.isNaN(water)
-                                ? ground.maxDrop
-                                : Math.max(ground.maxDrop, current.feetY - water);
+                if (Math.abs(x - sx) > radius || Math.abs(z - sz) > radius) continue;
+                float descent = ground.descentLimit(x, current.feetY, z);
                 for (float dy = 1; dy >= -descent; dy -= .5f) {
                     float y = current.feetY + dy;
-                    if (Math.abs(x - sx) > radius
-                            || Math.abs(z - sz) > radius
-                            || y - sy > (ground.climbing ? 24 : 8)
-                            || !ground.swimming && sy - y > (ground.climbing ? 24 : 8)) continue;
+                    if (y - sy > (ground.climbing ? 24 : 8)
+                            || !ground.swimming
+                                    && !ground.waterClutch
+                                    && sy - y > (ground.climbing ? 24 : 8)) continue;
                     Cell cell = new Cell(x, Math.round(y * 2), z);
                     if (!walkable.computeIfAbsent(cell, c -> ground.standable(c.x, c.y / 2f, c.z)))
                         continue;
                     if (!ground.transition(current.x, current.feetY, current.z, x, y, z)) continue;
                     float damage =
-                            ground.waterLanding(x, y, z)
+                            dy >= -3.01f || ground.protectedLanding(x, y, z)
                                     ? 0
                                     : (float) Math.ceil(Math.max(0, -dy - 3.01f));
                     float cost =

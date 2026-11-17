@@ -3,11 +3,14 @@ package net.classicremastered.minecraft.mob;
 import java.util.Random;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.DroppedBlock;
+import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.AnimalModel;
-import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.nbt.CompoundTag;
 import org.lwjgl.opengl.GL11;
 
 public class Sheep extends QuadrupedMob {
@@ -64,43 +67,47 @@ public class Sheep extends QuadrupedMob {
         }
     }
 
-    public void die(Entity var1) {
-        if (dead || removed)
-            return;
-        if (var1 != null) {
-            var1.awardKillScore(this, 10);
+    @Override
+    public void die(Entity killer) {
+        if (dead || removed) return;
+        if (killer != null) killer.awardKillScore(this, 10);
+        super.die(killer);
+        if (level != null && !level.isNetworkMode() && level.doMobLoot) {
+            ItemRegistry.bootstrap();
+            level.addEntity(
+                    new DroppedItem(
+                            level, x, y, z, Item.RAW_MUTTON.id, 1 + level.random.nextInt(2)));
         }
+    }
 
-        int var2 = (int) (Math.random() + Math.random() + 1.0D);
-
-        for (int var3 = 0; var3 < var2; ++var3) {
+    public boolean shear() {
+        if (!hasFur || health <= 0 || dead || removed || level == null || level.isNetworkMode())
+            return false;
+        hasFur = false;
+        if (!level.creativeMode) {
+            int dropCount = 2 + level.random.nextInt(3);
+            for (int i = 0; i < dropCount; ++i) {
+                level.addEntity(new DroppedBlock(level, x, y, z, Block.WHITE_WOOL.id));
+            }
         }
-        super.die(var1);
+        return true;
     }
 
     @Override
-    public void hurt(Entity var1, int var2) {
-        if (health <= 0 || dead || removed)
-            return;
-        if (this.hasFur && var1 instanceof Player && !"modern_melee".equals(damageCause)) {
-            // In Creative: remove fur but DO NOT drop wool
-            if (this.level != null && this.level.creativeMode) {
-                this.hasFur = false;
-                return; // no sound, no damage, no drops
-            }
+    public boolean isPersistenceRequired() {
+        return !hasFur || super.isPersistenceRequired();
+    }
 
-            // Survival/others: remove fur and drop 1–3 wool
-            this.hasFur = false;
-            int dropCount = (int) (Math.random() * 3.0D + 1.0D);
-            for (int i = 0; i < dropCount; ++i) {
-                this.level.addEntity(
-                        new DroppedBlock(this.level, this.x, this.y, this.z, Block.WHITE_WOOL.id));
-            }
-            return;
-        } else {
-            // Regular hurt behavior (and a bleat)
-            super.hurt(var1, var2);
-        }
+    @Override
+    public void savePersistence(CompoundTag tag) {
+        super.savePersistence(tag);
+        tag.putBoolean("Sheared", !hasFur);
+    }
+
+    @Override
+    public void loadPersistence(CompoundTag tag) {
+        super.loadPersistence(tag);
+        hasFur = !tag.getBoolean("Sheared");
     }
 
     public void renderModel(

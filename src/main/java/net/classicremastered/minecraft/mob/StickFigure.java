@@ -1,7 +1,12 @@
 package net.classicremastered.minecraft.mob;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
+import net.classicremastered.minecraft.player.Player;
 
 public final class StickFigure extends Mob {
     public static final float STANDING_HEIGHT = 2f;
@@ -19,6 +24,22 @@ public final class StickFigure extends Mob {
 
     public boolean isEnraged() {
         return health > 0 && health <= MAX_HEALTH / 4;
+    }
+
+    public int attackDamage(int damage) {
+        return switch (CombatRules.difficulty(level)) {
+            case VERY_HARD -> Math.round(damage * 1.4f);
+            case EXTREME -> Math.round(damage * 1.75f);
+            default -> damage;
+        };
+    }
+
+    public int attackInterval(int ticks) {
+        return switch (CombatRules.difficulty(level)) {
+            case VERY_HARD -> Math.round(ticks * .8f);
+            case EXTREME -> Math.round(ticks * .65f);
+            default -> ticks;
+        };
     }
 
     public float getSwimAmount(float partial) {
@@ -159,20 +180,18 @@ public final class StickFigure extends Mob {
         if (health <= 0 && ai instanceof StickFigureAI special) special.powers.cancel(this);
     }
 
-    public static StickFigure nearestBoss(
-            Level level, net.classicremastered.minecraft.player.Player player) {
-        if (level == null || player == null)
-            return null;
-        StickFigure boss = null;
-        float best = 48;
-        for (Object o : level.findEntities(player, player.bb.grow(48, 48, 48)))
-            if (o instanceof StickFigure s && !s.removed && s.health > 0) {
-                float distance = player.distanceTo(s);
-                if (distance < best) {
-                    boss = s;
-                    best = distance;
-                }
+    public static List<StickFigure> nearbyBosses(Level level, Player player) {
+        if (level == null || player == null || level.blockMap == null) return List.of();
+        List<StickFigure> bosses = new ArrayList<>();
+        for (Object entity : level.findEntities(player, player.bb.grow(48, 48, 48))) {
+            if (entity instanceof StickFigure boss
+                    && !boss.removed
+                    && boss.health > 0
+                    && player.distanceToSqr(boss) < 48 * 48) {
+                bosses.add(boss);
             }
-        return boss;
+        }
+        bosses.sort(Comparator.comparingDouble(player::distanceToSqr));
+        return bosses;
     }
 }

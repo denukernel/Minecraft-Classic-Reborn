@@ -4,6 +4,7 @@ package net.classicremastered.minecraft.level.tile;
 import java.util.Random;
 import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.phys.AABB;
 
 public final class CactusBlock extends Block {
     private static final int SIDE_TEX = 179; // cactus_side
@@ -15,6 +16,26 @@ public final class CactusBlock extends Block {
         setPhysics(true);
         setBounds(1 / 16f, 0, 1 / 16f, 15 / 16f, 1, 15 / 16f);
         this.setData(Tile$SoundType.cloth, 1.0F, 1.0F, 0.4F);
+    }
+
+    public static boolean nearSpawn(Level level, AABB body) {
+        return containsCactus(
+                level,
+                new AABB(
+                        body.x0 - .6f,
+                        body.y0 - 1.05f,
+                        body.z0 - .6f,
+                        body.x1 + .6f,
+                        body.y1,
+                        body.z1 + .6f));
+    }
+
+    private static boolean containsCactus(Level level, AABB area) {
+        for (int x = (int) Math.floor(area.x0); x < area.x1; x++)
+            for (int y = (int) Math.floor(area.y0); y < area.y1; y++)
+                for (int z = (int) Math.floor(area.z0); z < area.z1; z++)
+                    if (level.getTile(x, y, z) == CACTUS.id) return true;
+        return false;
     }
 
     private boolean hasSupport(Level level, int x, int y, int z) {

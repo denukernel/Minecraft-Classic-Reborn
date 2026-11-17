@@ -9,6 +9,7 @@ import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.Tile$SoundType;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.MobHazards;
 import net.classicremastered.minecraft.mob.Skeleton;
 import net.classicremastered.minecraft.mob.Spider;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -118,7 +119,10 @@ public abstract class Entity implements Serializable {
     private static int STEP_SOUND_COUNT = 0;
 
     private static boolean isStepPool(String key) {
-        return key != null && (key.startsWith("step/") || key.startsWith("step."));
+        return key != null
+                && (key.startsWith("step/")
+                        || key.startsWith("step.")
+                        || key.equals("mob/chicken/step"));
     }
 
     /** True if the entity is alive (works for Player, Mob, and other Entities). */
@@ -469,6 +473,9 @@ public abstract class Entity implements Serializable {
 
     private ArrayList<AABB> movementColliders(AABB swept) {
         ArrayList<AABB> collisions = level.getCubes(swept);
+        if (this instanceof Mob mob && mob.health > 0 && !(mob instanceof Player)) {
+            MobHazards.addCactusClearance(level, swept, collisions);
+        }
         if (level.blockMap == null) {
             return collisions;
         }
@@ -504,6 +511,15 @@ public abstract class Entity implements Serializable {
         } finally {
             body.move(bb.x0 - startX, bb.y0 - startY, bb.z0 - startZ);
             bb = body;
+        }
+    }
+
+    private void addMobHeatClearance(ArrayList<AABB> collisions, float dx, float dz, float lift) {
+        if ((dx != 0 || dz != 0)
+                && this instanceof Mob mob
+                && mob.health > 0
+                && !(mob instanceof Player)) {
+            MobHazards.addHorizontalHeatClearance(level, bb.expand(dx, 0, dz), collisions, lift);
         }
     }
 
@@ -553,6 +569,7 @@ public abstract class Entity implements Serializable {
             }
 
             boolean var16 = this.onGround || var7 != var2 && var7 < 0.0F;
+            addMobHeatClearance(var10, var1, var3, 0);
 
             int var12;
             for (var12 = 0; var12 < var10.size(); ++var12) {
@@ -601,6 +618,7 @@ public abstract class Entity implements Serializable {
                     var1 = 0.0F;
                 }
 
+                addMobHeatClearance(var10, var1, var3, Math.max(0, var2));
                 for (var15 = 0; var15 < var10.size(); ++var15) {
                     var1 = ((AABB) var10.get(var15)).clipXCollide(this.bb, var1);
                 }
@@ -668,7 +686,7 @@ public abstract class Entity implements Serializable {
                     this.nextStep = (int) this.walkDist + 1;
                     Tile$SoundType sound = Block.blocks[blockId].stepsound;
                     if (sound != Tile$SoundType.none) {
-                        this.playPositionalSound(sound.pool, sound.getVolume() * 0.60F, sound.getPitch());
+                        playStepSound(sound);
                     }
                 }
             }
@@ -686,6 +704,10 @@ public abstract class Entity implements Serializable {
 
     private static float trimSneakStep(float motion) {
         return Math.abs(motion) <= .05f ? 0 : motion - Math.copySign(.05f, motion);
+    }
+
+    protected void playStepSound(Tile$SoundType sound) {
+        playPositionalSound(sound.pool, sound.getVolume() * 0.60F, sound.getPitch());
     }
 
     protected void causeFallDamage(float var1) {}

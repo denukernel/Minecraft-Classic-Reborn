@@ -46,7 +46,7 @@ public final class LevelInfiniteFlat extends Level {
     }
 
     @Override
-    public int getTile(int x, int y, int z) {
+    protected int getStoredTile(int x, int y, int z) {
         if (y < 0 || y >= this.depth) return 0;
 
         if (y == 0) {
@@ -72,11 +72,12 @@ public final class LevelInfiniteFlat extends Level {
         // Survival: block any modification to the bedrock floor
         if (y == 0 && !this.creativeMode) return false;
 
-        int old = getTile(x, y, z);
+        int old = getStoredTile(x, y, z);
+        id = retainGlassWater(x, y, z, old, id);
         if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
-        updateFlowLevelMap(x, y, z, id);
+        updateFlowLevelMap(x, y, z, id, old);
 
         if (old > 0 && Block.blocks[old] != null) Block.blocks[old].onRemoved(this, x, y, z);
         if (id > 0 && Block.blocks[id] != null) Block.blocks[id].onAdded(this, x, y, z);
@@ -91,11 +92,12 @@ public final class LevelInfiniteFlat extends Level {
         if (y < 0 || y >= this.depth) return false;
         if (y == 0 && !this.creativeMode) return false;
 
-        int old = getTile(x, y, z);
+        int old = getStoredTile(x, y, z);
+        id = retainGlassWater(x, y, z, old, id);
         if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
-        updateFlowLevelMap(x, y, z, id);
+        updateFlowLevelMap(x, y, z, id, old);
 
         if (old > 0 && Block.blocks[old] != null) Block.blocks[old].onRemoved(this, x, y, z);
         if (id > 0 && Block.blocks[id] != null) Block.blocks[id].onAdded(this, x, y, z);
@@ -109,8 +111,9 @@ public final class LevelInfiniteFlat extends Level {
         if (y < 0 || y >= this.depth) return false;
         if (y == 0 && !this.creativeMode) return false;
 
+        int old = getStoredTile(x, y, z);
         chunks.setBlock(x, y, z, (byte) id);
-        updateFlowLevelMap(x, y, z, id);
+        updateFlowLevelMap(x, y, z, id, old);
         markSliceAndNeighbors(x, y, z);
         return true;
     }

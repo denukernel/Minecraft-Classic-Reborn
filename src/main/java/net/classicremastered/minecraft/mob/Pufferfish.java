@@ -2,10 +2,12 @@ package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
+import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.nbt.CompoundTag;
+import java.util.ArrayList;
 
 public final class Pufferfish extends Fish {
     public static final short REGISTRY_ID = 90;
@@ -23,24 +25,24 @@ public final class Pufferfish extends Fish {
         if (!level.isNetworkMode()) {
             AABB alertRange = bb.grow(2, 2, 2);
             boolean threatened = false;
-            if (!level.creativeMode) {
-                for (Object entity : level.findEntities(this, alertRange)) {
-                    if (entity instanceof Player player && canSting(player)) {
-                        threatened = true;
-                        break;
-                    }
+            for (Object entity : level.findEntities(this, alertRange)) {
+                if (canSting(entity)) {
+                    threatened = true;
+                    break;
                 }
             }
             updatePuffState(threatened);
             if (puffState > 0
                     && threatened
                     && CombatRules.difficulty(level) != Difficulty.PEACEFUL) {
-                for (Object entity : level.findEntities(this, bb.grow(.15f, .15f, .15f))) {
-                    if (entity instanceof Player player && canSting(player)) {
-                        int previousHealth = player.health;
-                        player.hurt(this, 1 + puffState);
-                        if (player.health > 0 && player.health < previousHealth)
-                            player.applyPoison(60 * puffState, 25);
+                for (Entity entity :
+                        level.blockMap.getEntities(
+                                this, bb.grow(.15f, .15f, .15f), new ArrayList<>())) {
+                    if (canSting(entity) && entity instanceof Mob victim) {
+                        int previousHealth = victim.health;
+                        victim.hurt(this, 1 + puffState);
+                        if (victim.health > 0 && victim.health < previousHealth)
+                            victim.applyPoison(60 * puffState, 25);
                     }
                 }
             }
@@ -48,8 +50,13 @@ public final class Pufferfish extends Fish {
         super.aiStep();
     }
 
-    private static boolean canSting(Player player) {
-        return !player.removed && player.health > 0 && !player.isSpectator();
+    private boolean canSting(Object entity) {
+        return entity instanceof Mob mob
+                && !mob.removed
+                && mob.health > 0
+                && !(mob instanceof Fish)
+                && (!(mob instanceof Player player)
+                        || !level.creativeMode && !player.isSpectator());
     }
 
     private void updatePuffState(boolean threatened) {

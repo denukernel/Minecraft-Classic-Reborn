@@ -8,6 +8,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.player.Player;
 
 public class BowItem extends ToolItem {
+    public static final int DRAW_TICKS = 20;
     private static final Map<Player, Integer> drawing = new WeakHashMap<>();
     private static WeakReference<Player> active = new WeakReference<>(null);
     public BowItem(int id) {
@@ -26,7 +27,7 @@ public class BowItem extends ToolItem {
     @Override
     public void tick(Player player, Level level) {
         if (drawing.containsKey(player)) {
-            drawing.put(player, Math.min(20, drawing.get(player) + drawRate(player)));
+            drawing.put(player, Math.min(DRAW_TICKS, drawing.get(player) + drawRate(player)));
         }
     }
 
@@ -40,7 +41,9 @@ public class BowItem extends ToolItem {
 
     public float getDrawProgress(Player player, float partial) {
         Integer ticks = drawing.get(player);
-        return ticks == null ? 0 : Math.max(0, Math.min(1, (ticks + partial * drawRate(player)) / 20f));
+        return ticks == null
+                ? 0
+                : Math.max(0, Math.min(1, (ticks + partial * drawRate(player)) / DRAW_TICKS));
     }
 
     public static void cancelIfNotSelected(Player player) {
@@ -59,7 +62,7 @@ public class BowItem extends ToolItem {
             return;
         int ammo = Equipment.ARROW.id + 256;
         if (level.creativeMode || player.inventory.removeResource(ammo)) {
-            float draw = ticks / 20f;
+            float draw = ticks / (float) DRAW_TICKS;
             float velocity = (.7f + 1.7f * draw) * drawRate(player);
             Arrow arrow =
                     new Arrow(
@@ -82,9 +85,11 @@ public class BowItem extends ToolItem {
     }
 
     public String getTexture(Player player) {
-        Integer ticks = drawing.get(player);
-        if (ticks == null)
-            return "/items/bow.png";
+        return textureForDrawTicks(drawing.getOrDefault(player, -1));
+    }
+
+    public static String textureForDrawTicks(int ticks) {
+        if (ticks < 0) return "/items/bow.png";
         return ticks > 14
                 ? "/items/bow_pulling_2.png"
                 : ticks > 7 ? "/items/bow_pulling_1.png" : "/items/bow_pulling_0.png";

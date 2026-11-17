@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.sound;
 import net.classicremastered.minecraft.GameSettings;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.render.CameraView;
 import net.classicremastered.util.MathHelper;
 
 import paulscode.sound.Channel;
@@ -31,10 +32,8 @@ public final class PaulsCodeSoundManager {
     private static final String MOB_SOURCE_PREFIX = "mob_sfx_";
     private static final String VOICE_SOURCE_PREFIX = "mob_voice_";
     private static final float SOUND_RANGE = 32f;
-    private static final float MOB_PAN_LIMIT = .6f;
-    private static final float MOB_PAN_RADIUS = 8f;
-    // Mob gain is set from the real distance. Linear attenuation keeps JavaSound panning enabled.
-    private static final float MOB_PAN_RANGE = Float.MAX_VALUE;
+    // Mob gain is computed here. Linear attenuation keeps JavaSound panning enabled.
+    private static final float MOB_ATTENUATION_RANGE = Float.MAX_VALUE;
     private static final float MINOR_THIRD = (float) Math.pow(2.0, 3.0 / 12.0);
     private final SoundSystem sys;
     private int farLandsTrackTick;
@@ -49,26 +48,17 @@ public final class PaulsCodeSoundManager {
 
     private float master = 1.0f;
     private long seq;
-    private volatile ListenerPosition listener;
+    private ListenerPosition listener;
     private final Map<String, MobPlayback> mobPlaybacks = new HashMap<>();
+    // A null start time marks a named track that stays registered until stopped.
+    private final Map<String, Long> centeredSounds = new HashMap<>();
 
-    private record MobPlayback(float x, float y, float z, float volume, long started) {
-    }
+    private record MobPlayback(float x, float y, float z, float volume, long started) {}
 
-    private record ListenerPosition(float x, float y, float z, float forwardX, float forwardZ) {
+    private record ListenerPosition(float x, float y, float z) {
         float mobGain(float sourceX, float sourceY, float sourceZ) {
             float dx = sourceX - x, dy = sourceY - y, dz = sourceZ - z;
             return Math.max(0f, 1f - MathHelper.sqrt(dx * dx + dy * dy + dz * dz) / SOUND_RANGE);
-        }
-
-        Vec3D mobPanPosition(float sourceX, float sourceY, float sourceZ) {
-            float dx = sourceX - x, dy = sourceY - y, dz = sourceZ - z;
-            float distance = MathHelper.sqrt(dx * dx + dy * dy + dz * dz);
-            float right = distance > 0f ? (dx * -forwardZ + dz * forwardX) / distance : 0f;
-            float side = right * MOB_PAN_LIMIT;
-            float forward = MathHelper.sqrt(1f - side * side);
-            return new Vec3D(x + MOB_PAN_RADIUS * (forwardX * forward - forwardZ * side), y,
-                    z + MOB_PAN_RADIUS * (forwardZ * forward + forwardX * side));
         }
     }
 
@@ -176,31 +166,31 @@ public final class PaulsCodeSoundManager {
     /* ---------------- listener (Classic Player) ---------------- */
 
     public void setListener(Player p, float partial) {
-        if (p == null) {
-            clearMobPlayback();
+        setListener(p == null ? null : CameraView.resolve(p, 0, partial));
+    }
+
+    public void setListener(CameraView camera) {
+        if (camera == null) {
+            clearTrackedSounds();
             return;
         }
 
-        float x = p.xo + (p.x - p.xo) * partial;
-        float y = p.yo + (p.y - p.yo) * partial;
-        float z = p.zo + (p.z - p.zo) * partial;
-
-        float pitch = p.xRotO + (p.xRot - p.xRotO) * partial;
-        float yaw = p.aimYaw(partial);
-
-        float cy = MathHelper.cos(-yaw * 0.017453292F - (float) Math.PI);
-        float sy = MathHelper.sin(-yaw * 0.017453292F - (float) Math.PI);
-        float cp = MathHelper.cos(-pitch * 0.017453292F);
-        float sp = MathHelper.sin(-pitch * 0.017453292F);
+        Vec3D eye = camera.position();
+        double yaw = Math.toRadians(camera.yaw());
+        double pitch = Math.toRadians(camera.pitch());
+        float cy = (float) -Math.cos(yaw);
+        float sy = (float) Math.sin(yaw);
+        float cp = (float) Math.cos(pitch);
+        float sp = (float) -Math.sin(pitch);
 
         float fx = sy * cp, fy = sp, fz = cy * cp;
         float ux = -sy * sp, uy = cp, uz = -cy * sp;
 
-        var next = new ListenerPosition(x, y, z, sy, cy);
+        var next = new ListenerPosition(eye.x, eye.y, eye.z);
         synchronized (SoundSystemConfig.THREAD_SYNC) {
-            sys.setListenerPosition(x, y, z);
+            sys.setListenerPosition(eye.x, eye.y, eye.z);
             sys.setListenerOrientation(fx, fy, fz, ux, uy, uz);
-            boolean changed = !next.equals(listener);
+            boolean moved = !next.equals(listener);
             listener = next;
             long now = System.nanoTime();
             var entries = mobPlaybacks.entrySet().iterator();
@@ -211,22 +201,40 @@ public final class PaulsCodeSoundManager {
                 // The sound thread may not have processed the queued play command yet.
                 if (now - sound.started > 250_000_000L && !sys.playing(id)) {
                     entries.remove();
-                } else if (changed) {
-                    Vec3D position = next.mobPanPosition(sound.x, sound.y, sound.z);
-                    sys.setPosition(id, position.x, position.y, position.z);
-                    sys.setVolume(id, sound.volume * master * next.mobGain(sound.x, sound.y, sound.z));
+                } else if (moved) {
+                    sys.setVolume(
+                            id, sound.volume * master * next.mobGain(sound.x, sound.y, sound.z));
+                }
+            }
+            var centered = centeredSounds.entrySet().iterator();
+            while (centered.hasNext()) {
+                var entry = centered.next();
+                String id = entry.getKey();
+                Long started = entry.getValue();
+                if (started != null && now - started > 250_000_000L && !sys.playing(id)) {
+                    centered.remove();
+                } else if (moved) {
+                    sys.setPosition(id, eye.x, eye.y, eye.z);
                 }
             }
         }
     }
 
-    private void clearMobPlayback() {
+    private void clearTrackedSounds() {
         synchronized (SoundSystemConfig.THREAD_SYNC) {
-            listener = null;
-            for (String id : mobPlaybacks.keySet())
-                sys.removeSource(id);
+            for (String id : mobPlaybacks.keySet()) sys.removeSource(id);
             mobPlaybacks.clear();
+            for (String id : centeredSounds.keySet()) sys.removeSource(id);
+            centeredSounds.clear();
+            sys.setListenerPosition(0f, 0f, 0f);
+            listener = null;
         }
+    }
+
+    private Vec3D listenerCoordinates() {
+        return listener == null
+                ? new Vec3D(0, 0, 0)
+                : new Vec3D(listener.x, listener.y, listener.z);
     }
 
     /* ---------------- playback ---------------- */
@@ -241,8 +249,8 @@ public final class PaulsCodeSoundManager {
         playSoundAt(key, x, y, z, volume, pitch, false);
     }
 
-    public void playSoundAt(String key, float x, float y, float z, float volume, float pitch,
-            boolean mobSound) {
+    public void playSoundAt(
+            String key, float x, float y, float z, float volume, float pitch, boolean mobSound) {
         playSoundInternal(key, x, y, z, volume, pitch, true, false, mobSound);
     }
 
@@ -252,10 +260,14 @@ public final class PaulsCodeSoundManager {
         playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, true, false);
     }
 
+    public void playMobSoundCleanAt(
+            String key, float x, float y, float z, float volume, float pitch) {
+        if (!settings.sound) return;
+        playSoundInternal(key, x, y, z, volume, pitch, true, true, true);
+    }
 
     private static String poolKeyOf(String key) {
-        if (key == null)
-            return null;
+        if (key == null) return null;
         key = key.replace('\\', '/');
         int slash = key.lastIndexOf('/');
         if (slash < 0)
@@ -270,11 +282,6 @@ public final class PaulsCodeSoundManager {
             boolean positional, boolean forceClean, boolean mobSound) {
         if (key == null || volume <= 0f)
             return;
-        ListenerPosition currentListener = listener;
-        boolean mixedMob = mobSound && currentListener != null;
-        float distanceGain = mixedMob ? currentListener.mobGain(x, y, z) : 1f;
-        if (distanceGain <= 0f)
-            return;
         key = key.replace('\\', '/');
 
         if (settings != null && !settings.allowMobSounds) {
@@ -285,7 +292,8 @@ public final class PaulsCodeSoundManager {
 
         String chosenKey = key;
 
-        if (farlandsActive && !forceClean
+        if (farlandsActive
+                && !forceClean
                 && (playerDist > 5_000_000 || playerDist > 1_000_000 && rng.nextFloat() < 0.3f)) {
             chosenKey = randomFarLandsSoundKey(key);
         }
@@ -293,8 +301,7 @@ public final class PaulsCodeSoundManager {
         List<URL> list = sfx.get(chosenKey);
         if (list == null || list.isEmpty()) {
             String pooled = poolKeyOf(chosenKey);
-            if (pooled != null)
-                list = sfx.get(pooled);
+            if (pooled != null) list = sfx.get(pooled);
         }
         if ((list == null || list.isEmpty()) && "random/wood_click".equals(chosenKey)) {
             list = sfx.get(net.classicremastered.minecraft.level.tile.Tile$SoundType.wood.pool);
@@ -310,14 +317,20 @@ public final class PaulsCodeSoundManager {
                         ? SoundSystemConfig.ATTENUATION_LINEAR
                         : SoundSystemConfig.ATTENUATION_NONE;
         synchronized (SoundSystemConfig.THREAD_SYNC) {
+            boolean mixedMob = mobSound && listener != null;
+            float distanceGain = mixedMob ? listener.mobGain(x, y, z) : 1f;
+            if (distanceGain <= 0f) return;
             boolean voice = mobSound && (key.startsWith("mob/") || key.startsWith("mob."));
             String id =
-                    (voice ? VOICE_SOURCE_PREFIX : mobSound ? MOB_SOURCE_PREFIX : "sfx_") + ++seq;
-            Vec3D position =
-                    mixedMob ? currentListener.mobPanPosition(x, y, z) : new Vec3D(x, y, z);
+                    (voice
+                                    ? VOICE_SOURCE_PREFIX
+                                    : mobSound && !forceClean ? MOB_SOURCE_PREFIX : "sfx_")
+                            + ++seq;
+            Vec3D position = positional ? new Vec3D(x, y, z) : listenerCoordinates();
             float sourceVolume = Math.min(1f, volume);
             if (mixedMob)
                 mobPlaybacks.put(id, new MobPlayback(x, y, z, sourceVolume, System.nanoTime()));
+            if (!positional) centeredSounds.put(id, System.nanoTime());
             sys.newSource(
                     voice || forceClean || !mobSound && volume > 1f,
                     id,
@@ -328,7 +341,7 @@ public final class PaulsCodeSoundManager {
                     position.y,
                     position.z,
                     attenuation,
-                    mixedMob ? MOB_PAN_RANGE : positional ? SOUND_RANGE : 0f);
+                    mixedMob ? MOB_ATTENUATION_RANGE : positional ? SOUND_RANGE : 0f);
             sys.setTemporary(id, true);
             sys.setPitch(id, Math.max(0.01f, pitch));
             sys.setVolume(id, sourceVolume * master * distanceGain);
@@ -349,16 +362,33 @@ public final class PaulsCodeSoundManager {
             return;
         }
         URL u = list.get(rng.nextInt(list.size()));
-        if (sys.playing("BgMusic"))
-            sys.stop("BgMusic");
-        sys.newStreamingSource(true, "BgMusic", u, u.toString(), true, 0, 0, 0, 2, 32f);
-        sys.setVolume("BgMusic", Math.min(1f, volume) * master);
-        sys.play("BgMusic");
+        synchronized (SoundSystemConfig.THREAD_SYNC) {
+            stopMusic();
+            Vec3D position = listenerCoordinates();
+            sys.newStreamingSource(
+                    true,
+                    "BgMusic",
+                    u,
+                    u.toString(),
+                    true,
+                    position.x,
+                    position.y,
+                    position.z,
+                    SoundSystemConfig.ATTENUATION_NONE,
+                    0f);
+            centeredSounds.put("BgMusic", null);
+            sys.setVolume("BgMusic", Math.min(1f, volume) * master);
+            sys.play("BgMusic");
+        }
     }
 
     public void stopMusic() {
-        if (sys.playing("BgMusic"))
-            sys.stop("BgMusic");
+        synchronized (SoundSystemConfig.THREAD_SYNC) {
+            if (centeredSounds.containsKey("BgMusic")) {
+                sys.removeSource("BgMusic");
+                centeredSounds.remove("BgMusic");
+            }
+        }
     }
 
     /* ---------------- Far Lands corruption tick ---------------- */
@@ -379,10 +409,23 @@ public final class PaulsCodeSoundManager {
             List<URL> clips = sfx.get("note/pling");
             if (clips == null || clips.isEmpty()) return;
             URL clip = clips.get(rng.nextInt(clips.size()));
-            sys.newSource(true, FAR_LANDS_MELODY, clip, clip.toString(), false,
-                    0f, 0f, 0f, SoundSystemConfig.ATTENUATION_NONE, 0f);
-            sys.newSource(true, FAR_LANDS_HARMONY, clip, clip.toString(), false,
-                    0f, 0f, 0f, SoundSystemConfig.ATTENUATION_NONE, 0f);
+            synchronized (SoundSystemConfig.THREAD_SYNC) {
+                Vec3D position = listenerCoordinates();
+                for (String id : List.of(FAR_LANDS_MELODY, FAR_LANDS_HARMONY)) {
+                    sys.newSource(
+                            true,
+                            id,
+                            clip,
+                            clip.toString(),
+                            false,
+                            position.x,
+                            position.y,
+                            position.z,
+                            SoundSystemConfig.ATTENUATION_NONE,
+                            0f);
+                    centeredSounds.put(id, null);
+                }
+            }
             farLandsTrackStarted = true;
         }
 
@@ -404,10 +447,14 @@ public final class PaulsCodeSoundManager {
 
     public synchronized void stopFarLandsSoundtrack() {
         if (!farLandsTrackStarted) return;
-        if (sys.playing(FAR_LANDS_MELODY)) sys.stop(FAR_LANDS_MELODY);
-        if (sys.playing(FAR_LANDS_HARMONY)) sys.stop(FAR_LANDS_HARMONY);
-        sys.removeSource(FAR_LANDS_MELODY);
-        sys.removeSource(FAR_LANDS_HARMONY);
+        synchronized (SoundSystemConfig.THREAD_SYNC) {
+            for (String id : List.of(FAR_LANDS_MELODY, FAR_LANDS_HARMONY)) {
+                if (centeredSounds.containsKey(id)) {
+                    sys.removeSource(id);
+                    centeredSounds.remove(id);
+                }
+            }
+        }
         farLandsTrackStarted = false;
         farLandsTrackTick = 0;
     }
@@ -497,18 +544,12 @@ public final class PaulsCodeSoundManager {
     }
 
     public void resetAudioState() {
-        clearMobPlayback();
+        clearTrackedSounds();
         farlandsActive = false;
         stopFarLandsSoundtrack();
         playerDist = 0;
         musicGlitchCounter = 0;
         herobrineCounter = 0;
-        try {
-            if (sys.playing("BgMusic")) {
-                sys.stop("BgMusic");
-            }
-        } catch (Throwable ignored) {
-        }
     }
 
     public void shutdown() {

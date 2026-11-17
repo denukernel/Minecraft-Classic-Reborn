@@ -73,7 +73,12 @@ public class BasicAttackAI extends BasicAI {
 
     public float getSightRange() {
         if (mob instanceof StickFigure) return 40;
-        if (mob instanceof Skeleton) return 20;
+        if (mob instanceof Skeleton) {
+            return switch (CombatRules.difficulty(level)) {
+                case VERY_HARD, EXTREME -> 30;
+                default -> 20;
+            };
+        }
         if (mob instanceof Zombie) return 35;
         if (mob instanceof Creeper) return 19;
         return 16;

@@ -142,11 +142,11 @@ public final class LevelInfiniteTerrain extends Level {
     @Override
     public boolean setTileNoUpdate(int x, int y, int z, int id) {
         if (y < 0 || y >= this.depth) return false;
-        int old = getTile(x, y, z);
+        int old = getStoredTile(x, y, z);
         if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
-        updateFlowLevelMap(x, y, z, id);
+        updateFlowLevelMap(x, y, z, id, old);
 
         // no neighbor updates or hooks; still mark chunk slices for rebuild
         markSliceAndNeighbors(x, y, z);
@@ -479,7 +479,7 @@ public final class LevelInfiniteTerrain extends Level {
 
     // === Core block access ===
     @Override
-    public int getTile(int x, int y, int z) {
+    protected int getStoredTile(int x, int y, int z) {
         if (y < 0 || y >= this.depth) return 0;
         SimpleChunk c = chunks.getOrCreate(x >> 4, z >> 4);
         c.markActive(this.tickCount);
@@ -505,11 +505,12 @@ public final class LevelInfiniteTerrain extends Level {
     @Override
     public boolean setTile(int x, int y, int z, int id) {
         if (y < 0 || y >= this.depth) return false;
-        int old = getTile(x, y, z);
+        int old = getStoredTile(x, y, z);
+        id = retainGlassWater(x, y, z, old, id);
         if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
-        updateFlowLevelMap(x, y, z, id);
+        updateFlowLevelMap(x, y, z, id, old);
 
         // --- update light if block emits light ---
         if (id > 0 && Block.blocks[id] != null) {
@@ -573,11 +574,12 @@ public final class LevelInfiniteTerrain extends Level {
     @Override
     public boolean setTileNoNeighborChange(int x, int y, int z, int id) {
         if (y < 0 || y >= this.depth) return false;
-        int old = getTile(x, y, z);
+        int old = getStoredTile(x, y, z);
+        id = retainGlassWater(x, y, z, old, id);
         if (old == id) return false;
 
         chunks.setBlock(x, y, z, (byte) id);
-        updateFlowLevelMap(x, y, z, id);
+        updateFlowLevelMap(x, y, z, id, old);
 
         if (old > 0 && Block.blocks[old] != null) {
             Block.blocks[old].onRemoved(this, x, y, z);

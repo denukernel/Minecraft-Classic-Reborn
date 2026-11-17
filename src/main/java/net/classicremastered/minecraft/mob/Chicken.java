@@ -5,6 +5,8 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
+import net.classicremastered.minecraft.level.tile.Tile$SoundType;
 
 public class Chicken extends Mob {
 
@@ -32,6 +34,7 @@ public class Chicken extends Mob {
         this.setSize(WIDTH, HEIGHT);
         this.setPos(x, y, z);
         this.health = this.lastHealth = healthLimit();
+        initSounds();
     }
 
     @Override
@@ -43,6 +46,21 @@ public class Chicken extends Mob {
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
         setSize(WIDTH, HEIGHT);
+        initSounds();
+    }
+
+    private void initSounds() {
+        soundIdle = "mob/chicken/say";
+        soundHurt = soundDeath = "mob/chicken/hurt";
+    }
+
+    @Override
+    protected void playStepSound(Tile$SoundType groundSound) {
+        if (level.minecraft == null
+                || level.minecraft.settings == null
+                || level.minecraft.settings.allowMobSounds) {
+            playPositionalSound("mob/chicken/step", .15f, 1f);
+        }
     }
 
     @Override
@@ -78,6 +96,8 @@ public class Chicken extends Mob {
         super.die(killer);
 
         if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
+        ItemRegistry.bootstrap();
+        level.addEntity(new DroppedItem(level, x, y, z, Item.RAW_CHICKEN.id));
 
         // Drop 1–2 feathers
         int count = 1 + random.nextInt(2);

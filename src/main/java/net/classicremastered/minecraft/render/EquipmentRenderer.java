@@ -155,16 +155,31 @@ public final class EquipmentRenderer {
 
     public static void held(
             Mob mob, HumanoidModel base, TextureManager tm, float scale, float brightness) {
-        int stackId = mob instanceof ZombieBuilder builder
-                ? builder.hasStolenHead() ? TurretItems.HEAD + 256 : Block.STONE.id
-                : mob.equipment[4];
+        int stackId =
+                mob instanceof Defender defender
+                        ? defender.heldItem()
+                        : mob instanceof ZombieBuilder builder
+                                ? builder.hasStolenHead() ? TurretItems.HEAD + 256 : Block.STONE.id
+                                : mob.equipment[4];
         if (stackId <= 0) return;
         GL11.glPushMatrix();
         try {
             if (isChildModel(base)) {
                 BabyZombieModel.applyChildTransform(scale);
             }
-            HandItemRenderer.renderStack(base.rightArm, tm, stackId, scale, brightness);
+            if (mob instanceof Defender defender && stackId == Item.BOW.id + 256) {
+                HandItemRenderer.renderBow(
+                        base.rightArm,
+                        tm,
+                        BowItem.textureForDrawTicks(defender.bowDrawTicks()),
+                        scale,
+                        brightness,
+                        0);
+            } else if (mob instanceof Defender && stackId == Item.GRAVITYGUN.id + 256) {
+                HandItemRenderer.renderGun(base.rightArm, stackId - 256, scale, brightness);
+            } else {
+                HandItemRenderer.renderStack(base.rightArm, tm, stackId, scale, brightness);
+            }
         } finally {
             GL11.glPopMatrix();
         }

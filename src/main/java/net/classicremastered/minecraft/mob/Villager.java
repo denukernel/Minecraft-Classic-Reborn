@@ -278,7 +278,7 @@ public class Villager extends Mob {
                 && this.level.minecraft.soundPC != null) {
             float v = Math.max(0.05f, Math.min(1.0f, volume));
             float p = Math.max(0.25f, Math.min(2.0f, pitch));
-            this.level.minecraft.soundPC.playSoundClean(key, v, p);
+            this.level.minecraft.soundPC.playMobSoundCleanAt(key, x, y + .12f, z, v, p);
         }
     }
 

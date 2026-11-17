@@ -5,7 +5,9 @@ import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.MobSpawner;
+import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.MobHazards;
 import net.classicremastered.minecraft.mob.Skeleton;
 import net.classicremastered.minecraft.mob.Zombie;
 import net.classicremastered.minecraft.mob.ZombieIgniter;
@@ -27,6 +29,8 @@ import java.util.List;
 import java.util.Random;
 
 public class BasicAI extends AI {
+    private static final float HAZARD_ESCAPE_DROP = 3.01f;
+    private transient boolean leavingLava;
 
     public static final long serialVersionUID = 0L;
     private static final int PLAYER_SEARCH_TICKS = 60;
@@ -123,11 +127,13 @@ public class BasicAI extends AI {
                 blockedPursuitTarget = null;
             }
             float previousYaw = mob.yRot;
+            boolean escapingHazard = escapeHazard();
+            boolean seekingFireWater = !escapingHazard && seekFireWater();
             emergencyMovement =
-                    escapeFire() || seekFireWater() || panicFromDamage() || yieldToIgniter();
+                    escapingHazard || seekingFireWater || panicFromDamage() || yieldToIgniter();
             boolean seekingShade = !emergencyMovement && seekSunlightShade();
             boolean seekingWater = !emergencyMovement && !seekingShade && seekSunlightWater();
-            shelteringInWater = (seekingWater || emergencyMovement) && mob.isWetForFire();
+            shelteringInWater = (seekingWater || seekingFireWater) && mob.isWetForFire();
             if (!emergencyMovement && !seekingShade && !seekingWater) {
                 this.update();
                 goalSelector().tick();
@@ -135,7 +141,7 @@ public class BasicAI extends AI {
                 selector.stopAll();
             }
             if (lastSeenPlayer != null && !hasPlayerSearch()) forgetPlayer();
-            if (shoreAirborne()) steeredThisTick = true;
+            if (shoreAirborne(tickYaw)) steeredThisTick = true;
             if (!steeredThisTick && navigationAllowed() && !mob.isInWater() && !mob.isInLava()) {
                 if (attackTarget != null && !attackTarget.removed) {
                     if (wander != null) wander = null;
@@ -207,7 +213,7 @@ public class BasicAI extends AI {
             crowdWaitTicks = 0;
         }
         if (mob.health > 0
-                && mob.isInWater()
+                && (mob.isInWater() || !mob.onGround && mob.isWetForFire())
                 && !shelteringInWater
                 && navigationAllowed()
                 && usesDefaultSwimSteering()
@@ -215,18 +221,7 @@ public class BasicAI extends AI {
             // Pursuit rotates toward the target during update. Start from the last
             // swim heading so a shore detour can keep turning away from a wall.
             mob.yRot = tickYaw;
-            if (!Pathfinder.canEnterWater(mob) || mob instanceof Zombie && !level.isDaytime()) {
-                Entity shoreGoal =
-                        attackTarget != null
-                                        && !attackTarget.removed
-                                        && !attackTarget.isWetForFire()
-                                ? attackTarget
-                                : null;
-                if (!steerToShore(shoreGoal)) {
-                    xxa = yya = yRotA = 0;
-                    jumping = mob.yd < .12f;
-                }
-            } else if (attackTarget != null && !attackTarget.removed) steerInWater();
+            steerWhileSwimming();
         }
         boolean inWater = mob.isInWater();
         boolean inLava = mob.isInLava();
@@ -275,152 +270,160 @@ public class BasicAI extends AI {
 
     private transient net.classicremastered.minecraft.path.PathNavigator.Result ladderStep;
 
-    private int swimRepath;
+    private transient int waterAvoidUntil;
+    private transient boolean shoreSwimGoal;
     private transient java.util.List<net.classicremastered.minecraft.path.ShoreNavigator.Step>
             shorePath = java.util.List.of();
     private int shoreIndex, shoreRepath, shoreJumpTicks;
+    private transient int shoreStallTicks;
+    private transient float shoreBestDistance;
     private transient Entity shoreTarget;
+    private transient net.classicremastered.minecraft.path.ShoreNavigator.Step blockedShoreExit;
 
-    private boolean shoreAirborne() {
+    public final boolean isAvoidingWater() {
+        return mob != null && mob.tickCount < waterAvoidUntil;
+    }
+
+    protected Entity waterPursuitTarget() {
+        return attackTarget != null && !attackTarget.removed ? attackTarget : null;
+    }
+
+    private void steerWhileSwimming() {
+        Entity goal = waterPursuitTarget();
+        boolean canSwim = Pathfinder.canEnterWater(mob);
+        if (isAvoidingWater()) waterAvoidUntil = mob.tickCount + 100;
+        if (goal != null && goal.isWetForFire()) {
+            if (canSwim) {
+                if (mob.airSupply > 80 && steerWaterRoute(goal, true)) return;
+                waterAvoidUntil = mob.tickCount + 100;
+            }
+            goal = null;
+        }
+        if (steerWaterRoute(goal, false)) return;
+        xxa = yya = yRotA = 0;
+        jumping = mob.yd < .12f;
+    }
+
+    private boolean shoreAirborne(float previousYaw) {
         if (shoreJumpTicks > 0) shoreJumpTicks--;
-        if (shorePath == null
+        if (shoreSwimGoal
+                || shorePath == null
                 || shorePath.isEmpty()
-                || shoreTarget != null && (shoreTarget != attackTarget || shoreTarget.removed))
+                || shoreTarget != null
+                        && (shoreTarget != waterPursuitTarget() || shoreTarget.removed))
             return false;
         var exit = shorePath.get(shorePath.size() - 1);
-        if (mob.onGround && mob.bb.y0 >= exit.feetY() - .1f) {
+        if (mob.onGround && !mob.isWetForFire() && mob.bb.y0 >= exit.feetY() - .1f) {
             shorePath = java.util.List.of();
             shoreRepath = 0;
+            shoreJumpTicks = 0;
+            blockedShoreExit = null;
             clearNavigation();
             return false;
         }
         if (shoreJumpTicks == 0 || mob.isInWater() || mob.onGround) return false;
+        mob.yRot = previousYaw;
         shoreHeading(exit);
         jumping = false;
         return true;
     }
 
-    private void shoreHeading(net.classicremastered.minecraft.path.ShoreNavigator.Step step) {
-        float yaw = (float) Math.toDegrees(Math.atan2(step.z() - mob.z, step.x() - mob.x)) - 90f,
-                d = yaw - mob.yRot;
-        while (d > 180) d -= 360;
-        while (d < -180) d += 360;
-        mob.yRot += Math.max(-20, Math.min(20, d));
+    private boolean shoreHeading(net.classicremastered.minecraft.path.ShoreNavigator.Step step) {
         xxa = 0;
         yRotA = 0;
-        yya = Math.min(runSpeed, 1.1f);
         routeDriven = false;
         yieldingToCrowd = false;
+        float dx = step.x() - mob.x, dz = step.z() - mob.z;
+        float distance = (float) Math.hypot(dx, dz);
+        boolean facing =
+                distance > .12f && faceMovement((float) Math.toDegrees(Math.atan2(dz, dx)) - 90f);
+        if (facing) {
+            yya = Math.min(1.05f, Math.max(.35f, distance * 1.7f));
+        } else {
+            yya = 0;
+            mob.xd *= .5f;
+            mob.zd *= .5f;
+        }
+        return facing;
     }
 
-    private boolean steerToShore(Entity target) {
-        if (target != null && target.isInWater()) return false;
-        if (shorePath == null
-                || shoreTarget != target
-                || shoreJumpTicks == 0 && --shoreRepath <= 0) {
+    private boolean faceMovement(float yaw) {
+        float turn = (float) Math.IEEEremainder(yaw - mob.yRot, 360f);
+        mob.yRot += Math.max(-18f, Math.min(18f, turn));
+        return Math.abs(turn) <= 30f;
+    }
+
+    private boolean steerWaterRoute(Entity target, boolean swimToTarget) {
+        if (shoreTarget != target || shoreSwimGoal != swimToTarget) {
+            shorePath = List.of();
+            shoreRepath = 0;
+            shoreJumpTicks = 0;
+            blockedShoreExit = null;
+        }
+        if (swimToTarget && !shorePath.isEmpty() && --shoreRepath <= 0) {
+            var end = shorePath.get(shorePath.size() - 1);
+            if (Math.hypot(end.x() - target.x, end.z() - target.z) > 1) shorePath = List.of();
+        }
+        shoreTarget = target;
+        shoreSwimGoal = swimToTarget;
+        if (shorePath.isEmpty() && --shoreRepath <= 0) {
             shorePath =
-                    net.classicremastered.minecraft.path.ShoreNavigator.find(level, mob, target);
-            shoreIndex = shorePath.size() > 1 ? 1 : 0;
-            shoreTarget = target;
+                    swimToTarget
+                            ? net.classicremastered.minecraft.path.ShoreNavigator.findWater(
+                                    level, mob, target)
+                            : net.classicremastered.minecraft.path.ShoreNavigator.find(
+                                    level, mob, target, blockedShoreExit);
+            if (shorePath.isEmpty()) blockedShoreExit = null;
+            shoreIndex = shoreStallTicks = 0;
+            shoreBestDistance = Float.POSITIVE_INFINITY;
             shoreRepath = 20;
         }
         if (shorePath.isEmpty()) return false;
         while (shoreIndex < shorePath.size() - 1) {
             var step = shorePath.get(shoreIndex);
             float dx = step.x() - mob.x, dz = step.z() - mob.z;
-            if (dx * dx + dz * dz > .25f) break;
+            if (dx * dx + dz * dz > .22f * .22f) break;
             shoreIndex++;
+            shoreStallTicks = 0;
+            shoreBestDistance = Float.POSITIVE_INFINITY;
         }
         var step = shorePath.get(shoreIndex);
-        shoreHeading(step);
+        if (swimToTarget
+                && shoreIndex == shorePath.size() - 1
+                && Math.hypot(step.x() - mob.x, step.z() - mob.z) < .55f) {
+            shoreHeading(
+                    new net.classicremastered.minecraft.path.ShoreNavigator.Step(
+                            target.x, step.feetY(), target.z));
+            jumping = mob.bb.y0 < Math.min(step.feetY(), target.bb.y0) && mob.yd < .16f;
+            return true;
+        }
+        boolean facing = shoreHeading(step);
         jumping = mob.yd < .16f;
         var exit = shorePath.get(shorePath.size() - 1);
         float dx = exit.x() - mob.x, dz = exit.z() - mob.z;
         float rise = exit.feetY() - mob.bb.y0;
-        if (shoreIndex == shorePath.size() - 1
+        float distance = (float) Math.hypot(step.x() - mob.x, step.z() - mob.z);
+        if (distance + .04f < shoreBestDistance) {
+            shoreBestDistance = distance;
+            shoreStallTicks = 0;
+        } else if (shoreJumpTicks == 0 && ++shoreStallTicks >= 48) {
+            // The bank may have changed, or the mob may have missed the approach.
+            blockedShoreExit = exit;
+            shorePath = List.of();
+            shoreRepath = 0;
+            return !swimToTarget;
+        }
+        if (!swimToTarget
+                && shoreIndex == shorePath.size() - 1
+                && facing
                 && dx * dx + dz * dz < 2.56f
                 && rise < 1.6f
                 && shoreJumpTicks == 0) {
-            mob.yd = Math.max(mob.yd, rise > .9f ? .58f : .42f);
+            mob.yd = Math.max(mob.yd, rise > .4f ? .58f : .42f);
             shoreJumpTicks = 18;
             jumping = false;
         }
         return true;
-    }
-
-    private float swimX, swimZ;
-
-    private boolean swimClear(int x, int y, int z) {
-        if (y < 1 || y >= level.depth - 2) return false;
-        if (level instanceof net.classicremastered.minecraft.level.LevelInfiniteTerrain t
-                && !t.chunks().isChunkLoaded(x >> 4, z >> 4)) return false;
-        if (level instanceof net.classicremastered.minecraft.level.LevelInfiniteFlat t
-                && !t.chunks().isChunkLoaded(x >> 4, z >> 4)) return false;
-        return !level.isSolidTile(x, y, z) && !level.isSolidTile(x, y + 1, z);
-    }
-
-    private void steerInWater() {
-        if (steerToShore(attackTarget)) return;
-        if (--swimRepath <= 0) {
-            swimRepath = 10;
-            swimX = attackTarget.x;
-            swimZ = attackTarget.z;
-            if (mob.horizontalCollision) {
-                int fx = (int) Math.floor(mob.x),
-                        fy = (int) Math.floor(mob.bb.y0),
-                        fz = (int) Math.floor(mob.z);
-                float best = Float.MAX_VALUE;
-                for (int dx = -3; dx <= 3; dx++)
-                    for (int dz = -3; dz <= 3; dz++) {
-                        if (dx == 0 && dz == 0) continue;
-                        int x = fx + dx, z = fz + dz;
-                        if (!swimClear(x, fy, z)
-                                && !(swimClear(x, fy + 1, z) && level.isSolidTile(x, fy, z)))
-                            continue;
-                        // Check the short approach corridor at the swimming height.
-                        boolean clear = true;
-                        for (int i = 1; i <= 3; i++) {
-                            int cx = fx + Math.round(dx * i / 3f),
-                                    cz = fz + Math.round(dz * i / 3f);
-                            if (!swimClear(cx, fy, cz) && !swimClear(cx, fy + 1, cz)) {
-                                clear = false;
-                                break;
-                            }
-                        }
-                        if (!clear) continue;
-                        float tx = x + .5f - attackTarget.x, tz = z + .5f - attackTarget.z;
-                        float score = tx * tx + tz * tz + (dx * dx + dz * dz) * .3f;
-                        if (score < best) {
-                            best = score;
-                            swimX = x + .5f;
-                            swimZ = z + .5f;
-                        }
-                    }
-            }
-        }
-        float dx = swimX - mob.x, dz = swimZ - mob.z;
-        if (dx * dx + dz * dz > .09f) {
-            float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90f, d = yaw - mob.yRot;
-            while (d > 180) d -= 360;
-            while (d < -180) d += 360;
-            mob.yRot += Math.max(-20, Math.min(20, d));
-            xxa = 0;
-            yya = runSpeed;
-        }
-        if (mob instanceof net.classicremastered.minecraft.mob.Skeleton
-                && dx * dx + dz * dz >= 36
-                && dx * dx + dz * dz <= 144
-                && level.clip(
-                                new net.classicremastered.minecraft.model.Vec3D(
-                                        mob.x, mob.bb.y0 + 1.5f, mob.z),
-                                new net.classicremastered.minecraft.model.Vec3D(
-                                        attackTarget.x, attackTarget.bb.y0 + 1f, attackTarget.z))
-                        == null) yya = 0;
-        jumping = !attackTarget.isInWater() || mob.bb.y0 < attackTarget.bb.y0 + .2f;
-        routeDriven = false;
-        yieldingToCrowd = false;
-        // Buoyancy is independent of random-jump suppression and fades at the surface.
-        if (mob.yd > .16f) mob.yd = .16f;
     }
 
     public void addGoal(Goal g) {
@@ -431,15 +434,20 @@ public class BasicAI extends AI {
         goalSelector().addGoal(priority, goal);
     }
 
-    private boolean escapeFire() {
+    private boolean escapeHazard() {
         if (!navigationAllowed()) return false;
-        // Zombies can follow a clear route past adjacent flames without fleeing.
-        var fireBounds =
-                mob instanceof Zombie && !(mob instanceof Skeleton)
-                        ? mob.bb
-                        : mob.bb.grow(.4f, 0, .4f);
-        if (!mob.overlapsFire(fireBounds)) return false;
-
+        boolean besideHazard = MobHazards.near(level, mob.bb, null);
+        if (!besideHazard && !leavingLava) return false;
+        boolean inLava = level.containsLiquid(mob.bb, LiquidType.LAVA);
+        leavingLava =
+                inLava
+                        || leavingLava
+                                && level.containsLiquid(
+                                        mob.bb
+                                                .grow(MobHazards.CLEARANCE, 0, MobHazards.CLEARANCE)
+                                                .expand(0, -1.3f, 0),
+                                        LiquidType.LAVA);
+        if (!besideHazard && !leavingLava) return false;
         float bestDistance = Float.POSITIVE_INFINITY;
         float bestYaw = mob.yRot;
         for (int direction = 0; direction < 16; direction++) {
@@ -447,23 +455,31 @@ public class BasicAI extends AI {
             double angle = Math.toRadians(yaw);
             float dx = (float) -Math.sin(angle), dz = (float) Math.cos(angle);
             for (float distance = .5f; distance <= 5f && distance < bestDistance; distance += .5f) {
-                var next = mob.bb.cloneMove(dx * distance, 0, dz * distance);
-                if (!level.getCubes(next).isEmpty()
-                        || level.getCubes(next.cloneMove(0, -.65f, 0)).isEmpty()) break;
-                if (!mob.overlapsFire(fireBounds.cloneMove(dx * distance, 0, dz * distance))) {
+                var next = mob.bb.cloneMove(dx * distance, inLava ? 1 : 0, dz * distance);
+                if (!level.getCubes(next).isEmpty()) break;
+                var landing = next.expand(0, -HAZARD_ESCAPE_DROP, 0);
+                boolean hasSupport = !level.getCubes(landing).isEmpty();
+                if (!hasSupport && !leavingLava) break;
+                if (hasSupport && !MobHazards.near(level, landing, null)) {
                     bestDistance = distance;
                     bestYaw = yaw;
                     break;
                 }
             }
         }
-        if (!Float.isFinite(bestDistance)) return false;
+        boolean foundExit = Float.isFinite(bestDistance);
+        if (!foundExit && !leavingLava) return false;
 
-        mob.yRot = bestYaw;
+        boolean facing = foundExit && faceMovement(bestYaw);
         xxa = yRotA = 0;
-        yya = 1;
+        yya = facing ? 1 : 0;
+        if (!facing) {
+            mob.xd *= .5f;
+            mob.zd *= .5f;
+        }
         running = true;
-        jumping = false;
+        jumping = inLava;
+        if (inLava) mob.yd = Math.max(mob.yd, .28f);
         steeredThisTick = true;
         return true;
     }
@@ -488,7 +504,9 @@ public class BasicAI extends AI {
         }
         if (panicTicks > 0) panicTicks--;
         if (!navigationAllowed()) return false;
-        if (panicRoute == null || panicRoute.level != level) {
+        boolean choosingRoute = panicRoute == null || panicRoute.level != level;
+        float previousYaw = mob.yRot;
+        if (choosingRoute) {
             if (panicAttacker != null) {
                 mob.yRot =
                         (float)
@@ -503,7 +521,9 @@ public class BasicAI extends AI {
         running = true;
         runMultiplier = 1.4f;
         steeredThisTick = true;
-        applyRoute(panicRoute.steer(mob, random), 1f);
+        var route = panicRoute.steer(mob, random);
+        mob.yRot = previousYaw;
+        applyRoute(route, 1f);
         return true;
     }
 
@@ -639,8 +659,13 @@ public class BasicAI extends AI {
         float x = waterDestination.x + offset, z = waterDestination.z + offset;
         float dx = x - mob.x, dz = z - mob.z;
         if (dx * dx + dz * dz < .16f && Math.abs(mob.bb.y0 - waterDestination.feetY) < .5f) {
-            holdPosition((float) Math.toDegrees(Math.atan2(dz, dx)) - 90f);
-            yya = .55f;
+            holdPosition(mob.yRot);
+            if (dx * dx + dz * dz <= .08f * .08f
+                    || faceMovement((float) Math.toDegrees(Math.atan2(dz, dx)) - 90f)) yya = .55f;
+            else {
+                mob.xd *= .5f;
+                mob.zd *= .5f;
+            }
             return true;
         }
         var route = waterRefuge.setGoal(x, waterDestination.feetY, z).steerToWaterRefuge(mob);
@@ -692,7 +717,7 @@ public class BasicAI extends AI {
     public final List<net.classicremastered.minecraft.model.Vec3D> debugRoute() {
         var route = waterDestination != null ? waterRefuge : navigator;
         if (mob == null) return List.of();
-        if (!mob.isInWater() || waterDestination != null) {
+        if (waterDestination != null || !mob.isWetForFire() && shoreJumpTicks == 0) {
             if (route == null) return List.of();
             float offset = Pathfinder.offset(mob.movementClearanceWidth());
             return route.remainingPath().stream()
@@ -807,6 +832,13 @@ public class BasicAI extends AI {
         float turn = result.targetYaw - mob.yRot;
         while (turn < -180f) turn += 360f;
         while (turn >= 180f) turn -= 360f;
+        if (mob instanceof net.classicremastered.minecraft.mob.Defender
+                && mob.onGround
+                && (mob.horizontalCollision || Math.abs(turn) > 35f)) {
+            // Keep sprint momentum from carrying the defender across the next corridor.
+            mob.xd *= .25f;
+            mob.zd *= .25f;
+        }
         mob.yRot += Math.max(-maxTurn, Math.min(maxTurn, turn));
         if (Math.abs(turn) > 35f) {
             mob.xd *= 0.5f;

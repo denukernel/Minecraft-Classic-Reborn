@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft.path;
 
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 
 import java.util.*;
@@ -17,6 +18,8 @@ public final class PathNavigator {
     private float plannedX, plannedY, plannedZ;
     private int failedPlans;
     private boolean knownPosition;
+    private boolean waterClutch;
+    private boolean swimming;
     private float lastX, lastY, lastZ;
     private boolean aligning, alignZAxis;
     private float alignX, alignY, alignZ;
@@ -74,6 +77,16 @@ public final class PathNavigator {
             Pathfinder.Node next = path.get(index);
             float dx = next.x + ground.offset - mob.x, dz = next.z + ground.offset - mob.z;
             if (dx * dx + dz * dz > reach * reach || Math.abs(mob.bb.y0 - next.feetY) > 0.2f) break;
+            if (index + 1 < path.size()) {
+                Pathfinder.Node successor = path.get(index + 1);
+                if (successor.feetY == next.feetY
+                        && !ground.bodyLineClear(
+                                mob.x,
+                                next.feetY,
+                                mob.z,
+                                successor.x + ground.offset,
+                                successor.z + ground.offset)) break;
+            }
             index++;
         }
     }
@@ -88,19 +101,23 @@ public final class PathNavigator {
 
     private Result steer(Mob mob, boolean swimming) {
         if (!hasGoal || mob.bb == null) return Result.idle();
+        GroundClearance ground = new GroundClearance(level, mob, null, swimming);
         float mx = mob.x - lastX, mz = mob.z - lastZ;
-        if (knownPosition && (mx * mx + mz * mz > 9 || Math.abs(mob.bb.y0 - lastY) > 2)) {
+        if (waterClutch != ground.waterClutch
+                || this.swimming != swimming
+                || knownPosition && (mx * mx + mz * mz > 9 || Math.abs(mob.bb.y0 - lastY) > 2)) {
             path = Collections.emptyList();
             index = 0;
             replanTicks = 0;
             progressTicks = 0;
             aligning = false;
         }
+        waterClutch = ground.waterClutch;
+        this.swimming = swimming;
         lastX = mob.x;
         lastY = mob.bb.y0;
         lastZ = mob.z;
         knownPosition = true;
-        GroundClearance ground = new GroundClearance(level, mob, null, swimming);
         float feet = mob.bb.y0;
         if (aligning) {
             float lane = alignZAxis ? Math.abs(mob.z - alignZ) : Math.abs(mob.x - alignX);
@@ -113,8 +130,11 @@ public final class PathNavigator {
             } else return toward(mob, alignX, alignY, alignZ);
         }
         float dx = gx - mob.x, dz = gz - mob.z;
+        boolean cornerBlocked = mob instanceof Defender && mob.onGround && mob.horizontalCollision;
         if (dx * dx + dz * dz < 0.4f * 0.4f && Math.abs(feet - gy) < 0.5f) return Result.arrived();
-        if (dx * dx + dz * dz < 2.25f && ground.walkableLine(mob.x, feet, mob.z, gx, gy, gz))
+        if (!cornerBlocked
+                && dx * dx + dz * dz < 2.25f
+                && ground.walkableLine(mob.x, feet, mob.z, gx, gy, gz))
             return toward(mob, gx, gy, gz);
         replanTicks--;
         advance(mob, ground);
@@ -193,7 +213,7 @@ public final class PathNavigator {
             if (vertical && climbX * climbX + climbZ * climbZ > .05f * .05f) climbY = 0;
             return Result.ladder(climbX, climbY, climbZ);
         }
-        if (index == 0 && path.size() > 1 && mob.onGround && crowded(mob)) {
+        if (index == 0 && path.size() > 1 && mob.onGround && (cornerBlocked || crowded(mob))) {
             Pathfinder.Node start = path.get(0), next = path.get(1);
             float upper = Math.max(feet, next.feetY);
             if (Math.abs(start.feetY - feet) < 0.2f
@@ -219,7 +239,7 @@ public final class PathNavigator {
         // Skip redundant grid centers only across a fully supported, body-clear corridor.
         // This also prevents periodic replans from steering back to the start-cell center.
         for (int look = path.size() - 1;
-                look > index;
+                !cornerBlocked && look > index;
                 look = look > index + 6 ? index + 6 : look - 1) {
             Pathfinder.Node candidate = path.get(look);
             boolean ladderAhead = false;

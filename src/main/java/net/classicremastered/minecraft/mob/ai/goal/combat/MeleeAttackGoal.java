@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.mob.ai.goal.combat;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 import net.classicremastered.minecraft.mob.ai.goal.MobGoal;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
@@ -43,8 +44,15 @@ public class MeleeAttackGoal extends MobGoal<BasicAttackAI> {
 
         int dmgRoll = (int) ((ai.random.nextFloat() + ai.random.nextFloat()) / 2.0F * (float) ai.damage + 1.0F);
         if (ai.mob.equipment[4] > 0)
-            dmgRoll = Math.max(dmgRoll,
-                    net.classicremastered.minecraft.level.itemstack.Equipment.damage(ai.mob.equipment[4]));
+            dmgRoll =
+                    Math.max(
+                            dmgRoll,
+                            net.classicremastered.minecraft.level.itemstack.Equipment.damage(
+                                    ai.mob.equipment[4]));
+        if (ai.mob instanceof Defender defender) {
+            defender.swingHand();
+            dmgRoll = defender.weaponDamage(dmgRoll);
+        }
         target.hurt(ai.mob, dmgRoll);
         ai.noActionTime = 0;
         return true;

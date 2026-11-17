@@ -2,12 +2,15 @@ package net.classicremastered.minecraft.path;
 
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.RedstoneEngine.Pos;
+import net.classicremastered.minecraft.level.itemstack.BucketItem;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.LadderBlock;
 import net.classicremastered.minecraft.level.tile.StairBlock;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.MobHazards;
 import net.classicremastered.minecraft.phys.AABB;
 
 import java.util.ArrayList;
@@ -22,6 +25,7 @@ final class GroundClearance {
     private final List<AABB> turrets;
     final boolean climbing;
     final float maxDrop;
+    final boolean waterClutch;
     private final Predicate<Pos> removableFire;
 
     GroundClearance(Level level, float width, float height) {
@@ -49,11 +53,12 @@ final class GroundClearance {
                 Pathfinder.dropLimit(mob),
                 nearbyTurrets(level, mob),
                 Pathfinder.supportsLadders(mob),
+                mob instanceof Defender defender && defender.hasWaterClutchReady(),
                 removableFire);
     }
 
     GroundClearance(Level level, float width, float height, boolean swimming, float maxDrop) {
-        this(level, width, height, swimming, maxDrop, List.of(), false, null);
+        this(level, width, height, swimming, maxDrop, List.of(), false, false, null);
     }
 
     private GroundClearance(
@@ -64,6 +69,7 @@ final class GroundClearance {
             float maxDrop,
             List<AABB> turrets,
             boolean climbing,
+            boolean waterClutch,
             Predicate<Pos> removableFire) {
         this.level = level;
         this.width = Math.max(0.1f, width);
@@ -72,6 +78,7 @@ final class GroundClearance {
         this.maxDrop = maxDrop;
         this.turrets = turrets;
         this.climbing = climbing;
+        this.waterClutch = waterClutch;
         this.removableFire = removableFire;
         offset = Pathfinder.offset(width);
     }
@@ -99,9 +106,7 @@ final class GroundClearance {
         if (id <= 0) return false;
         Block block = Block.blocks[id];
         return block == null
-                || block == Block.FIRE
-                || block == Block.CACTUS
-                || block.getLiquidType() == LiquidType.LAVA
+                || MobHazards.isHazard(id)
                 || !swimming && block.getLiquidType() == LiquidType.WATER;
     }
 
@@ -122,6 +127,7 @@ final class GroundClearance {
                         x + half,
                         feet + height - 0.002f,
                         z + half);
+        if (MobHazards.near(level, body, removableFire)) return false;
         for (AABB turret : turrets) {
             if (body.intersects(turret)) return false;
         }
@@ -269,13 +275,14 @@ final class GroundClearance {
         for (AABB turret : turrets) {
             if (intersectsSweep(turret, x, feet, z, nx, nz, half)) return false;
         }
-        for (int bx = (int) Math.floor(Math.min(x, nx) - half);
-                bx <= (int) Math.floor(Math.max(x, nx) + half);
+        float hazardHalf = half + MobHazards.CLEARANCE;
+        for (int bx = (int) Math.floor(Math.min(x, nx) - hazardHalf);
+                bx <= (int) Math.floor(Math.max(x, nx) + hazardHalf);
                 bx++)
-            for (int bz = (int) Math.floor(Math.min(z, nz) - half);
-                    bz <= (int) Math.floor(Math.max(z, nz) + half);
+            for (int bz = (int) Math.floor(Math.min(z, nz) - hazardHalf);
+                    bz <= (int) Math.floor(Math.max(z, nz) + hazardHalf);
                     bz++)
-                for (int by = (int) Math.floor(feet + 0.002f);
+                for (int by = (int) Math.floor(feet - MobHazards.LIP_CLEARANCE);
                         by <= (int) Math.floor(feet + height - 0.002f);
                         by++) {
                     if (!level.isInBounds(bx, by, bz)) continue;
@@ -295,11 +302,21 @@ final class GroundClearance {
                         }
                         continue;
                     }
+                    boolean danger = hazardous(id, bx, by, bz);
+                    boolean padded = danger && MobHazards.isHazard(id);
                     AABB box =
-                            hazardous(id, bx, by, bz)
-                                    ? new AABB(bx, by, bz, bx + 1, by + 1, bz + 1)
+                            danger
+                                    ? new AABB(
+                                            bx,
+                                            by,
+                                            bz,
+                                            bx + 1,
+                                            by + 1 + (padded ? MobHazards.LIP_CLEARANCE : 0),
+                                            bz + 1)
                                     : Block.blocks[id].getCollisionBox(bx, by, bz);
-                    if (box != null && intersectsSweep(box, x, feet, z, nx, nz, half)) return false;
+                    float checkHalf = padded ? hazardHalf : half;
+                    if (box != null && intersectsSweep(box, x, feet, z, nx, nz, checkHalf))
+                        return false;
                 }
         return true;
     }
@@ -337,6 +354,11 @@ final class GroundClearance {
                 && supportedAt(x + offset, y, z + offset);
     }
 
+    boolean waterRefugeLanding(int x, float y, int z) {
+        // A wide mob standing across the lip must have space to fall into the water.
+        return waterLanding(x, y, z) && bodyClear(x + offset, y - .35f, z + offset);
+    }
+
     float waterLandingBelow(int x, float feet, int z) {
         if (!swimming) return Float.NaN;
         for (int y = (int) Math.floor(feet - .001f); y >= 0; y--) {
@@ -350,13 +372,38 @@ final class GroundClearance {
         return Float.NaN;
     }
 
+    boolean protectedLanding(int x, float y, int z) {
+        return waterLanding(x, y, z)
+                || waterClutch && BucketItem.canPlaceWaterSource(level, x, (int) Math.ceil(y), z);
+    }
+
+    float descentLimit(int x, float feet, int z) {
+        float water = waterLandingBelow(x, feet, z);
+        float limit = Float.isNaN(water) ? maxDrop : Math.max(maxDrop, feet - water);
+        if (!waterClutch || feet - limit <= 1) return limit;
+
+        float cx = x + offset, cz = z + offset;
+        if (supportedAt(cx, feet, cz) || !bodyClear(cx, feet, cz)) return limit;
+        float half = width * .5f - .002f;
+        AABB body = new AABB(cx - half, feet, cz - half, cx + half, feet + height, cz + half);
+        float drop = 1 - feet;
+        for (Object collider : level.getCubes(body.expand(0, drop, 0))) {
+            drop = ((AABB) collider).clipYCollide(body, drop);
+        }
+        float landing = feet + drop;
+        return -drop > limit && protectedLanding(x, landing, z) && standable(x, landing, z)
+                ? -drop
+                : limit;
+    }
+
     boolean transition(int x, float y, int z, int nx, float ny, int nz) {
         if (y != ny
                 && (ladderNode(x, y, z) && !supportedAt(x + offset, y, z + offset)
                         || ladderNode(nx, ny, nz) && !supportedAt(nx + offset, ny, nz + offset)))
             return false;
-        if (ny - y > 1 || y - ny > maxDrop && !waterLanding(nx, ny, nz) || !standable(nx, ny, nz))
-            return false;
+        if (ny - y > 1
+                || y - ny > maxDrop && !protectedLanding(nx, ny, nz)
+                || !standable(nx, ny, nz)) return false;
         if (ny < y)
             for (float height = ny; height < y; height += .5f)
                 if (!bodyClear(nx + offset, height, nz + offset)) return false;

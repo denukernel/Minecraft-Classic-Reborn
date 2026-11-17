@@ -5,12 +5,29 @@ import net.classicremastered.minecraft.level.itemstack.FlintAndSteelItem;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.ToolItem;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.model.GunModel;
 import net.classicremastered.minecraft.model.ModelPart;
 
 import org.lwjgl.opengl.GL11;
 
 /** Third-person item displays relative to the posed right arm. */
 public final class HandItemRenderer {
+    public static void renderGun(ModelPart arm, int id, float scale, float brightness) {
+        GL11.glPushMatrix();
+        try {
+            arm.applyTransform(scale);
+            GL11.glTranslatef(0, 9 * scale, 0);
+            GL11.glRotatef(90, 1, 0, 0);
+            GL11.glRotatef(180, 0, 0, 1);
+            float size = 16 * .68f * scale;
+            GL11.glScalef(size, size, size);
+            GL11.glTranslatef(0, .28f, -.18f);
+            GunModel.render(id, brightness);
+        } finally {
+            GL11.glPopMatrix();
+        }
+    }
+
     public static void renderBow(
             ModelPart arm,
             TextureManager textures,

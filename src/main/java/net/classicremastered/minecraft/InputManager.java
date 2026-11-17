@@ -19,6 +19,7 @@ import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.FireBlock;
 import net.classicremastered.minecraft.level.tile.FlowerBlock;
 import net.classicremastered.minecraft.mob.Mob;
+import net.classicremastered.minecraft.mob.Sheep;
 import net.classicremastered.minecraft.mob.Villager;
 import net.classicremastered.minecraft.particle.FoodParticle;
 import net.classicremastered.minecraft.player.DeveloperPowers;
@@ -141,11 +142,10 @@ public class InputManager {
     private void tickEating() {
         int elapsed = mc.ticks - eating.startTick();
         boolean finished = elapsed >= FoodItem.EAT_TICKS;
-        if (elapsed >= 8 && elapsed % 4 == 0) {
+        if (FoodItem.isBiteTick(elapsed)) {
             var random = ThreadLocalRandom.current();
-            mc.level.playSound(
+            playEatingSound(
                     "item/food/eat",
-                    mc.player,
                     random.nextBoolean() ? .5f : 1f,
                     1f + (random.nextFloat() - random.nextFloat()) * .2f);
             FoodParticle.spawn(mc.player, eating.food().getTexture(), finished ? 16 : 5);
@@ -155,8 +155,14 @@ public class InputManager {
             eating = null;
             lastUseTick = mc.ticks;
             if (food.use(mc.player, mc.level) && food.playsBurp()) {
-                mc.level.playSound("item/food/burp", mc.player, .5f, 1f);
+                playEatingSound("item/food/burp", .5f, 1f);
             }
+        }
+    }
+
+    private void playEatingSound(String key, float volume, float pitch) {
+        if (mc.settings.sound && mc.soundPC != null) {
+            mc.soundPC.playSound(key, volume, pitch);
         }
     }
 
@@ -225,6 +231,7 @@ public class InputManager {
     }
 
     private void swingHeldItem() {
+        if (mc.player != null) mc.player.swingHand();
         if (mc.renderer != null && mc.renderer.heldBlock != null) {
             mc.renderer.heldBlock.swing();
         }
@@ -260,7 +267,20 @@ public class InputManager {
                 && mc.selected.entity
                         instanceof net.classicremastered.minecraft.mob.SkeletonTrap trap
                 && trap.isScattered()) {
-            if (mc.entityWithinReach(trap)) trap.breakBone(mc.player, mc.selected.bone);
+            if (mc.entityWithinReach(trap)) {
+                swingHeldItem();
+                trap.breakBone(mc.player, mc.selected.bone);
+            }
+            return;
+        }
+        if (button == 1
+                && DeveloperPowers.isSword(selId)
+                && mc.selected != null
+                && mc.selected.entity instanceof Sheep sheep) {
+            if (!mc.isOnline()
+                    && sheep.level == mc.level
+                    && mc.entityWithinReach(sheep)
+                    && sheep.shear()) swingHeldItem();
             return;
         }
         if (button == 1 && powers.active(mc.player) && DeveloperPowers.isSword(selId)) {

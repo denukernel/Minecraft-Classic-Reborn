@@ -3,23 +3,26 @@ package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.mob.ai.BasicAI;
+import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.nbt.CompoundTag;
 
 public final class IronGolem extends Mob {
+    private static final long serialVersionUID = -6818494539615206007L;
+    public static final float HEIGHT = 2.9f;
 
-    public boolean builtByPlayer = false; // added
+    public boolean builtByPlayer;
 
     public IronGolem(Level level, float x, float y, float z) {
         super(level);
-        this.setPos(x, y, z);
 
         this.modelName = "irongolem"; // mapped in ModelManager
         this.textureName = "/mob/iron_golem.png"; // 128×128 texture atlas
 
-        this.health = 100;
+        this.health = this.lastHealth = 100;
         this.coinDrop = 5;
-        this.bbWidth = 1.4F;
-        this.bbHeight = 2.9F;
+        setSize(1.4f, HEIGHT);
         this.footSize = 0.9F;
         this.speed = 0.20F;
         this.heightOffset = 1.0F;
@@ -27,6 +30,24 @@ public final class IronGolem extends Mob {
         this.hurtPitchMax = 0.3F;
         this.soundHurt = "random/anvil_land";
         this.soundDeath = "random/anvil_break";
+        setPos(x, y, z);
+    }
+
+    @Override
+    public boolean isPersistenceRequired() {
+        return builtByPlayer || super.isPersistenceRequired();
+    }
+
+    @Override
+    public void savePersistence(CompoundTag tag) {
+        super.savePersistence(tag);
+        tag.putBoolean("BuiltByPlayer", builtByPlayer);
+    }
+
+    @Override
+    public void loadPersistence(CompoundTag tag) {
+        super.loadPersistence(tag);
+        builtByPlayer = tag.getBoolean("BuiltByPlayer");
     }
 
     @Override
@@ -45,10 +66,12 @@ public final class IronGolem extends Mob {
                     net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearest(
                             this, 32, previous);
         }
-        if (ai instanceof net.classicremastered.minecraft.mob.ai.BasicAI basic)
-            basic.attackTarget = target;
+        if (ai instanceof BasicAI basic) basic.attackTarget = target;
         super.aiStep();
-        if (target != null) attackNearby(target);
+        if (ai instanceof BasicAI basic
+                && basic.attackTarget instanceof Mob victim
+                && !victim.removed
+                && victim.health > 0) attackNearby(victim);
     }
 
     // --- helper: move toward & attack any entity ---
@@ -59,12 +82,9 @@ public final class IronGolem extends Mob {
 
         if (dist < 2.0f
                 && this.attackTime == 0
-                && level.clip(
-                                new net.classicremastered.minecraft.model.Vec3D(
-                                        x, bb.y0 + bbHeight * 0.7f, z),
-                                new net.classicremastered.minecraft.model.Vec3D(
-                                        e.x, e.bb.y0 + e.bbHeight * 0.5f, e.z))
-                        == null) {
+                && e.bb.y1 > bb.y0 - .2f
+                && e.bb.y0 < bb.y1 + .2f
+                && HostileTargets.hasLineOfSight(this, e)) {
             this.attackTime = 40; // 2s cooldown
             e.hurt(this, 10);
 
@@ -85,16 +105,14 @@ public final class IronGolem extends Mob {
         Mob best = null;
 
         for (Object o : level.blockMap.all) {
-            if (!(o instanceof Mob)) continue;
-            if (o instanceof Player) continue;
-
-            Mob m = (Mob) o;
+            if (!(o instanceof Mob m) || m instanceof Player || m.corruptedToDefendPlayer) continue;
             if (!(m instanceof Zombie
                     || m instanceof Skeleton
                     || m instanceof Creeper
                     || m instanceof Spider
                     || m instanceof Enderman
-                    || m instanceof BabyZombie)) {
+                    || m instanceof BabyZombie
+                    || m instanceof IronGolem golem && !golem.builtByPlayer)) {
                 continue; // only hostiles
             }
 
@@ -104,7 +122,7 @@ public final class IronGolem extends Mob {
             float dy = m.y - this.y;
             float dz = m.z - this.z;
             float d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < bestDist2) {
+            if (d2 < bestDist2 && HostileTargets.hasLineOfSight(this, m)) {
                 bestDist2 = d2;
                 best = m;
             }

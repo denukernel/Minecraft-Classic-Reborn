@@ -10,6 +10,7 @@ import net.classicremastered.minecraft.model.HumanoidModel;
 import net.classicremastered.minecraft.model.ModelPart;
 import net.classicremastered.minecraft.mob.Enderman;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.particle.SmokeParticle;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.player.Player;
@@ -59,6 +60,9 @@ public class Arrow extends Entity {
         if (owner instanceof net.classicremastered.minecraft.mob.CrossbowTurret turret) {
             damage = turret.projectileDamage();
             bullet = turret.usesBullets();
+        }
+        if (owner instanceof Defender defender) {
+            damage = defender.weaponDamage(7);
         }
         if (stolen) {
             damage = stolenDamage;
@@ -179,6 +183,7 @@ public class Arrow extends Entity {
                 List blockMapEntitiesList = level.blockMap.getEntities(this, unknown5);
                 for (int currentEntity = 0; currentEntity < blockMapEntitiesList.size(); currentEntity++) {
                     Entity entity = (Entity) blockMapEntitiesList.get(currentEntity);
+                    if (owner instanceof Defender defender && !defender.canAttack(entity)) continue;
                     if (owner != null && entity == owner.riding && time <= 5)
                         continue;
                     if (owner instanceof CrossbowTurret
@@ -503,7 +508,7 @@ public class Arrow extends Entity {
         return stolen || owner instanceof CrossbowTurret;
     }
 
-    private boolean isBullet() {
+    public boolean isBullet() {
         return bullet;
     }
 

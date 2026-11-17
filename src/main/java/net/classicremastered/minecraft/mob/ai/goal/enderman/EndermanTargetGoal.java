@@ -1,10 +1,14 @@
 package net.classicremastered.minecraft.mob.ai.goal.enderman;
 
+import net.classicremastered.minecraft.level.itemstack.MobBattle;
 import net.classicremastered.minecraft.mob.Enderman;
+import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.enderman.EndermanAI;
+import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.mob.ai.goal.Goal;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
+import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 import java.util.EnumSet;
 
@@ -29,27 +33,40 @@ public final class EndermanTargetGoal extends Goal {
 
     @Override
     public void tick() {
-        net.classicremastered.minecraft.mob.Mob player =
-                net.classicremastered.minecraft.mob.ai.combat.HostileTargets.nearestForPursuit(
-                        ai.mob, 64, ai.attackTarget);
-        if (player == null) {
+        Mob battleTarget = MobBattle.target(ai.mob);
+        if (validTarget(battleTarget)) ai.becomeAngryAt(battleTarget);
+        Mob target = ai.angerTarget();
+        if (validTarget(target)) {
+            if (HostileTargets.canLocate(ai.mob, target)) {
+                ai.setPursuitTarget(target);
+                return;
+            }
             ai.setPursuitTarget(null);
-            ai.running = false;
-            ((Enderman) ai.mob).isAttacking = false;
-            ai.farFromTargetTicks = 0;
-            ai.navigation().clear();
-            if (!ai.hasPlayerSearch()) ai.clearTarget();
-            return;
+            if (ai.hasPlayerSearch()) {
+                ai.running = false;
+                ((Enderman) ai.mob).isAttacking = false;
+                ai.farFromTargetTicks = 0;
+                ai.navigation().clear();
+                return;
+            }
         }
-        if (!ai.angry
-                && (player instanceof net.classicremastered.minecraft.mob.Defender
-                        || player instanceof Player p
-                                && isPlayerLookingAtMe(p, (Enderman) ai.mob))) {
-            ai.angry = true;
-            ai.navigation().clear();
+        if (ai.angry || ai.attackTarget != null) ai.clearTarget();
+        if (ai.level.getPlayer() instanceof Player player
+                && validTarget(player)
+                && isPlayerLookingAtMe(player, (Enderman) ai.mob)) {
+            ai.becomeAngryAt(player);
+            ai.setPursuitTarget(player);
         }
-        if (ai.angry) ai.setPursuitTarget(player);
-        else ai.clearTarget();
+    }
+
+    private boolean validTarget(Mob target) {
+        return target != null
+                && target != ai.mob
+                && target.level == ai.level
+                && target.health > 0
+                && !target.removed
+                && !CreativeModeHelper.shouldIgnoreTarget(target)
+                && ai.mob.distanceToSqr(target) <= 64 * 64;
     }
 
     @Override

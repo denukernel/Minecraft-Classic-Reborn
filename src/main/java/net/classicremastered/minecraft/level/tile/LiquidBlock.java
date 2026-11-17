@@ -50,6 +50,8 @@ public class LiquidBlock extends Block {
         if (this.id == this.movingId || this.type == LiquidType.LAVA
                 || this.type == LiquidType.WATER && usesLevelledFlow(level)) {
             level.addToTickNextTick(x, y, z, this.id);
+        } else if (level.getTile(x, y - 1, z) == Block.SNOW_LAYER.id) {
+            onNeighborChange(level, x, y, z, Block.SNOW_LAYER.id);
         }
     }
 
@@ -145,10 +147,15 @@ public class LiquidBlock extends Block {
     }
 
     private void updateClassic(Level level, int x, int y, int z) {
-        boolean spread = spreadTo(level, x, y - 1, z, 0);
+        // Track which cells spread from a source even when classic flow ignores fluid levels.
+        int flowing = 1;
+        boolean spread = spreadTo(level, x, y - 1, z, flowing);
         if (!spread) {
-            spread = spreadTo(level, x - 1, y, z, 0) | spreadTo(level, x + 1, y, z, 0) | spreadTo(level, x, y, z - 1, 0)
-                    | spreadTo(level, x, y, z + 1, 0);
+            spread =
+                    spreadTo(level, x - 1, y, z, flowing)
+                            | spreadTo(level, x + 1, y, z, flowing)
+                            | spreadTo(level, x, y, z - 1, flowing)
+                            | spreadTo(level, x, y, z + 1, flowing);
         }
         if (!spread && level.getTile(x, y, z) == this.movingId) {
             level.setTileNoUpdate(x, y, z, this.stillId);
@@ -343,16 +350,18 @@ public class LiquidBlock extends Block {
         return true;
     }
 
+    public static boolean canWashAway(int tile) {
+        return tile == Block.SNOW_LAYER.id
+                || tile == Block.FIRE.id
+                || Block.blocks[tile] instanceof FlowerBlock plant && plant.canBeWashedAway();
+    }
+
     protected final boolean canFlowInto(Level level, int x, int y, int z) {
         if (!level.isInBounds(x, y, z)) {
             return false;
         }
         int tile = level.getTile(x, y, z);
-        if (tile != 0
-                && (this.type != LiquidType.WATER
-                        || (tile != Block.FIRE.id
-                                && !(Block.blocks[tile] instanceof FlowerBlock plant
-                                        && plant.canBeWashedAway())))) {
+        if (tile != 0 && (this.type != LiquidType.WATER || !canWashAway(tile))) {
             return false;
         }
         if (this.type == LiquidType.WATER) {
@@ -382,7 +391,9 @@ public class LiquidBlock extends Block {
         }
 
         int id = level.getTile(x, y, z);
-        if (id == this.movingId || id == this.stillId) {
+        if (id == this.movingId
+                || id == this.stillId
+                || this.type == LiquidType.WATER && level.isWaterloggedGlass(x, y, z)) {
             return false; // skip self-adjacent liquids
         }
 
@@ -396,7 +407,7 @@ public class LiquidBlock extends Block {
         }
 
         // A solid ceiling can only hide a water surface that reaches its underside.
-        boolean top = level.isInBounds(x, y + 1, z) && !level.isWater(x, y + 1, z);
+        boolean top = level.isInBounds(x, y + 1, z) && !level.hasVisibleWater(x, y + 1, z);
         boolean north = canRenderSide(level, x, y, z - 1, 2);
         boolean south = canRenderSide(level, x, y, z + 1, 3);
         boolean west = canRenderSide(level, x - 1, y, z, 4);
@@ -479,14 +490,15 @@ public class LiquidBlock extends Block {
         float total = 0;
         int samples = 0;
         boolean levelled = usesLevelledFlow(level);
-        boolean connected = level.isWater(x + dx, y, z) || level.isWater(x, y, z + dz);
+        boolean connected =
+                level.hasVisibleWater(x + dx, y, z) || level.hasVisibleWater(x, y, z + dz);
         for (int ox = 0; ox <= 1; ox++) {
             int nx = x + ox * dx;
             for (int oz = 0; oz <= 1; oz++) {
                 if (ox == 1 && oz == 1 && !connected) continue;
                 int nz = z + oz * dz;
-                if (level.getLiquid(nx, y, nz) == LiquidType.WATER) {
-                    if (level.getLiquid(nx, y + 1, nz) == LiquidType.WATER) {
+                if (level.hasVisibleWater(nx, y, nz)) {
+                    if (level.hasVisibleWater(nx, y + 1, nz)) {
                         return 1.0F;
                     }
                     int flow = levelled ? level.getFlowLevel(nx, y, nz) : 0;

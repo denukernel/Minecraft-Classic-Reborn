@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 /** Moves a centered projectile to its first contact along the current velocity. */
 public final class ProjectileSweep {
@@ -44,7 +45,9 @@ public final class ProjectileSweep {
                 if (!(candidate instanceof Mob mob)
                         || mob == owner
                         || mob.removed
-                        || mob.health <= 0) continue;
+                        || mob.health <= 0
+                        || (projectile instanceof BossFireball
+                                && CreativeModeHelper.shouldIgnoreTarget(mob))) continue;
                 float distance = distanceSquared(mob.bb, start, end, halfWidth, halfHeight);
                 if (distance < nearest) {
                     nearest = distance;

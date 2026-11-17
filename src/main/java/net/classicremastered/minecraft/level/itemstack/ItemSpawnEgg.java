@@ -4,6 +4,8 @@ package net.classicremastered.minecraft.level.itemstack;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.LiquidBlock;
+import net.classicremastered.minecraft.mob.CrossbowTurret;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Fish;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.MobRegistry;
@@ -105,6 +107,7 @@ public final class ItemSpawnEgg extends Item {
 
     private boolean release(Player player, Level level, Mob mob) {
         if (mob instanceof Fish) mob.persistent = true;
+        if (mob instanceof Defender defender) defender.owner = CrossbowTurret.playerName(player);
         level.addEntity(mob);
         consumeSelected(player, level);
         return true;

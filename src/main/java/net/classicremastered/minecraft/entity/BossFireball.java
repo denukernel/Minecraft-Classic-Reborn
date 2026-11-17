@@ -70,7 +70,6 @@ public final class BossFireball extends Entity {
         if (owner.removed
                 || owner.health <= 0
                 || owner.level != level
-                || level.creativeMode
                 || CombatRules.difficulty(level) == Difficulty.PEACEFUL) {
             remove();
             return;

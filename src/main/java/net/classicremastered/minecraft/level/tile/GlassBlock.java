@@ -4,10 +4,15 @@ import net.classicremastered.minecraft.level.Level;
 
 public final class GlassBlock extends Block {
 
-    private boolean showNeighborSides = false;
+    protected GlassBlock(int id) {
+        super(id, 49, "Glass");
+    }
 
-    protected GlassBlock(int var1, int var2, boolean var3) {
-        super(20, 49, "Glass");
+    public static int retainWater(int previousId, int placedId) {
+        return placedId == Block.GLASS.id
+                        && (previousId == Block.WATER.id || previousId == Block.STATIONARY_WATER.id)
+                ? Block.WATERLOGGED_GLASS.id
+                : placedId;
     }
 
     public final boolean isSolid() {
@@ -15,12 +20,17 @@ public final class GlassBlock extends Block {
     }
 
     public final boolean canRenderSide(Level level, int x, int y, int z, int side) {
-        int var6 = level.getTile(x, y, z);
-        return !this.showNeighborSides && var6 == this.id ? false : super.canRenderSide(level, x, y, z, side);
+        return level.getTile(x, y, z) != Block.GLASS.id
+                && super.canRenderSide(level, x, y, z, side);
     }
 
     public final boolean isOpaque() {
         return false;
+    }
+
+    @Override
+    public int getDrop() {
+        return Block.GLASS.id;
     }
 
     public static void playShatter(Level level, float x, float y, float z) {
