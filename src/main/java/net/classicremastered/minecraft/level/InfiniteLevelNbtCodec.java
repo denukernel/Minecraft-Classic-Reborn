@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.infinite.SimpleChunkManager;
@@ -10,11 +11,15 @@ import java.util.Map;
 import java.util.function.IntConsumer;
 
 /** Reads and writes infinite terrain and flat world NBT data. */
-final class InfiniteLevelNbtCodec {
+public final class InfiniteLevelNbtCodec {
     private InfiniteLevelNbtCodec() {}
 
     static void save(Level level, DataOutputStream out) throws IOException {
-        CompoundTag root = new CompoundTag("InfiniteLevel");
+        NBTIO.write(encode(level, "InfiniteLevel"), out);
+    }
+
+    public static CompoundTag encode(Level level, String tagName) throws IOException {
+        CompoundTag root = new CompoundTag(tagName);
         root.putByte("FormatVersion", (byte) 1);
         root.putString("TerrainType", level instanceof LevelInfiniteFlat ? "Flat" : "Terrain");
 
@@ -32,6 +37,10 @@ final class InfiniteLevelNbtCodec {
             seed = terrain.randomSeed;
             depthY = terrain.depth;
             map = terrain.chunks().getAllChunks();
+        }
+        if (level.isStickmansHouse()) {
+            root.putString("TerrainType", StickmansHouse.TERRAIN_TYPE);
+            root.putInt("StickmansHouseStage", level.stickmansHouseStage);
         }
 
         root.putLong("Seed", seed);
@@ -101,16 +110,20 @@ final class InfiniteLevelNbtCodec {
         WorldStateNbtCodec.save(level, root);
 
         net.classicremastered.minecraft.level.structure.CobblestoneTower.save(level, root);
-        net.classicremastered.nbt.NBTIO.write(root, out);
+        return root;
     }
 
-    static Level load(CompoundTag root, IntConsumer progress) throws IOException {
+    public static Level load(CompoundTag root, IntConsumer progress) throws IOException {
         progress.accept(0);
         String type = root.getString("TerrainType");
+        boolean stickmansHouse = StickmansHouse.TERRAIN_TYPE.equals(type);
         long seed = root.getLong("Seed");
         int depth = root.getInt("Depth");
         if (depth <= 0 || depth > Integer.MAX_VALUE / 256) {
             throw new IOException("Invalid infinite world depth: " + depth);
+        }
+        if (stickmansHouse && depth != StickmansHouse.DEPTH) {
+            throw new IOException("Invalid Stickman's House depth: " + depth);
         }
         ListTag chunks = root.getList("Chunks");
         for (int i = 0; i < chunks.size(); i++) {
@@ -120,9 +133,10 @@ final class InfiniteLevelNbtCodec {
             }
         }
 
+        int verticalOffset = WorldStateNbtCodec.verticalOffset(root, depth);
         Level level;
         if ("Flat".equalsIgnoreCase(type)) {
-            level = new LevelInfiniteFlat(seed, depth);
+            level = new LevelInfiniteFlat(seed, depth, verticalOffset);
         } else {
             level =
                     new LevelInfiniteTerrain(
@@ -130,9 +144,13 @@ final class InfiniteLevelNbtCodec {
                             depth,
                             "Biomes".equalsIgnoreCase(type),
                             root.getBoolean("FlatBiomes"),
-                            root.getBoolean("OceanBiomes"));
+                            root.getBoolean("OceanBiomes"),
+                            stickmansHouse,
+                            root.getBoolean("LargeBiomes"),
+                            stickmansHouse ? 0 : verticalOffset);
         }
 
+        if (stickmansHouse) level.stickmansHouseStage = root.getInt("StickmansHouseStage");
         level.setTime(root.getInt("TimeOfDay"));
         level.doDayNightCycle =
                 !root.hasKey("DoDayNightCycle") || root.getBoolean("DoDayNightCycle");

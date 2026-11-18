@@ -56,7 +56,7 @@ public final class StructureLocatorItem extends Item {
                                 "&a%s &fat %d %d %d &7(%.0f blocks away)",
                                 found.label,
                                 found.x,
-                                found.y,
+                                level.worldY(found.y),
                                 found.z,
                                 Math.hypot(found.x - player.x, found.z - player.z)));
         return true;

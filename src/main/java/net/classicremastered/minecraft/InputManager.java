@@ -7,6 +7,7 @@ import net.classicremastered.minecraft.entity.SignEntity;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.BowItem;
+import net.classicremastered.minecraft.level.itemstack.DarkStickItem;
 import net.classicremastered.minecraft.level.itemstack.BucketItem;
 import net.classicremastered.minecraft.level.itemstack.FoodItem;
 import net.classicremastered.minecraft.level.itemstack.GrapplingHookItem;
@@ -184,6 +185,10 @@ public class InputManager {
         lastUseTick = mc.ticks;
         Item held = selectedItem();
         int raw = mc.player.inventory.getSelected();
+        if (held instanceof DarkStickItem) {
+            if (held.use(mc.player, mc.level)) swingHeldItem();
+            return;
+        }
         if (mc.selected != null
                 && mc.selected.entity
                         instanceof net.classicremastered.minecraft.entity.BoatEntity boat
@@ -239,6 +244,7 @@ public class InputManager {
 
     private static boolean repeatsUse(Item item) {
         return !(item instanceof BowItem
+                || item instanceof DarkStickItem
                 || item instanceof BucketItem
                 || item instanceof GravityGunItem
                 || item instanceof PhysicsGunItem

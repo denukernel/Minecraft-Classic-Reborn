@@ -936,6 +936,10 @@ public class Player extends Mob {
             for (int i = 0; i < this.inventory.totalSize(); i++) {
                 int id = this.inventory.getId(i);
                 int count = this.inventory.getCount(i);
+                if (level.isStickmansHouse()
+                        && id
+                                == net.classicremastered.minecraft.level.itemstack.DarkStickItem.ID
+                                        + 256) continue;
                 if (id > 0 && count > 0) {
                     // Random scatter offset around the player's feet
                     float rx = (rnd.nextFloat() - 0.5F) * 0.4F;

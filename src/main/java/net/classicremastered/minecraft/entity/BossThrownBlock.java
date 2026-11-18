@@ -1,7 +1,9 @@
 package net.classicremastered.minecraft.entity;
+
 import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.TNTBlock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -15,6 +17,7 @@ public final class BossThrownBlock extends Entity {
     public static final float GRAVITY = .025f;
     public static final float SMALL_BLOCK_WIDTH = .7f;
     private int cubeSize = 1;
+
     public int cubeSize() {
         return Math.max(1, cubeSize);
     }
@@ -22,14 +25,19 @@ public final class BossThrownBlock extends Entity {
     public int blockCount() {
         return cubeSize() * cubeSize() * cubeSize();
     }
+
     private final Mob owner;
     public final int blockId;
     private int age;
     private final boolean creativeThrow;
-    public BossThrownBlock(Level level, Mob owner, int id, float x, float y, float z, Vec3D velocity) {
+
+    public BossThrownBlock(
+            Level level, Mob owner, int id, float x, float y, float z, Vec3D velocity) {
         super(level);
         this.owner = owner;
-        creativeThrow = owner instanceof net.classicremastered.minecraft.player.Player && level.creativeMode;
+        creativeThrow =
+                owner instanceof net.classicremastered.minecraft.player.Player
+                        && level.creativeMode;
         blockId = id;
         setSize(SMALL_BLOCK_WIDTH, SMALL_BLOCK_WIDTH);
         heightOffset = bbHeight * .5f;
@@ -42,7 +50,8 @@ public final class BossThrownBlock extends Entity {
         zd = velocity.z;
     }
 
-    public BossThrownBlock(Level level, Mob owner, int id, float x, float y, float z, Vec3D velocity, int size) {
+    public BossThrownBlock(
+            Level level, Mob owner, int id, float x, float y, float z, Vec3D velocity, int size) {
         this(level, owner, id, x, y, z, velocity);
         cubeSize = size == 2 ? 2 : 1;
         setSize(cubeSize, cubeSize);
@@ -70,6 +79,16 @@ public final class BossThrownBlock extends Entity {
                 large ? ProjectileSweep.moveAgainstBlocks(this) : ProjectileSweep.move(this, owner);
         if (impact != null) {
             if (explosive) {
+                var bounds = impact.blockBounds();
+                if (bounds != null) {
+                    // Use the struck block interior, since contact may lie on a cell boundary.
+                    TNTBlock.ignite(
+                            level,
+                            (int) Math.floor((bounds.x0 + bounds.x1) * .5f),
+                            (int) Math.floor((bounds.y0 + bounds.y1) * .5f),
+                            (int) Math.floor((bounds.z0 + bounds.z1) * .5f),
+                            owner);
+                }
                 detonate(large ? impact.blockContact() : new Vec3D(x, y, z));
             } else if (blockId == Block.TNT.id) {
                 PrimedTnt.detonate(this, owner, 4f);
@@ -123,12 +142,19 @@ public final class BossThrownBlock extends Entity {
         if (removed) return;
         removed = true;
         if (level.particleEngine != null)
-            Block.blocks[blockId].spawnBreakParticles(level, (int) Math.floor(x), (int) Math.floor(y),
-                    (int) Math.floor(z), level.particleEngine);
-        if (!creativeThrow)
-            for (int i = 0; i < blockCount(); i++)
-                level.addEntity(new DroppedBlock(level, x, y, z, blockId));
+            Block.blocks[blockId].spawnBreakParticles(
+                    level,
+                    (int) Math.floor(x),
+                    (int) Math.floor(y),
+                    (int) Math.floor(z),
+                    level.particleEngine);
+        if (!creativeThrow && blockId != Block.OBSIDIAN.id) dropBlocks();
         level.playSound("random/anvil_land", this, .5f, 1.5f);
+    }
+
+    private void dropBlocks() {
+        for (int i = 0; i < blockCount(); i++)
+            level.addEntity(new DroppedBlock(level, x, y, z, blockId));
     }
 
     @Override

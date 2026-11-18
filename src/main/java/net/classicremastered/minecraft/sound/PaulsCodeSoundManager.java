@@ -260,6 +260,13 @@ public final class PaulsCodeSoundManager {
         playSoundInternal(key, 0f, 0f, 0f, volume, pitch, false, true, false);
     }
 
+    public synchronized boolean playCaveAmbience() {
+        String pool = "ambient/cave/cave";
+        if (!settings.sound || !sfx.containsKey(pool)) return false;
+        playSoundClean(pool, .65f, 1f);
+        return true;
+    }
+
     public void playMobSoundCleanAt(
             String key, float x, float y, float z, float volume, float pitch) {
         if (!settings.sound) return;

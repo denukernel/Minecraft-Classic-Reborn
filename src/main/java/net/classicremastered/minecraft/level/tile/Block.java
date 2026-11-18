@@ -84,6 +84,7 @@ public class Block {
     public static final Block WORKBENCH;
     public static final Block DIRT;
     public static final Block COBBLESTONE;
+    public static final Block BLACK_COBBLESTONE;
     public static final Block LADDER;
     public static final Block LADDER_NORTH, LADDER_SOUTH, LADDER_WEST;
     public static final Block TOWER_LADDER;
@@ -512,7 +513,28 @@ public class Block {
         this.dropItems(level, x, y, z, 1.0F);
     }
 
+    public void onMined(
+            Level level,
+            int x,
+            int y,
+            int z,
+            net.classicremastered.minecraft.level.itemstack.ToolItem tool) {
+        if (!requiresDiamondPickaxe()) {
+            onBreak(level, x, y, z);
+        } else if (tool != null && tool.isDiamondPickaxe()) {
+            spawnDrops(level, x, y, z, 1f);
+        }
+    }
+
     public void dropItems(Level level, int x, int y, int z, float chance) {
+        if (!requiresDiamondPickaxe()) spawnDrops(level, x, y, z, chance);
+    }
+
+    private boolean requiresDiamondPickaxe() {
+        return this == BLACK_COBBLESTONE || this == OBSIDIAN;
+    }
+
+    private void spawnDrops(Level level, int x, int y, int z, float chance) {
         if (!level.creativeMode) {
             int cnt = this.getDropCount();
             for (int i = 0; i < cnt; ++i) {
@@ -609,6 +631,7 @@ public class Block {
         return (this instanceof StoneBlock)
                 || (this instanceof OreBlock)
                 || this == COBBLESTONE
+                || this == BLACK_COBBLESTONE
                 || this == MOSSY_COBBLESTONE
                 || this == BRICK
                 || this == SLAB
@@ -668,6 +691,10 @@ public class Block {
         var1 = var10000;
         var10000.explodes = false;
         COBBLESTONE = var1;
+        BLACK_COBBLESTONE =
+                new Block(230, 102, "Black Cobblestone")
+                        .setData(Tile$SoundType.stone, 1f, 1f, 1.5f);
+        BLACK_COBBLESTONE.explodes = false;
         LADDER = new TowerLadderBlock(91);
         TOWER_LADDER = LADDER;
         LADDER_NORTH = new LadderBlock(97, 2);
@@ -823,11 +850,8 @@ public class Block {
         var1 = var10000;
         var10000.explodes = false;
         MOSSY_COBBLESTONE = var1;
-        var10000 = (new StoneBlock(49, 37)).setData(Tile$SoundType.stone, 1.0F, 1.0F, 10.0F);
-        var0 = false;
-        var1 = var10000;
-        var10000.explodes = false;
-        OBSIDIAN = var1;
+        OBSIDIAN = new Block(49, 37, "Obsidian").setData(Tile$SoundType.stone, 1f, 1f, 10f);
+        OBSIDIAN.explodes = false;
         MAGMA = new MagmaBlock(100, 191);
     }
 }

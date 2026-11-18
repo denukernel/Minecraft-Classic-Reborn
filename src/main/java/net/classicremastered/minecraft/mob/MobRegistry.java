@@ -302,6 +302,7 @@ public final class MobRegistry {
         register(Salmon.REGISTRY_ID, "Salmon", Salmon.class, Salmon::new);
         register(TropicalFish.REGISTRY_ID, "TropicalFish", TropicalFish.class, TropicalFish::new);
         register(Pufferfish.REGISTRY_ID, "Pufferfish", Pufferfish.class, Pufferfish::new);
+        register(Steve.REGISTRY_ID, "Steve", Steve.class, Steve::new);
         // --- Variants / babies (optional on some builds) ---
         tryRegister(
                 (short) 40,

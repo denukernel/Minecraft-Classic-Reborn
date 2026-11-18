@@ -15,8 +15,17 @@ public final class LevelInfiniteFlat extends Level {
     public final long randomSeed;
 
     public LevelInfiniteFlat(long seed, int depthY) {
+        this(seed, depthY, 0);
+    }
+
+    public static LevelInfiniteFlat createOverworld(long seed) {
+        return new LevelInfiniteFlat(seed, OVERWORLD_HEIGHT, OVERWORLD_Y_OFFSET);
+    }
+
+    LevelInfiniteFlat(long seed, int depthY, int verticalOffset) {
         super();
         this.randomSeed = seed;
+        this.verticalOffset = verticalOffset;
 
         this.width = 16;
         this.height = 16;
@@ -37,12 +46,14 @@ public final class LevelInfiniteFlat extends Level {
         Arrays.fill(this.blockers, this.depth);
 
         // explicitly flat mode
-        this.chunks = new SimpleChunkManager(seed, depthY, SimpleChunkManager.Mode.FLAT);
+        this.chunks =
+                new SimpleChunkManager(
+                        seed, depthY, SimpleChunkManager.Mode.FLAT, false, false, verticalOffset);
         this.chunks.level = this;
-        this.waterLevel = Math.max(1, depthY / 2);
+        this.waterLevel = Math.max(1, (depthY + verticalOffset) / 2);
 
         this.findSpawn();
-        this.ySpawn = Math.min(34, depthY - 1);
+        this.ySpawn = Math.min(34 + verticalOffset, depthY - 1);
     }
 
     @Override
@@ -264,14 +275,7 @@ public final class LevelInfiniteFlat extends Level {
                         if (id > 0) {
                             Block b = Block.blocks[id];
                             if (b != null && canBlastDestroy(b, src)) {
-                                if (id == Block.TNT.id) {
-                                    net.classicremastered.minecraft.level.tile.TNTBlock.ignite(
-                                            this, x, y, z);
-                                } else {
-                                    if (dropBlocks) b.dropItems(this, x, y, z, 0.3F);
-                                    setTile(x, y, z, 0);
-                                    b.explode(this, x, y, z);
-                                }
+                                blastBlock(src, b, x, y, z, dropBlocks);
                             }
                         }
                     }

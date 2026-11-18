@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.level.infinite;
 
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.tile.Block;
 
@@ -12,12 +13,14 @@ public final class SimpleChunkManager {
     public enum Mode {
         FLAT,
         TERRAIN,
-        BIOMES
+        BIOMES,
+        STICKMANS_HOUSE
     }
 
     private final Map<Long, SimpleChunk> map = new ConcurrentHashMap<>();
     private final int height;
     private final long seed;
+    private final int verticalOffset;
     private final InfiniteTerrainGenerator terrain;
     private final BiomeLevelGenerator biomes;
     private final Mode mode;
@@ -65,11 +68,33 @@ public final class SimpleChunkManager {
     }
 
     public SimpleChunkManager(long seed, int height, Mode mode, boolean oceans) {
+        this(seed, height, mode, oceans, true);
+    }
+
+    public SimpleChunkManager(
+            long seed, int height, Mode mode, boolean oceans, boolean largeBiomes) {
+        this(seed, height, mode, oceans, largeBiomes, 0);
+    }
+
+    public SimpleChunkManager(
+            long seed,
+            int height,
+            Mode mode,
+            boolean oceans,
+            boolean largeBiomes,
+            int verticalOffset) {
         this.seed = seed;
         this.height = height;
         this.mode = mode;
-        this.terrain = mode == Mode.BIOMES ? null : new InfiniteTerrainGenerator(seed, height);
-        this.biomes = mode == Mode.BIOMES ? new BiomeLevelGenerator(seed, oceans) : null;
+        this.verticalOffset = verticalOffset;
+        this.terrain =
+                mode == Mode.FLAT || mode == Mode.TERRAIN
+                        ? new InfiniteTerrainGenerator(seed, height, verticalOffset)
+                        : null;
+        this.biomes =
+                mode == Mode.BIOMES
+                        ? new BiomeLevelGenerator(seed, oceans, largeBiomes, verticalOffset)
+                        : null;
     }
 
     private static long key(int cx, int cz) {
@@ -255,13 +280,19 @@ public final class SimpleChunkManager {
         int worldX = c.cx * SimpleChunk.SIZE;
         int worldZ = c.cz * SimpleChunk.SIZE;
 
+        if (mode == Mode.STICKMANS_HOUSE) {
+            StickmansHouse.generateChunk(c);
+            c.buildEmissiveList();
+            return;
+        }
         if (biomes != null) {
             biomes.generateChunk(c, level != null && level.flatBiomes);
         } else if (terrain != null) {
             terrain.generateChunk(c, worldX, worldZ, mode == Mode.FLAT, level);
         }
         if (mode != Mode.FLAT && (level == null || !level.flatBiomes)) {
-            net.classicremastered.minecraft.level.structure.Mineshaft.decorate(c, seed);
+            net.classicremastered.minecraft.level.structure.Mineshaft.decorate(
+                    c, seed, verticalOffset);
             net.classicremastered.minecraft.level.structure.CobblestoneTower.decorate(c, seed);
             if (level != null && c.cobblestoneTower != null) {
                 level.cobblestoneTowers.add(c.cobblestoneTower);
@@ -287,6 +318,7 @@ public final class SimpleChunkManager {
     public static void checkFarLandsWarning(
             Minecraft mc, net.classicremastered.minecraft.player.Player player) {
         if (mc == null || mc.hud == null || player == null) return;
+        if (player.level != null && player.level.isStickmansHouse()) return;
         long dist = (long) Math.max(Math.abs(player.x), Math.abs(player.z));
         if (dist >= 1_000_000L && dist <= 5_000_000L) {
             if (!warnedFarLands) {

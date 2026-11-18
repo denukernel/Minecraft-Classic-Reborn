@@ -1,5 +1,7 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
+
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.ProgressBarDisplay;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
@@ -31,6 +33,8 @@ public final class LevelIO {
     private static final int VERSION_TERRAIN  = 4; // terrain
     private static final int VERSION_CLASSIC_NBT  = 5;
     private static final int VERSION_INFINITE_NBT = 6;
+    private static final int SAVE_BUFFER_BYTES = 64 * 1024;
+    private static final long SAVE_PROGRESS_INTERVAL_NANOS = 100_000_000L;
 
     private final ProgressBarDisplay progressBar;
 
@@ -50,6 +54,7 @@ public final class LevelIO {
     }
 
     private boolean save(Level level, File file, boolean showProgress) {
+        level = StickmansHouse.homeLevel(level);
         Path tmp = null;
         ProgressBarDisplay display = showProgress ? progressBar : null;
         try {
@@ -67,12 +72,14 @@ public final class LevelIO {
             tmp = Files.createTempFile(destination.getParent(), ".level-save-", ".tmp");
 
             try (OutputStream fos = Files.newOutputStream(tmp);
-                    GZIPOutputStream gos = new GZIPOutputStream(fos);
+                    GZIPOutputStream gos = new GZIPOutputStream(fos, SAVE_BUFFER_BYTES);
+                    BufferedOutputStream buffered =
+                            new BufferedOutputStream(gos, SAVE_BUFFER_BYTES);
                     DataOutputStream out =
                             new DataOutputStream(
                                     display == null
-                                            ? gos
-                                            : new SaveProgressStream(gos, level, display))) {
+                                            ? buffered
+                                            : new SaveProgressStream(buffered, level, display))) {
 
                 if (level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain) {
                     InfiniteLevelNbtCodec.save(level, out);
@@ -129,6 +136,7 @@ public final class LevelIO {
         private final ProgressBarDisplay display;
         private long written;
         private int previous;
+        private long nextUpdate = System.nanoTime() + SAVE_PROGRESS_INTERVAL_NANOS;
 
         SaveProgressStream(OutputStream out, Level level, ProgressBarDisplay display) {
             super(out);
@@ -156,7 +164,7 @@ public final class LevelIO {
         @Override
         public void write(byte[] bytes, int offset, int length) throws IOException {
             while (length > 0) {
-                int batch = Math.min(length, 64 * 1024);
+                int batch = Math.min(length, SAVE_BUFFER_BYTES);
                 out.write(bytes, offset, batch);
                 advance(batch);
                 offset += batch;
@@ -167,9 +175,10 @@ public final class LevelIO {
         private void advance(int bytes) {
             written += bytes;
             int percent = (int) (Math.min(terrainBytes, written) * 95 / terrainBytes);
-            if (percent == previous) return;
+            if (percent == previous || System.nanoTime() - nextUpdate < 0) return;
             previous = percent;
             reportSaveProgress(() -> display.setProgress(percent));
+            nextUpdate = System.nanoTime() + SAVE_PROGRESS_INTERVAL_NANOS;
         }
     }
 
@@ -297,8 +306,11 @@ public final class LevelIO {
     public final Level load(File file) {
         try (FileInputStream fis = new FileInputStream(file)) {
             Level level = load(fis);
-            if (level != null)
+            if (level != null) {
                 level.saveFile = file.getAbsoluteFile();
+                String name = WorldStorage.storedName(file);
+                if (name != null) level.name = name;
+            }
             return level;
         } catch (Exception ex) {
             ex.printStackTrace();

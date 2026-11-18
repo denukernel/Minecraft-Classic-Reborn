@@ -19,10 +19,58 @@ import net.classicremastered.minecraft.GameSettings.GraphicsMode;
 import net.classicremastered.minecraft.player.Player;
 
 public final class Screenshot {
+    private static final ThreadLocal<ByteBuffer> WORLD_ICON_PIXELS = new ThreadLocal<>();
+
     private Screenshot() {}
 
     public static File take(File gameDir) {
         return take(gameDir, null);
+    }
+
+    public static BufferedImage captureWorldIcon(int width, int height) {
+        int side = Math.min(width, height);
+        if (side <= 0) return null;
+        int bytes = Math.multiplyExact(side * 4, side);
+        ByteBuffer pixels = WORLD_ICON_PIXELS.get();
+        if (pixels == null || pixels.capacity() != bytes) {
+            pixels = BufferUtils.createByteBuffer(bytes);
+            WORLD_ICON_PIXELS.set(pixels);
+        }
+        pixels.clear();
+        int alignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        try {
+            GL11.glReadBuffer(GL11.GL_BACK);
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+            GL11.glReadPixels(
+                    (width - side) / 2,
+                    (height - side) / 2,
+                    side,
+                    side,
+                    GL11.GL_RGBA,
+                    GL11.GL_UNSIGNED_BYTE,
+                    pixels);
+        } finally {
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, alignment);
+            GL11.glReadBuffer(readBuffer);
+        }
+        return worldIcon(pixels, side);
+    }
+
+    static BufferedImage worldIcon(ByteBuffer pixels, int side) {
+        int size = 64;
+        BufferedImage icon = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int i = ((side - 1 - y * side / size) * side + x * side / size) * 4;
+                int rgb =
+                        ((pixels.get(i) & 255) << 16)
+                                | ((pixels.get(i + 1) & 255) << 8)
+                                | (pixels.get(i + 2) & 255);
+                icon.setRGB(x, y, rgb);
+            }
+        }
+        return icon;
     }
 
     public static File takeBugReport(File gameDir, Player player, GraphicsMode graphicsMode) {
@@ -33,7 +81,7 @@ public final class Screenshot {
                             Locale.ROOT,
                             "XYZ: %.2f / %.2f / %.2f   |   %s",
                             player.x,
-                            player.y,
+                            player.level == null ? player.y : player.level.worldY(player.y),
                             player.z,
                             details);
         }

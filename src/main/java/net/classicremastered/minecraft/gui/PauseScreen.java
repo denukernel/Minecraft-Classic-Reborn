@@ -1,7 +1,5 @@
 package net.classicremastered.minecraft.gui;
 
-
-
 public final class PauseScreen extends GuiScreen {
 
     @Override
@@ -9,31 +7,35 @@ public final class PauseScreen extends GuiScreen {
         return true;
     }
 
-    // IDs
     private static final int ID_OPTIONS = 0;
     private static final int ID_SELECTLEVEL = 1;
-    private static final int ID_MARKETPLACE = 2; // NEW
+    private static final int ID_MARKETPLACE = 2;
     private static final int ID_STATS = 3;
     private static final int ID_BACK = 4;
     private static final int ID_QUITMENU = 5;
 
     @Override
     public void onOpen() {
-        this.buttons.clear();
-        int x = this.width / 2 - 100;
-        int y = Math.max(56, (this.height - 140) / 2);
+        buttons.clear();
+        int x = width / 2 - 100;
+        int y = menuTop();
+        buttons.add(new Button(ID_BACK, x, y, "Back to Game"));
+        buttons.add(new Button(ID_MARKETPLACE, x, y + 24, 98, 20, "Marketplace"));
+        buttons.add(new Button(ID_STATS, x + 102, y + 24, 98, 20, "Statistics"));
+        buttons.add(new Button(ID_OPTIONS, x, y + 48, 98, 20, "Options..."));
+        Button worlds = new Button(ID_SELECTLEVEL, x + 102, y + 48, 98, 20, "Select World...");
+        worlds.active = !minecraft.isOnline();
+        buttons.add(worlds);
+        buttons.add(
+                new Button(
+                        ID_QUITMENU,
+                        x,
+                        y + 72,
+                        worlds.active ? "Save and Quit to Title" : "Disconnect"));
+    }
 
-        this.buttons.add(new Button(ID_OPTIONS, x, y + 0, "Options..."));
-        this.buttons.add(new Button(ID_SELECTLEVEL, x, y + 24, "Select Level..."));
-        this.buttons.add(new Button(ID_MARKETPLACE, x, y + 48, "Marketplace (Parody)")); // NEW
-        this.buttons.add(new Button(ID_STATS, x, y + 72, "Statistics"));
-        this.buttons.add(new Button(ID_QUITMENU, x, y + 96, "Quit to Main Menu"));
-        this.buttons.add(new Button(ID_BACK, x, y + 120, "Back to game"));
-
-        // Disable Select Level in multiplayer
-        if (this.minecraft.networkManager != null) {
-            ((Button) this.buttons.get(1)).active = false; // Select Level...
-        }
+    private int menuTop() {
+        return Math.max(30, height / 2 - 40);
     }
 
     @Override
@@ -91,7 +93,7 @@ public final class PauseScreen extends GuiScreen {
     @Override
     public void render(int mx, int my) {
         drawFadingBox(0, 0, this.width, this.height, 0x60000000, 0xA0000000);
-        drawCenteredString(this.fontRenderer, "Game menu", this.width / 2, 40, 0xFFFFFF);
+        drawCenteredString(fontRenderer, "Game Menu", width / 2, menuTop() - 24, 0xFFFFFF);
         super.render(mx, my);
     }
 }

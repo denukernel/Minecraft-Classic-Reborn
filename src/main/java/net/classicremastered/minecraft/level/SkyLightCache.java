@@ -41,19 +41,28 @@ final class SkyLightCache {
         boolean[] opaque = new boolean[COUNT];
         int[] queue = new int[COUNT];
         int tail = 0;
+        int minY = Math.max(0, oy);
+        int maxY = Math.min(level.depth - 1, oy + SIDE - 1);
         for (int z = 0; z < SIDE; z++)
             for (int x = 0; x < SIDE; x++) {
-                // Unlike a bounded upward ray, this detects roofs at any world height.
                 boolean sky = true;
                 int waterDepth = 0;
-                for (int y = level.depth - 1; y >= Math.max(0, oy); y--) {
+                // Above the tile, the first opaque roof settles direct light for the column.
+                for (int y = level.depth - 1; y > maxY && maxY >= minY; y--) {
+                    int id = level.getTile(ox + x, y, oz + z);
+                    if (id == Block.WATER.id || id == Block.STATIONARY_WATER.id) waterDepth++;
+                    else if (id > 0 && Block.blocks[id] != null && Block.blocks[id].isOpaque()) {
+                        sky = false;
+                        break;
+                    }
+                }
+                for (int y = maxY; y >= minY; y--) {
                     int id = level.getTile(ox + x, y, oz + z);
                     boolean blocked =
                             id > 0 && Block.blocks[id] != null && Block.blocks[id].isOpaque();
                     if (id == Block.WATER.id || id == Block.STATIONARY_WATER.id) waterDepth++;
                     else if (blocked) sky = false;
                     int dy = y - oy;
-                    if (dy >= SIDE) continue;
                     int i = (dy * SIDE + z) * SIDE + x;
                     opaque[i] = blocked;
                     if (sky && waterDepth == 0) {

@@ -8,11 +8,11 @@ import net.classicremastered.minecraft.level.tile.Block;
 public final class Mineshaft {
     private Mineshaft() {}
 
-    public static void decorate(SimpleChunk chunk, long seed) {
+    public static void decorate(SimpleChunk chunk, long seed, int verticalOffset) {
         Random random = siteRandom(seed, chunk.cx, chunk.cz);
         if (random.nextInt(10) != 0) return;
-        int top = Math.min(28, chunk.height - 8);
-        for (int y = top; y >= 9; y--) {
+        int top = Math.min(28 + verticalOffset, chunk.height - 8);
+        for (int y = top; y >= 9 + verticalOffset; y--) {
             if (tryBuild(chunk, y, 3, 1) || tryBuild(chunk, y, 12, -1)) return;
         }
     }
@@ -54,13 +54,14 @@ public final class Mineshaft {
         return true;
     }
 
-    public static void decorateFinite(byte[] blocks, int width, int length, int height, long seed) {
+    public static void decorateFinite(
+            byte[] blocks, int width, int length, int height, long seed, int verticalOffset) {
         for (int cz = 0; cz < length / 16; cz++) {
             for (int cx = 0; cx < width / 16; cx++) {
                 if (siteRandom(seed, cx, cz).nextInt(10) != 0) continue;
                 SimpleChunk chunk = new SimpleChunk(cx, cz, height);
                 copyRows(blocks, width, length, chunk, false);
-                decorate(chunk, seed);
+                decorate(chunk, seed, verticalOffset);
                 copyRows(blocks, width, length, chunk, true);
             }
         }
@@ -84,6 +85,7 @@ public final class Mineshaft {
 
     private static boolean rock(int id) {
         return id == Block.STONE.id
+                || id == Block.SANDSTONE.id
                 || id == Block.COAL_ORE.id
                 || id == Block.IRON_ORE.id
                 || id == Block.GOLD_ORE.id

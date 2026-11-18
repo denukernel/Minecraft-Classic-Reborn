@@ -145,8 +145,7 @@ abstract class CraftingContainerScreen extends GuiScreen {
                 drawBox(sx - 1, sy - 1, sx + 17, sy + 17, 0xFF494949);
                 drawBox(sx, sy, sx + 16, sy + 16, 0xFF909090);
                 drawRecipeItem(recipe.resultId, recipe.resultCount, sx, sy);
-                if (!craftableOnly
-                        && !hasIngredients(recipe, ingredientSlots(recipe, ids, counts))) {
+                if (!craftableOnly && !ingredientPlan(recipe, ids, counts).missing().isEmpty()) {
                     drawString(fontRenderer, "X", sx + 1, sy + 1, 0xFF6565);
                 }
             }
@@ -183,7 +182,7 @@ abstract class CraftingContainerScreen extends GuiScreen {
             int gridX, int gridY, int gridSize, int[] ids, int[] counts, int mx, int my) {
         Recipe recipe = requirementPreview;
         if (recipe == null) return;
-        int[] slots = ingredientSlots(recipe, ids, counts);
+        IngredientPlan plan = ingredientPlan(recipe, ids, counts);
         boolean emptyGrid = true;
         for (int id : ids) {
             if (id > 0) {
@@ -200,24 +199,20 @@ abstract class CraftingContainerScreen extends GuiScreen {
                 if (ingredient <= 0) continue;
                 int col = i % recipe.width, row = i / recipe.width;
                 int x = gridX + col * CELL, y = gridY + row * CELL;
-                drawBox(x, y, x + 16, y + 16, slots[i] < 0 ? 0xFFB78181 : 0xFFAAAAAA);
-                drawRecipeItem(ingredient, 1, x, y);
+                drawBox(
+                        x,
+                        y,
+                        x + 16,
+                        y + 16,
+                        plan.missing().containsKey(ingredient) ? 0xFFB78181 : 0xFFAAAAAA);
+                drawRecipeItem(ingredient, recipe.ingredientCount(i), x, y);
                 if (inside(mx, my, x, y, 16, 16)) hovered = ingredient;
             }
-            drawMissingIngredients(gridSize, missingIngredients(recipe, slots));
+            drawMissingIngredients(gridSize, plan.missing());
             if (hovered > 0) ItemTooltip.draw(this, hovered, null, mx, my);
         } finally {
             GL11.glPopAttrib();
         }
-    }
-
-    private static Map<Integer, Integer> missingIngredients(Recipe recipe, int[] slots) {
-        Map<Integer, Integer> missing = new LinkedHashMap<>();
-        for (int i = 0; i < slots.length; i++) {
-            int ingredient = recipe.ingredients[i];
-            if (ingredient > 0 && slots[i] < 0) missing.merge(ingredient, 1, Integer::sum);
-        }
-        return missing;
     }
 
     private void drawMissingIngredients(int gridSize, Map<Integer, Integer> missing) {
@@ -301,7 +296,7 @@ abstract class CraftingContainerScreen extends GuiScreen {
             if (recipe.width <= gridSize
                     && recipe.height <= gridSize
                     && (!craftableOnly
-                            || hasIngredients(recipe, ingredientSlots(recipe, ids, counts)))) {
+                            || ingredientPlan(recipe, ids, counts).missing().isEmpty())) {
                 result.add(recipe);
             }
         }
@@ -309,72 +304,66 @@ abstract class CraftingContainerScreen extends GuiScreen {
         return result;
     }
 
-    private int[] ingredientSlots(Recipe recipe, int[] ids, int[] counts) {
+    private record IngredientPlan(int[] used, int[] ingredientIds, Map<Integer, Integer> missing) {}
+
+    private IngredientPlan ingredientPlan(Recipe recipe, int[] ids, int[] counts) {
         Inventory inventory = minecraft.player.inventory;
         int inventorySize = inventory.totalSize();
         int[] used = new int[inventorySize + ids.length];
-        int[] slots = new int[recipe.ingredients.length];
-        Arrays.fill(slots, -1);
-        for (int i = 0; i < slots.length; i++) {
+        int[] ingredientIds = new int[recipe.ingredients.length];
+        Map<Integer, Integer> missing = new LinkedHashMap<>();
+        for (int i = 0; i < ingredientIds.length; i++) {
             int ingredient = recipe.ingredients[i];
-            if (ingredient <= 0) continue;
-            for (int slot = 0; slot < used.length; slot++) {
+            int remaining = recipe.ingredientCount(i);
+            for (int slot = 0; remaining > 0 && slot < used.length; slot++) {
                 boolean inGrid = slot < ids.length;
                 int inventorySlot = slot - ids.length;
                 int count = inGrid ? counts[slot] : inventory.getCount(inventorySlot);
                 int raw = inGrid ? ids[slot] : inventory.getId(inventorySlot);
+                int canonicalId = Item.inventoryId(raw);
                 if (count > used[slot]
                         && (inGrid || inventory.crate(inventorySlot) == null)
-                        && OreMaterials.matches(ingredient, Item.inventoryId(raw))) {
-                    slots[i] = slot;
-                    used[slot]++;
-                    break;
+                        && OreMaterials.matches(ingredient, canonicalId)
+                        && (ingredientIds[i] == 0 || ingredientIds[i] == canonicalId)) {
+                    int take = Math.min(remaining, count - used[slot]);
+                    ingredientIds[i] = canonicalId;
+                    used[slot] += take;
+                    remaining -= take;
                 }
             }
+            if (remaining > 0) missing.merge(ingredient, remaining, Integer::sum);
         }
-        return slots;
-    }
-
-    private static boolean hasIngredients(Recipe recipe, int[] slots) {
-        for (int i = 0; i < slots.length; i++) {
-            if (recipe.ingredients[i] > 0 && slots[i] < 0) return false;
-        }
-        return true;
+        return new IngredientPlan(used, ingredientIds, missing);
     }
 
     private boolean fillGrid(Recipe recipe, int gridSize, int[] ids, int[] counts) {
-        if (recipe.matches(ids, gridSize)) return true;
-        int[] slots = ingredientSlots(recipe, ids, counts);
-        if (!hasIngredients(recipe, slots)) return false;
+        if (recipe.matches(ids, counts, gridSize)) return true;
+        IngredientPlan plan = ingredientPlan(recipe, ids, counts);
+        if (!plan.missing().isEmpty()) return false;
 
         Inventory inventory = minecraft.player.inventory;
         Inventory staged = new Inventory();
         staged.resizeGrid(inventory.totalSize() - Inventory.HOTBAR_SIZE);
         for (int slot = 0; slot < inventory.totalSize(); slot++) {
-            staged.setLoadedStack(slot, inventory.getId(slot), inventory.getCount(slot));
+            staged.setLoadedStack(
+                    slot,
+                    inventory.getId(slot),
+                    inventory.getCount(slot) - plan.used()[ids.length + slot]);
         }
 
-        int[] gridRemainder = counts.clone();
         int[] nextIds = new int[ids.length];
+        int[] nextCounts = new int[ids.length];
         Arrays.fill(nextIds, -1);
-        for (int i = 0; i < slots.length; i++) {
-            int slot = slots[i];
-            if (slot < 0) continue;
+        for (int i = 0; i < recipe.ingredients.length; i++) {
+            if (recipe.ingredientCount(i) == 0) continue;
             int target = i % recipe.width + i / recipe.width * gridSize;
-            if (slot < ids.length) {
-                nextIds[target] = ids[slot];
-                gridRemainder[slot]--;
-            } else {
-                int inventorySlot = slot - ids.length;
-                int id = staged.getId(inventorySlot);
-                nextIds[target] = id;
-                staged.setIdCount(inventorySlot, id, staged.getCount(inventorySlot) - 1);
-            }
+            nextIds[target] = plan.ingredientIds()[i];
+            nextCounts[target] = recipe.ingredientCount(i);
         }
 
         // Only commit after every leftover stack fits back into the inventory.
         for (int slot = 0; slot < ids.length; slot++) {
-            for (int count = 0; count < gridRemainder[slot]; count++) {
+            for (int count = plan.used()[slot]; count < counts[slot]; count++) {
                 if (!staged.addResource(ids[slot])) return false;
             }
         }
@@ -387,7 +376,7 @@ abstract class CraftingContainerScreen extends GuiScreen {
         }
         for (int slot = 0; slot < ids.length; slot++) {
             ids[slot] = nextIds[slot];
-            counts[slot] = nextIds[slot] > 0 ? 1 : 0;
+            counts[slot] = nextCounts[slot];
         }
         return true;
     }

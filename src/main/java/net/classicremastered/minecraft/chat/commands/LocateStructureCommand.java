@@ -152,10 +152,11 @@ public class LocateStructureCommand implements Command {
     private static void found(Minecraft mc, String name, int x, int y, int z) {
         if (mc.hud == null) return;
         Level world = mc.level;
+        int worldY = world.worldY(y);
         mc.hud.addChat(
                 "&a" + name + " at",
                 new net.classicremastered.minecraft.ChatLine.Action(
-                        "[" + x + " " + y + " " + z + "]",
+                        "[" + x + " " + worldY + " " + z + "]",
                         () -> {
                             if (mc.level != world) {
                                 hud(mc, "&cThis location belongs to a different world.");
@@ -167,7 +168,7 @@ public class LocateStructureCommand implements Command {
                                             mc.player,
                                             new String[] {
                                                 Integer.toString(x),
-                                                Integer.toString(y),
+                                                Integer.toString(worldY),
                                                 Integer.toString(z)
                                             });
                         }));

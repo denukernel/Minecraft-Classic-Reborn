@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.BoatEntity;
 import net.classicremastered.minecraft.entity.DroppedBlock;
@@ -18,7 +19,13 @@ import java.util.ArrayList;
 final class WorldStateNbtCodec {
     private WorldStateNbtCodec() {}
 
-    static void save(Level level, CompoundTag root) {
+    static int verticalOffset(CompoundTag root, int depth) {
+        int minY = root.getInt("MinY");
+        return minY <= 0 && minY > -depth ? -minY : 0;
+    }
+
+    static void save(Level level, CompoundTag root) throws IOException {
+        StickmansHouse.save(level, root);
         root.putInt("GameMode", level.spectatorMode ? 3 : level.creativeMode ? 1 : 0);
         level.saveBlockState(root);
         net.classicremastered.minecraft.level.structure.GeneratedHouse.save(level, root);
@@ -26,6 +33,8 @@ final class WorldStateNbtCodec {
         if (level.biomeSeed != null) root.putLong("BiomeSeed", level.biomeSeed);
         if (level.flatBiomes) root.putBoolean("FlatBiomes", true);
         if (level.oceanBiomes) root.putBoolean("OceanBiomes", true);
+        if (level.largeBiomes) root.putBoolean("LargeBiomes", true);
+        if (level.verticalOffset != 0) root.putInt("MinY", level.worldY(0));
         root.putBoolean("DoMobSpawning", level.doMobSpawning);
         root.putBoolean("DoMobLoot", level.doMobLoot);
         root.putBoolean("KeepInventory", level.keepInventory);
@@ -109,6 +118,7 @@ final class WorldStateNbtCodec {
 
     static void load(Level level, CompoundTag root, RidingLinks ridingLinks) throws IOException {
         net.classicremastered.minecraft.level.itemstack.ItemRegistry.bootstrap();
+        StickmansHouse.load(level, root);
         if (root.hasKey("GameMode")) {
             int mode = root.getInt("GameMode");
             level.spectatorMode = mode == 3;
@@ -119,6 +129,8 @@ final class WorldStateNbtCodec {
         if (root.hasKey("BiomeSeed")) level.biomeSeed = root.getLong("BiomeSeed");
         level.flatBiomes = root.getBoolean("FlatBiomes");
         level.oceanBiomes = root.getBoolean("OceanBiomes");
+        level.largeBiomes = root.getBoolean("LargeBiomes");
+        level.verticalOffset = verticalOffset(root, level.depth);
         level.redstone().load(root);
         level.doMobSpawning = !root.hasKey("DoMobSpawning") || root.getBoolean("DoMobSpawning");
         level.doMobLoot = !root.hasKey("DoMobLoot") || root.getBoolean("DoMobLoot");

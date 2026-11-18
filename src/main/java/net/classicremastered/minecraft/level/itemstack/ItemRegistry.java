@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.mob.MobRegistry;
 
 public final class ItemRegistry {
 
+    private static final int SPAWN_EGG_BASE_ID = 100;
     private static boolean bootstrapped = false;
 
     private ItemRegistry() {}
@@ -53,7 +54,9 @@ public final class ItemRegistry {
         Item.PUFFERFISH = new RawMeatItem(238, "Pufferfish", "/items/pufferfish.png", 1);
         Item.RAW_MUTTON = new RawMeatItem(239, "Raw Mutton", "/items/mutton.png", 2);
         Item.RAW_CHICKEN = new RawMeatItem(240, "Raw Chicken", "/items/chicken.png", 2);
+        Item.EGG = new EggItem(241);
         new BoatItem();
+        new DarkStickItem();
 
         Equipment.register();
         TurretItems.register();
@@ -71,7 +74,6 @@ public final class ItemRegistry {
         for (MobWandItem.Power power : MobWandItem.Power.values())
             new MobWandItem(80 + power.ordinal(), power);
         // --- Spawn eggs ---
-        int eggBaseId = 100; // free range, safe above your tools/items
         for (String name : MobRegistry.allNames()) {
             short mobId = MobRegistry.idOfName(name);
             if (mobId < 0
@@ -79,8 +81,18 @@ public final class ItemRegistry {
                 continue; // invalid entry
 
             // Create spawn egg item
-            ItemSpawnEgg egg = new ItemSpawnEgg(eggBaseId + mobId, mobId, name);
+            ItemSpawnEgg egg = new ItemSpawnEgg(SPAWN_EGG_BASE_ID + mobId, mobId, name);
             Item.items[egg.id] = egg;
         }
+    }
+
+    public static int spawnEggInventoryId(String mobName) {
+        int mobId = MobRegistry.idOfName(mobName);
+        int itemId = SPAWN_EGG_BASE_ID + mobId;
+        if (mobId < 0
+                || itemId >= Item.items.length
+                || !(Item.items[itemId] instanceof ItemSpawnEgg))
+            throw new IllegalArgumentException("No spawn egg for " + mobName);
+        return itemId + 256;
     }
 }

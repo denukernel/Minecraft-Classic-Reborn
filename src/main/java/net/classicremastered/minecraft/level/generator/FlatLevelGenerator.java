@@ -9,10 +9,10 @@ public final class FlatLevelGenerator {
 
     /** 0=Small, 1=Normal, 2=Huge */
     public static Level makeFlatLevel(int sizeId) {
-        final int h = 64;
+        final int h = Level.OVERWORLD_HEIGHT;
         final int w = (sizeId == 0) ? 64 : (sizeId == 1) ? 128 : 256;
         final int d = w;
-        final int groundY = 8;
+        final int groundY = Level.OVERWORLD_Y_OFFSET + 8;
 
         final int AIR   = 0;
         final int STONE = Block.STONE.id;
@@ -26,16 +26,19 @@ public final class FlatLevelGenerator {
             for (int z = 0; z < d; z++) {
                 for (int y = 0; y < h; y++) {
                     int id = AIR;
-                    if (y < groundY - 2)        id = STONE;
-                    else if (y == groundY - 2)  id = DIRT;
-                    else if (y == groundY - 1)  id = DIRT;
-                    else if (y == groundY)      id = GRASS;
+                    if (y == 0) id = Block.BEDROCK.id;
+                    else if (y < groundY - 2) id = STONE;
+                    else if (y == groundY - 2) id = DIRT;
+                    else if (y == groundY - 1) id = DIRT;
+                    else if (y == groundY) id = GRASS;
                     blocks[((y * d) + z) * w + x] = (byte) id;
                 }
             }
         }
 
         Level lvl = new Level();            // no ctor args needed
+        lvl.verticalOffset = Level.OVERWORLD_Y_OFFSET;
+        lvl.waterLevel = Level.OVERWORLD_Y_OFFSET + 32;
         lvl.setData(w, h, d, blocks);       // resets blockMap/chunks/water/etc.
         // set spawn ~center
         lvl.xSpawn = w / 2;

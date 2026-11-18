@@ -155,7 +155,7 @@ public class SpawnMobCommand implements Command, AliasedCommand {
             boolean explicitPosition = args.length - index >= 3;
             if (explicitPosition) {
                 x = parseCoord(args[index++], x);
-                y = parseCoord(args[index++], y);
+                y = (float) mc.level.storageY(parseCoord(args[index++], mc.level.worldY(y)));
                 z = parseCoord(args[index++], z);
             }
             if (args.length - index > 1)

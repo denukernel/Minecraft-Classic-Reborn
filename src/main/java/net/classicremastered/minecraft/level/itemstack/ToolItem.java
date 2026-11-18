@@ -45,6 +45,10 @@ public class ToolItem extends Item {
         return kind;
     }
 
+    public final boolean isDiamondPickaxe() {
+        return kind == Kind.PICKAXE && material == Material.DIAMOND;
+    }
+
     public final float attackDamage() {
         if (kind != Kind.PICKAXE && kind != Kind.SHOVEL) return 0;
         int bonus =

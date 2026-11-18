@@ -1,12 +1,11 @@
 package net.classicremastered.minecraft.mob.ai.stickfigure;
 
-import java.util.ArrayList;
-import java.util.List;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
-import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.LiquidBlock;
+import net.classicremastered.minecraft.mob.MobHazards;
 import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.path.Pathfinder;
@@ -14,14 +13,14 @@ import net.classicremastered.minecraft.path.ShoreNavigator;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
-/**
- * Boss pursuit uses supported shortcuts, checked jump arcs, and controlled
- * buoyancy.
- */
+import java.util.ArrayList;
+import java.util.List;
+
+/** Boss pursuit uses supported shortcuts, checked jump arcs, and controlled buoyancy. */
 public final class StickFigureMovement {
 
     private int leapTicks, leapAge, leapCooldown, scanCooldown, lastTick = -1, shoreRepath;
-    private float leapX, leapZ;
+    private boolean escapingPit;
     private List<Vec3D> leapPath = List.of();
     private List<ShoreNavigator.Step> shorePath = List.of();
     private Entity shoreTarget, chaseTarget;
@@ -67,12 +66,45 @@ public final class StickFigureMovement {
 
     public void cancel() {
         leapTicks = leapAge = 0;
+        escapingPit = false;
         leapPath = List.of();
         shorePath = List.of();
         shoreTarget = null;
         shoreRepath = 0;
         bankExit = null;
         blockedExit = null;
+    }
+
+    public boolean recoverArenaFloor(StickFigureAI ai, StickFigure boss) {
+        if (!boss.level.isStickmansHouse()) return false;
+        if (escapingPit && advanceLeap(ai, boss)) return true;
+        float floor = StickmansHouse.BOSS_FLOOR_FEET;
+        if (boss.bb.y0 >= floor - .05f || !boss.onGround || scanCooldown > 0) return false;
+        scanCooldown = 8;
+        int bx = (int) Math.floor(boss.x), bz = (int) Math.floor(boss.z);
+        List<Vec3D> best = null;
+        double nearest = Double.POSITIVE_INFINITY;
+        for (int dx = -3; dx <= 3; dx++) {
+            for (int dz = -3; dz <= 3; dz++) {
+                float x = bx + dx + .5f, z = bz + dz + .5f;
+                double distance = Math.hypot(x - boss.x, z - boss.z);
+                if (distance >= nearest
+                        || !StickmansHouse.isBossRoomInterior(x, z)
+                        || !landingClear(boss, x, floor, z)) continue;
+                List<Vec3D> path = plan(boss, x, floor, z, true);
+                if (path == null) continue;
+                best = path;
+                nearest = distance;
+            }
+        }
+        if (best == null) return false;
+        cancel();
+        ai.powers.cancel(boss);
+        ai.clearNavigation();
+        boss.dodgeTicks = 0;
+        escapingPit = true;
+        startLeap(ai, boss, best);
+        return true;
     }
 
     public boolean chase(StickFigureAI ai, StickFigure boss, Entity target) {
@@ -113,31 +145,29 @@ public final class StickFigureMovement {
             bankExit = null;
             shoreRepath = 0;
         }
-        if (leapTicks > 0) {
-            if ((leapAge > 1 && (boss.onGround || boss.horizontalCollision)) || --leapTicks <= 0) {
-                boss.fallDistance = 0;
-                cancel();
-            } else {
-                leapAge++;
-                ai.xxa = ai.yya = ai.yRotA = 0;
-                ai.jumping = false;
-                if (leapAge < leapPath.size()) {
-                    boss.xd = leapX;
-                    boss.zd = leapZ;
-                } else {
-                    boss.xd = boss.zd = 0;
-                }
-                boss.fallDistance = 0;
-                face(boss, leapX, leapZ, 24);
-                return true;
-            }
-        }
+        if (advanceLeap(ai, boss)) return true;
         if (inWater) return swim(ai, boss, target, targetInWater);
         if (target == null) return false;
         if (targetInWater) {
             float goalFeet = targetAboveWater ? waterBelowTarget + .5f : target.bb.y0;
             ai.navigateToWater(target.x, goalFeet, target.z, ai.runSpeed);
             return true;
+        }
+        var support = StickFigurePowers.findSupport(boss, target);
+        if (support != null) {
+            float dx = boss.x - (support.x() + .5f), dz = boss.z - (support.z() + .5f);
+            float distance = (float) Math.hypot(dx, dz);
+            if (distance > 2.5f) {
+                float x = support.x() + .5f + dx * 2 / distance;
+                float z = support.z() + .5f + dz * 2 / distance;
+                if (Pathfinder.canWalkStraight(boss.level, boss, x, boss.bb.y0, z)) {
+                    ai.clearNavigation();
+                    steer(ai, boss, x, z, 1f);
+                    return true;
+                }
+                ai.navigateToWater(x, support.bottom(), z, ai.runSpeed);
+                return false;
+            }
         }
         float distance = (float) Math.hypot(target.x - boss.x, target.z - boss.z);
         float lead = Math.min(6, distance / .5f);
@@ -279,8 +309,7 @@ public final class StickFigureMovement {
     }
 
     private static float face(StickFigure boss, float dx, float dz, float limit) {
-        if (dx * dx + dz * dz < .0001f)
-            return 0;
+        if (dx * dx + dz * dz < .0001f) return 0;
         float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90;
         float turn = (float) Math.IEEEremainder(yaw - boss.yRot, 360);
         boss.yRot += Math.max(-limit, Math.min(limit, turn));
@@ -291,19 +320,18 @@ public final class StickFigureMovement {
         double heading = Math.atan2(tz - boss.z, tx - boss.x);
         float best = score(boss.x, boss.bb.y0, boss.z, tx, ty, tz) - 1;
         float[] destination = null;
-        for (int angle : new int[]{0, -30, 30, -60, 60}) {
+        for (int angle : new int[] {0, -30, 30, -60, 60}) {
             double direction = heading + Math.toRadians(angle);
-            for (int distance : new int[]{3, 5, 7}) {
+            for (int distance : new int[] {3, 5, 7}) {
                 float x = (float) Math.floor(boss.x + Math.cos(direction) * distance) + .5f;
                 float z = (float) Math.floor(boss.z + Math.sin(direction) * distance) + .5f;
                 for (int rise = 4; rise >= -2; rise--) {
                     float feet = (float) Math.floor(boss.bb.y0) + rise;
                     float value = score(x, feet, z, tx, ty, tz) + distance * .15f;
-                    if (value >= best || !landingClear(boss, x, feet, z))
-                        continue;
+                    if (value >= best || !landingClear(boss, x, feet, z)) continue;
                     if (plan(boss, x, feet, z) != null) {
                         best = value;
-                        destination = new float[]{x, feet, z};
+                        destination = new float[] {x, feet, z};
                     }
                 }
             }
@@ -317,26 +345,42 @@ public final class StickFigureMovement {
     }
 
     private boolean launch(StickFigureAI ai, StickFigure boss, float x, float feet, float z) {
-        if (!landingClear(boss, x, feet, z))
-            return false;
+        if (!landingClear(boss, x, feet, z)) return false;
         List<Vec3D> path = plan(boss, x, feet, z);
-        if (path == null)
-            return false;
+        if (path == null) return false;
+        startLeap(ai, boss, path);
+        return true;
+    }
+
+    private void startLeap(StickFigureAI ai, StickFigure boss, List<Vec3D> path) {
         leapPath = path;
-        int duration = path.size() - 1;
-        leapX = (x - boss.x) / duration;
-        leapZ = (z - boss.z) / duration;
         boss.yd = path.get(1).y - boss.bb.y0;
-        boss.xd = leapX;
-        boss.zd = leapZ;
-        boss.fallDistance = 0;
         leapAge = 1;
-        leapTicks = duration + 5;
+        leapTicks = path.size() + 4;
         leapCooldown = 35;
+        steerLeap(ai, boss);
+    }
+
+    private boolean advanceLeap(StickFigureAI ai, StickFigure boss) {
+        if (leapTicks <= 0) return false;
+        if ((leapAge > 1 && (boss.onGround || boss.horizontalCollision)) || --leapTicks <= 0) {
+            boss.fallDistance = 0;
+            cancel();
+            return false;
+        }
+        leapAge++;
+        steerLeap(ai, boss);
+        return true;
+    }
+
+    private void steerLeap(StickFigureAI ai, StickFigure boss) {
+        Vec3D next = leapPath.get(Math.min(leapAge, leapPath.size() - 1));
+        boss.xd = next.x - boss.x;
+        boss.zd = next.z - boss.z;
+        boss.fallDistance = 0;
         ai.xxa = ai.yya = ai.yRotA = 0;
         ai.jumping = false;
-        face(boss, leapX, leapZ, 180);
-        return true;
+        face(boss, boss.xd, boss.zd, leapAge == 1 ? 180 : 24);
     }
 
     private static AABB body(StickFigure boss, float x, float feet, float z) {
@@ -347,35 +391,27 @@ public final class StickFigureMovement {
 
     private static boolean clear(Level level, AABB box) {
         if (!level.isInBounds(
-                (int) Math.floor(box.x0),
-                (int) Math.floor(box.y0),
-                (int) Math.floor(box.z0))
+                        (int) Math.floor(box.x0),
+                        (int) Math.floor(box.y0),
+                        (int) Math.floor(box.z0))
                 || !level.isInBounds(
                         (int) Math.floor(box.x1),
                         (int) Math.floor(box.y1),
                         (int) Math.floor(box.z1))
                 || !level.getCubes(box).isEmpty()
-                || level.containsLiquid(box, LiquidType.LAVA))
-            return false;
-        for (int x = (int) Math.floor(box.x0); x <= (int) Math.floor(box.x1); x++)
-            for (int y = (int) Math.floor(box.y0); y <= (int) Math.floor(box.y1); y++)
-                for (int z = (int) Math.floor(box.z0); z <= (int) Math.floor(box.z1); z++) {
-                    int tile = level.getTile(x, y, z);
-                    if (tile == Block.FIRE.id || tile == Block.CACTUS.id)
-                        return false;
-                }
-        return true;
+                || level.containsLiquid(box, LiquidType.LAVA)) return false;
+        return !MobHazards.near(level, box, null);
     }
 
     private static boolean landingClear(StickFigure boss, float x, float feet, float z) {
+        if (boss.level.isStickmansHouse()
+                && (feet < StickmansHouse.BOSS_FLOOR_FEET - .01f
+                        || !StickmansHouse.isBossRoomInterior(x, z))) return false;
         AABB box = body(boss, x, feet, z);
         box.y1 = feet + StickFigure.STANDING_HEIGHT - .002f;
-        int support = boss.level.getTile(
-                (int) Math.floor(x), (int) Math.floor(feet - .01f), (int) Math.floor(z));
         return clear(boss.level, box)
-                && support != Block.CACTUS.id
-                && support != Block.FIRE.id
-                && !boss.level.isWater((int) Math.floor(x), (int) Math.floor(feet - .01f), (int) Math.floor(z))
+                && !boss.level.isWater(
+                        (int) Math.floor(x), (int) Math.floor(feet - .01f), (int) Math.floor(z))
                 && !boss.level
                         .getCubes(
                                 new AABB(x - .15f, feet - .08f, z - .15f, x + .15f, feet, z + .15f))
@@ -383,21 +419,43 @@ public final class StickFigureMovement {
     }
 
     private static List<Vec3D> plan(StickFigure boss, float x, float feet, float z) {
+        return plan(boss, x, feet, z, false);
+    }
+
+    private static List<Vec3D> plan(StickFigure boss, float x, float feet, float z, boolean pit) {
         float distance = (float) Math.hypot(x - boss.x, z - boss.z);
-        if (distance < .5f || distance > 8 || feet - boss.bb.y0 > 4.1f) return null;
+        if (distance < .5f || distance > 8 || !pit && feet - boss.bb.y0 > 4.1f) return null;
         boolean leavingWater = boss.isInWater();
-        for (int duration : new int[] {16, 20, 24}) {
+        for (int duration :
+                pit ? new int[] {18, 22, 26, 30, 34, 38, 42, 46} : new int[] {16, 20, 24}) {
             if (distance / duration > .5f) continue;
-            float low = .15f, high = 1.15f;
+            float low = .15f, high = pit ? 2.3f : 1.15f;
             for (int i = 0; i < 16; i++) {
                 float speed = (low + high) * .5f;
-                List<Vec3D> arc = arc(boss, x, z, duration, speed);
+                List<Vec3D> arc = arc(boss, pit ? boss.x : x, pit ? boss.z : z, duration, speed);
                 if (arc.get(duration).y < feet + .02f) low = speed;
                 else high = speed;
             }
-            List<Vec3D> arc = arc(boss, x, z, duration, (low + high) * .5f);
+            List<Vec3D> arc =
+                    arc(boss, pit ? boss.x : x, pit ? boss.z : z, duration, (low + high) * .5f);
             if (Math.abs(arc.get(duration).y - feet) > .06f
                     || arc.get(duration - 1).y <= arc.get(duration).y) continue;
+            if (pit) {
+                // Rise above the rim before moving sideways through the opening.
+                int aboveRim = 1;
+                while (aboveRim < duration && arc.get(aboveRim).y < feet + .1f) aboveRim++;
+                int travelTicks = duration - aboveRim;
+                if (travelTicks < 1 || distance / travelTicks > .55f) continue;
+                for (int i = aboveRim + 1; i <= duration; i++) {
+                    float progress = (i - aboveRim) / (float) travelTicks;
+                    arc.set(
+                            i,
+                            new Vec3D(
+                                    boss.x + (x - boss.x) * progress,
+                                    arc.get(i).y,
+                                    boss.z + (z - boss.z) * progress));
+                }
+            }
             boolean valid = true;
             for (int i = 1; i < arc.size() && valid; i++) {
                 Vec3D from = arc.get(i - 1), to = arc.get(i);
@@ -429,9 +487,10 @@ public final class StickFigureMovement {
         path.add(new Vec3D(boss.x, feet, boss.z));
         for (int i = 1; i <= duration; i++) {
             Vec3D previous = path.get(i - 1);
-            boolean water = boss.level.containsLiquid(
-                    body(boss, previous.x, feet, previous.z).grow(0, -.4f, 0),
-                    LiquidType.WATER);
+            boolean water =
+                    boss.level.containsLiquid(
+                            body(boss, previous.x, feet, previous.z).grow(0, -.4f, 0),
+                            LiquidType.WATER);
             feet += velocity;
             velocity = water ? velocity * .8f - .02f : velocity * .98f - .08f;
             path.add(

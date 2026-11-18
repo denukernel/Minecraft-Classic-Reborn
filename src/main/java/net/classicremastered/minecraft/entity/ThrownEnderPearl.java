@@ -273,9 +273,7 @@ public class ThrownEnderPearl extends Entity {
         }
 
         moveOwner(player, lastSafeLanding);
-        if (!level.creativeMode) {
-            player.hurt(null, 5);
-        }
+        if (player.yd < 0) player.yd = 0;
     }
 
     private void moveOwner(Mob mob, Vec3D feet) {

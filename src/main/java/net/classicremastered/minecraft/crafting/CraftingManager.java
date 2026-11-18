@@ -1,8 +1,10 @@
 package net.classicremastered.minecraft.crafting;
 
 import net.classicremastered.minecraft.level.itemstack.BoatItem;
+import net.classicremastered.minecraft.level.itemstack.DarkStickItem;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.level.itemstack.OreMaterials;
 import net.classicremastered.minecraft.level.itemstack.StructureLocatorItem.Filter;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
@@ -25,7 +27,7 @@ public class CraftingManager {
 
     private CraftingManager() {
         System.out.println("Initializing CraftingManager...");
-        net.classicremastered.minecraft.level.itemstack.ItemRegistry.bootstrap();
+        ItemRegistry.bootstrap();
 
         addRecipe(new ItemStack(Block.SNOW_BLOCK.id, 1), "ss", "ss", 's', Item.SNOWBALL.id + 256);
 
@@ -308,6 +310,14 @@ public class CraftingManager {
                 's',
                 stick);
         addRecipe(new ItemStack(stick, 4), "#", "#", '#', Block.WOOD.id);
+        recipes.add(
+                new Recipe(
+                        2,
+                        1,
+                        new int[] {Item.COAL_ID + 256, stick},
+                        new int[] {64, 1},
+                        DarkStickItem.ID + 256,
+                        1));
         int[] materials = {
             Block.WOOD.id,
             Block.COBBLESTONE.id,
@@ -442,6 +452,8 @@ public class CraftingManager {
         addStairs(Block.COBBLESTONE_STAIRS, Block.COBBLESTONE);
         addStairs(Block.STONE_BRICK_STAIRS, Block.STONE_BRICKS);
 
+        addSpawnEggRecipes();
+
         // Sort recipes by size (largest first) to prioritize complex recipes
         Collections.sort(
                 recipes,
@@ -455,6 +467,71 @@ public class CraftingManager {
 
     private void addStairs(Block stairs, Block material) {
         addRecipe(new ItemStack(stairs.id, 4), "s  ", "ss ", "sss", 's', material.id);
+    }
+
+    private void addSpawnEggRecipes() {
+        int egg = Item.EGG.id + 256;
+        addSpawnEgg("Chicken", egg, Item.FEATHER.id + 256);
+        addSpawnEgg("Pig", egg, Item.RAW_PORKCHOP.id + 256);
+        addSpawnEgg("Cow", egg, Item.RAW_BEEF.id + 256);
+        addSpawnEgg("Sheep", egg, Item.RAW_MUTTON.id + 256);
+        addSpawnEgg("Cod", egg, Item.RAW_COD.id + 256);
+        addSpawnEgg("Salmon", egg, Item.RAW_SALMON.id + 256);
+        addSpawnEgg("TropicalFish", egg, Item.TROPICAL_FISH.id + 256);
+        addSpawnEgg("Pufferfish", egg, Item.PUFFERFISH.id + 256);
+        addSpawnEgg("Bee", egg, Block.DANDELION.id);
+        addSpawnEgg("IronGolem", egg, Block.IRON_BLOCK.id);
+        addSpawnEgg("Villager", egg, Block.BOOKSHELF.id);
+        addSpawnEgg("Defender", egg, Item.SWORD.id + 256);
+        addSpawnEgg("Spider", egg, Equipment.STRING.id + 256);
+        addSpawnEgg("Zombie", egg, Block.MOSSY_COBBLESTONE.id);
+        addSpawnEgg("Skeleton", egg, Equipment.ARROW.id + 256);
+        addSpawnEgg("Creeper", egg, Block.TNT.id);
+        addSpawnEgg("Enderman", egg, Item.ENDER_PEARL.id + 256);
+        addSpawnEgg("Rana", egg, Block.LIME_WOOL.id);
+        addSpawnEgg("SignMob", egg, Item.OAK_SIGN.id + 256);
+        addSpawnEgg("LeggedMonster", egg, Block.GRAY_WOOL.id);
+        addSpawnEgg("LongNeckMan", egg, Block.BLACK_WOOL.id);
+        addSpawnEgg("PlayerClone", egg, Block.CYAN_WOOL.id);
+        addSpawnEgg("BlueForestGolem", egg, Block.BLUE_TERRACOTTA.id);
+        addSpawnEgg("Ironmock", egg, OreMaterials.RAW_IRON + 256);
+        addSpawnEgg("HouseVandalizer", egg, Block.BRICK.id);
+        addSpawnEgg("StickFigure", egg, Equipment.STICK.id + 256);
+        addSpawnEgg("ShulkerMan", egg, Block.PURPLE_WOOL.id);
+
+        int zombie = ItemRegistry.spawnEggInventoryId("Zombie");
+        addSpawnEgg("Husk", zombie, Block.SAND.id);
+        addSpawnEgg("Frostbite", zombie, Block.SNOW_BLOCK.id);
+        addSpawnEgg("TNTThrower", zombie, Block.TNT.id);
+        addSpawnEgg("ZombieBuilder", zombie, Block.WOOD.id);
+        addSpawnEgg("ScaryMindZombie", zombie, Block.OBSIDIAN.id);
+
+        int coal = Item.COAL_ID + 256;
+        addSpawnEgg("ZombieIgniter", zombie, coal);
+        addSpawnEgg("HuskIgniter", ItemRegistry.spawnEggInventoryId("Husk"), coal);
+        addSpawnEgg("FrostbiteIgniter", ItemRegistry.spawnEggInventoryId("Frostbite"), coal);
+        addSpawnEgg("SkeletonTrap", ItemRegistry.spawnEggInventoryId("Skeleton"), Block.GRAVEL.id);
+        addSpawnEggAgeVariants("Zombie", true);
+        addSpawnEggAgeVariants("Skeleton", true);
+        addSpawnEggAgeVariants("Husk", true);
+        addSpawnEggAgeVariants("Frostbite", true);
+        addSpawnEggAgeVariants("Villager", false);
+    }
+
+    private void addSpawnEggAgeVariants(String mob, boolean hasTeen) {
+        int parentEgg = ItemRegistry.spawnEggInventoryId(mob);
+        addSpawnEgg("Baby" + mob, parentEgg, Item.EGG.id + 256);
+        if (hasTeen) addSpawnEgg("Teen" + mob, parentEgg, Item.APPLE.id + 256);
+    }
+
+    private void addSpawnEgg(String mob, int baseEgg, int ingredient) {
+        addRecipe(
+                new ItemStack(ItemRegistry.spawnEggInventoryId(mob), 1),
+                "em",
+                'e',
+                baseEgg,
+                'm',
+                ingredient);
     }
 
     private void addTurretUpgrade(TurretUpgrade upgrade, int material) {
@@ -517,17 +594,9 @@ public class CraftingManager {
         recipes.add(new Recipe(width, height, ingredients, result.id, result.count));
     }
 
-    public static void consumeIngredients(int[] ids, int[] counts) {
-        for (int i = 0; i < ids.length; i++) {
-            if (ids[i] > 0 && --counts[i] == 0) ids[i] = -1;
-        }
-    }
-
-    public ItemStack findMatchingRecipe(int[] matrix, int matrixWidth) {
+    public Recipe findMatchingRecipe(int[] matrix, int[] counts, int matrixWidth) {
         for (Recipe r : recipes) {
-            if (r.matches(matrix, matrixWidth)) { // Pass matrix width (e.g., 3 for 3x3 grid)
-                return new ItemStack(r.resultId, r.resultCount);
-            }
+            if (r.matches(matrix, counts, matrixWidth)) return r;
         }
         return null;
     }

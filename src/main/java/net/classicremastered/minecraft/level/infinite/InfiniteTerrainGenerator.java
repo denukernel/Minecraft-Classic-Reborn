@@ -14,6 +14,7 @@ public final class InfiniteTerrainGenerator {
 
     private final long seed;
     private final int height;
+    private final int sandstoneBottom;
     public final int waterLevel;
 
     private final CombinedNoise nH1, nH2;
@@ -23,9 +24,14 @@ public final class InfiniteTerrainGenerator {
     private final PerlinNoise nCave;
 
     public InfiniteTerrainGenerator(long seed, int height) {
+        this(seed, height, 0);
+    }
+
+    public InfiniteTerrainGenerator(long seed, int height, int verticalOffset) {
         this.seed = seed;
         this.height = height;
-        this.waterLevel = Math.max(1, height / 2);
+        this.sandstoneBottom = Math.max(1, verticalOffset + Level.SANDSTONE_MIN_Y);
+        this.waterLevel = Math.max(1, (height + verticalOffset) / 2);
 
         Random r = new Random(seed);
         nH1 = new CombinedNoise(new OctaveNoise(r, 8), new OctaveNoise(r, 8));
@@ -89,6 +95,12 @@ public final class InfiniteTerrainGenerator {
                     if (c.blocks[idx] == (byte) Block.GRASS.id) {
                         boolean gravel = nBeachB.compute(gx, gz) > 12.0;
                         c.blocks[idx] = (byte) (gravel ? Block.GRAVEL.id : Block.SAND.id);
+                        if (!gravel) {
+                            for (int y = sandstoneBottom; y <= stoneTop; y++) {
+                                c.blocks[SimpleChunk.idx(lx, y, lz, c.height)] =
+                                        (byte) Block.SANDSTONE.id;
+                            }
+                        }
                     }
                 }
             }
@@ -142,6 +154,7 @@ public final class InfiniteTerrainGenerator {
                         int idx = SimpleChunk.idx(lx, y, lz, height);
                         int block = c.blocks[idx] & 255;
                         if (block == Block.STONE.id
+                                || block == Block.SANDSTONE.id
                                 || block == Block.COAL_ORE.id
                                 || block == Block.IRON_ORE.id
                                 || block == Block.GOLD_ORE.id
@@ -158,7 +171,8 @@ public final class InfiniteTerrainGenerator {
                 for (int y = 2; y < Math.min(8, dirtTop - cover); y++) {
                     int floor = SimpleChunk.idx(lx, y, lz, height);
                     int above = SimpleChunk.idx(lx, y + 1, lz, height);
-                    if ((c.blocks[floor] & 255) == Block.STONE.id
+                    int floorBlock = c.blocks[floor] & 255;
+                    if ((floorBlock == Block.STONE.id || floorBlock == Block.SANDSTONE.id)
                             && (c.blocks[above] & 255) == Block.STATIONARY_LAVA.id
                             && nCave.compute(gx * .12, y * .12, gz * .12) > .12) {
                         c.blocks[floor] = (byte) Block.MAGMA.id;
@@ -170,7 +184,7 @@ public final class InfiniteTerrainGenerator {
 
     /** Clean flat: flat plains. */
     private void generateCorruptedFlat(SimpleChunk c, int worldX, int worldZ) {
-        final int baseY = height / 2;
+        final int baseY = waterLevel;
 
         for (int lx = 0; lx < CHUNK; lx++) {
             for (int lz = 0; lz < CHUNK; lz++) {
@@ -288,7 +302,7 @@ public final class InfiniteTerrainGenerator {
 
                 int idx = SimpleChunk.idx(xx, yy, zz, height);
                 byte id = c.blocks[idx];
-                if (id == (byte) Block.STONE.id) {
+                if (id == (byte) Block.STONE.id || id == (byte) Block.SANDSTONE.id) {
                     c.blocks[idx] = (byte) blockId; // replace with ore
                 }
             }

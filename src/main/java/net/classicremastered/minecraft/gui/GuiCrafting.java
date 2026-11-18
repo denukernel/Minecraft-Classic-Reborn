@@ -1,7 +1,6 @@
 package net.classicremastered.minecraft.gui;
 
 import net.classicremastered.minecraft.crafting.CraftingManager;
-import net.classicremastered.minecraft.crafting.CraftingManager.ItemStack;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.PackedTurret;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -186,6 +185,10 @@ public final class GuiCrafting extends CraftingContainerScreen {
                         mouseX,
                         mouseY);
             }
+        } else if (hover >= 0 && craftMatrix[hover] > 0) {
+            ItemTooltip.draw(this, craftMatrix[hover], null, mouseX, mouseY);
+        } else if (resultId > 0 && isResultAt(mouseX, mouseY, resultX, resultY)) {
+            ItemTooltip.draw(this, resultId, null, mouseX, mouseY);
         }
     }
 
@@ -214,7 +217,7 @@ public final class GuiCrafting extends CraftingContainerScreen {
         // The output does not participate in drag painting.
         int outX = x0 + RESULT_X;
         int outY = y0 + RESULT_Y;
-        if (inside(mouseX, mouseY, outX - 5, outY - 5, 26, 26)) {
+        if (isResultAt(mouseX, mouseY, outX, outY)) {
             handleOutputClick();
             if (pickingUp && carriedId > 0) beginStackDrag(painted.length);
             return;
@@ -369,10 +372,10 @@ public final class GuiCrafting extends CraftingContainerScreen {
     }
 
     private void checkRecipe() {
-        ItemStack result = CraftingManager.getInstance().findMatchingRecipe(craftMatrix, 3);
+        var result = CraftingManager.getInstance().findMatchingRecipe(craftMatrix, craftCount, 3);
         if (result != null) {
-            resultId = result.id;
-            resultCount = result.count;
+            resultId = result.resultId;
+            resultCount = result.resultCount;
         } else {
             resultId = -1;
             resultCount = 0;
@@ -401,7 +404,8 @@ public final class GuiCrafting extends CraftingContainerScreen {
     }
 
     private void consumeGrid() {
-        CraftingManager.consumeIngredients(craftMatrix, craftCount);
+        var recipe = CraftingManager.getInstance().findMatchingRecipe(craftMatrix, craftCount, 3);
+        if (recipe != null) recipe.consume(craftMatrix, craftCount, 3);
     }
 
     private void drawSlotIcon(int id, int x, int y) {
@@ -443,6 +447,10 @@ public final class GuiCrafting extends CraftingContainerScreen {
             if (inside(mx, my, position[0] - 1, position[1] - 1, CELL, CELL)) return slot;
         }
         return -1;
+    }
+
+    private boolean isResultAt(int mouseX, int mouseY, int resultX, int resultY) {
+        return inside(mouseX, mouseY, resultX - 5, resultY - 5, 26, 26);
     }
 
     private void getUnifiedSlotPos(int slot, int[] out) {

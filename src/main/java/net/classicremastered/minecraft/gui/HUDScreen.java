@@ -40,6 +40,9 @@ public final class HUDScreen extends Screen {
     private Player heartPlayer;
     private Level heartLevel;
     private int observedHealth, displayHealth, healthBlinkUntil, settleHealthAt;
+    private int namedItem = -1;
+    private int namedSlot = -1;
+    private int itemNameUntil;
     private List<String> debugHardware;
 
     public HUDScreen(Minecraft mc, int w, int h) {
@@ -62,6 +65,33 @@ public final class HUDScreen extends Screen {
         }
         if (ticks >= settleHealthAt) displayHealth = health;
         observedHealth = health;
+    }
+
+    private void renderHeldItemTooltip(FontRenderer font, Inventory inventory) {
+        if (mc.currentScreen != null || inventory.getCount(inventory.selected) <= 0) {
+            namedItem = namedSlot = -1;
+            return;
+        }
+        int raw = inventory.getSelected();
+        if (raw != namedItem || inventory.selected != namedSlot) {
+            namedItem = raw;
+            namedSlot = inventory.selected;
+            itemNameUntil = ticks + 40;
+        }
+
+        String durability =
+                ItemTooltip.durabilityText(raw, inventory.armorWear(inventory.selected));
+        if (mc.gamemode.isSurvival() && ticks < itemNameUntil) {
+            drawCenteredString(
+                    font,
+                    BlockSelectScreen.displayName(raw),
+                    width / 2,
+                    height - (durability.isEmpty() ? 61 : 72),
+                    0xFFFFFF);
+        }
+        if (!durability.isEmpty()) {
+            drawCenteredString(font, durability, width / 2, height - 61, 0xFFFFFF);
+        }
     }
 
     private void renderDebugOverlay(FontRenderer font) {
@@ -91,10 +121,15 @@ public final class HUDScreen extends Screen {
                                         Locale.ROOT,
                                         "XYZ: %.3f / %.3f / %.3f",
                                         player.x,
-                                        player.bb.y0,
+                                        mc.level.worldY(player.bb.y0),
                                         player.z),
-                                "Block: " + x + " " + y + " " + z,
-                                "Chunk: " + (x >> 4) + " " + (y >> 4) + " " + (z >> 4),
+                                "Block: " + x + " " + mc.level.worldY(y) + " " + z,
+                                "Chunk: "
+                                        + (x >> 4)
+                                        + " "
+                                        + (mc.level.worldY(y) >> 4)
+                                        + " "
+                                        + (z >> 4),
                                 String.format(
                                         Locale.ROOT,
                                         "Facing: %s (%.1f / %.1f)",
@@ -169,7 +204,13 @@ public final class HUDScreen extends Screen {
             int id = mc.level.getTile(blockHit.x, blockHit.y, blockHit.z);
             Block block = Block.blocks[id];
             system.add("");
-            system.add("Targeted Block: " + blockHit.x + " " + blockHit.y + " " + blockHit.z);
+            system.add(
+                    "Targeted Block: "
+                            + blockHit.x
+                            + " "
+                            + mc.level.worldY(blockHit.y)
+                            + " "
+                            + blockHit.z);
             if (block != null) system.add(block.name + " (" + id + ")");
         }
         if (mc.selected != null && mc.selected.entity != null) {
@@ -407,13 +448,7 @@ public final class HUDScreen extends Screen {
                     font.render(countStr, x + 19 - font.getWidth(countStr), y + 6, 0xFFFFFF);
                 }
             }
-            if (mc.currentScreen == null && inv.getCount(inv.selected) > 0) {
-                String durability =
-                        ItemTooltip.durabilityText(inv.getSelected(), inv.armorWear(inv.selected));
-                if (!durability.isEmpty()) {
-                    drawCenteredString(font, durability, width / 2, height - 61, 0xFFFFFF);
-                }
-            }
+            renderHeldItemTooltip(font, inv);
         }
 
         // --------------------------------------------------------------------

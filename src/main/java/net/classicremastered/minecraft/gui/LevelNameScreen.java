@@ -2,8 +2,6 @@ package net.classicremastered.minecraft.gui;
 
 import org.lwjgl.input.Keyboard;
 
-import net.classicremastered.minecraft.Minecraft;
-
 import java.io.File;
 
 public final class LevelNameScreen extends GuiScreen {
@@ -14,9 +12,9 @@ public final class LevelNameScreen extends GuiScreen {
 
     private final GuiScreen parent;
     private final String title = "Enter level name:";
-    private final int id;   // slot id or save slot index
+    private final int id; // slot id or save slot index
     private String name;
-    private int counter = 0;
+    private GuiTextField nameField;
     private Receiver receiver;
 
     public LevelNameScreen(GuiScreen parent, String currentName, int id) {
@@ -44,9 +42,14 @@ public final class LevelNameScreen extends GuiScreen {
     public void onOpen() {
         this.buttons.clear();
         Keyboard.enableRepeatEvents(true);
-        this.buttons.add(new Button(0, this.width / 2 - 100, this.height / 4 + 120, "Save"));
-        this.buttons.add(new Button(1, this.width / 2 - 100, this.height / 4 + 144, "Cancel"));
-        ((Button) this.buttons.get(0)).active = this.name.trim().length() > 1;
+        int x = width / 2 - 100;
+        int y = height / 2 - 10;
+        nameField = new GuiTextField(fontRenderer, x, y, 200, 20, false);
+        nameField.setText(name);
+        nameField.setFocused(true);
+        this.buttons.add(new Button(0, x, y + 32, 98, 20, "Save"));
+        this.buttons.add(new Button(1, x + 102, y + 32, 98, 20, "Cancel"));
+        ((Button) this.buttons.get(0)).active = !name.isBlank();
     }
 
     @Override
@@ -56,15 +59,15 @@ public final class LevelNameScreen extends GuiScreen {
 
     @Override
     public void tick() {
-        ++this.counter;
+        nameField.updateCursorCounter();
     }
 
     @Override
     protected void onButtonClick(Button b) {
         if (!b.active) return;
 
-        if (b.id == 0 && this.name.trim().length() > 1) {
-            String safeName = this.name.trim();
+        if (b.id == 0 && !name.isBlank()) {
+            String safeName = name.strip();
             if (this.receiver != null) {
                 this.receiver.onNameEntered(safeName);
                 return;
@@ -72,10 +75,14 @@ public final class LevelNameScreen extends GuiScreen {
 
             // --- Save locally ---
             if (this.minecraft.level == null) {
-                this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save", "No level is loaded.", this));
+                this.minecraft.setCurrentScreen(
+                        new ErrorScreen("Failed to save", "No level is loaded.", this));
                 return;
             }
-            this.minecraft.level.name = safeName;
+            net.classicremastered.minecraft.level.dimensions.StickmansHouse.homeLevel(
+                                    this.minecraft.level)
+                            .name =
+                    safeName;
 
             try {
                 File savesDir = new File("saves");
@@ -84,11 +91,14 @@ public final class LevelNameScreen extends GuiScreen {
                 File saveFile = new File(savesDir, "level" + id + ".lvl");
                 boolean ok = this.minecraft.levelIo.save(this.minecraft.level, saveFile);
                 if (!ok) {
-                    this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save", "Could not save the level file.", this));
+                    this.minecraft.setCurrentScreen(
+                            new ErrorScreen(
+                                    "Failed to save", "Could not save the level file.", this));
                     return;
                 }
             } catch (Exception ex) {
-                this.minecraft.setCurrentScreen(new ErrorScreen("Failed to save", ex.toString(), this));
+                this.minecraft.setCurrentScreen(
+                        new ErrorScreen("Failed to save", ex.toString(), this));
                 return;
             }
 
@@ -109,19 +119,13 @@ public final class LevelNameScreen extends GuiScreen {
             return;
         }
         if (key == Keyboard.KEY_RETURN || key == Keyboard.KEY_NUMPADENTER) {
-            onButtonClick((Button)this.buttons.get(0));
+            onButtonClick((Button) this.buttons.get(0));
             return;
         }
-        if (key == Keyboard.KEY_BACK && this.name.length() > 0) {
-            this.name = this.name.substring(0, this.name.length() - 1);
+        if (nameField.textboxKeyTyped(c, key)) {
+            name = nameField.getText();
+            ((Button) this.buttons.get(0)).active = !name.isBlank();
         }
-
-        String allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ,.:-_'*!\"#%/()=+?[]{}<>";
-        if (allowed.indexOf(c) >= 0 && this.name.length() < 64) {
-            this.name = this.name + c;
-        }
-
-        ((Button) this.buttons.get(0)).active = this.name.trim().length() > 1;
     }
 
     @Override
@@ -131,14 +135,7 @@ public final class LevelNameScreen extends GuiScreen {
 
         drawCenteredString(this.fontRenderer, this.title, this.width / 2, 40, 0xFFFFFF);
 
-        int boxX = this.width / 2 - 100;
-        int boxY = this.height / 2 - 10;
-
-        drawBox(boxX - 1, boxY - 1, boxX + 201, boxY + 21, 0xFF999999);
-        drawBox(boxX, boxY, boxX + 200, boxY + 20, 0xFF000000);
-
-        String cursor = (this.counter / 6 % 2 == 0 ? "_" : "");
-        drawString(this.fontRenderer, this.name + cursor, boxX + 4, boxY + 6, 0xE0E0E0);
+        nameField.drawTextBox();
 
         super.render(mx, my);
     }

@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
@@ -21,6 +22,16 @@ public final class LevelInfiniteTerrain extends Level {
         this(seed, depthY, false);
     }
 
+    public static LevelInfiniteTerrain createStickmansHouse() {
+        return new LevelInfiniteTerrain(
+                0, StickmansHouse.DEPTH, false, false, false, true, false, 0);
+    }
+
+    public static LevelInfiniteTerrain createOverworld(long seed, boolean biomes, boolean flat) {
+        return new LevelInfiniteTerrain(
+                seed, OVERWORLD_HEIGHT, biomes, flat, true, false, true, OVERWORLD_Y_OFFSET);
+    }
+
     public LevelInfiniteTerrain(long seed, int depthY, boolean biomesEnabled) {
         this(seed, depthY, biomesEnabled, false);
     }
@@ -31,12 +42,27 @@ public final class LevelInfiniteTerrain extends Level {
 
     LevelInfiniteTerrain(
             long seed, int depthY, boolean biomesEnabled, boolean flatBiomes, boolean oceans) {
+        this(seed, depthY, biomesEnabled, flatBiomes, oceans, false, true, 0);
+    }
+
+    LevelInfiniteTerrain(
+            long seed,
+            int depthY,
+            boolean biomesEnabled,
+            boolean flatBiomes,
+            boolean oceans,
+            boolean stickmansHouse,
+            boolean largeBiomes,
+            int verticalOffset) {
         super();
         this.flatBiomes = biomesEnabled && flatBiomes;
         this.oceanBiomes = biomesEnabled && !flatBiomes && oceans;
+        this.largeBiomes = biomesEnabled && largeBiomes;
+        this.verticalOffset = verticalOffset;
         this.randomSeed = seed;
         this.biomesEnabled = biomesEnabled;
         this.biomeSeed = biomesEnabled ? seed : null;
+        this.stickmansHouseArena = stickmansHouse;
 
         this.width = 255; // dummy finite values (stub)
         this.height = 2;
@@ -62,15 +88,29 @@ public final class LevelInfiniteTerrain extends Level {
                 new SimpleChunkManager(
                         seed,
                         depthY,
-                        biomesEnabled
-                                ? SimpleChunkManager.Mode.BIOMES
-                                : SimpleChunkManager.Mode.TERRAIN,
-                        this.oceanBiomes);
+                        stickmansHouse
+                                ? SimpleChunkManager.Mode.STICKMANS_HOUSE
+                                : biomesEnabled
+                                        ? SimpleChunkManager.Mode.BIOMES
+                                        : SimpleChunkManager.Mode.TERRAIN,
+                        this.oceanBiomes,
+                        this.largeBiomes,
+                        verticalOffset);
         this.chunks.level = this;
-        this.waterLevel = Math.max(1, depthY / 2 - (biomesEnabled ? 2 : 0));
+        this.waterLevel =
+                stickmansHouse
+                        ? 1
+                        : Math.max(1, (depthY + verticalOffset) / 2 - (biomesEnabled ? 2 : 0));
 
-        this.findSpawn();
-        if (!biomesEnabled) this.ySpawn = Math.min(34, depthY - 1);
+        if (stickmansHouse) {
+            doDayNightCycle = false;
+            doMobSpawning = false;
+            StickmansHouse.setSpawn(this);
+            setTime(0);
+        } else {
+            this.findSpawn();
+            if (!biomesEnabled) this.ySpawn = Math.min(34 + verticalOffset, depthY - 1);
+        }
     }
 
     // === Core block access ===
@@ -101,16 +141,7 @@ public final class LevelInfiniteTerrain extends Level {
                         if (id > 0) {
                             Block b = Block.blocks[id];
                             if (b != null && canBlastDestroy(b, src)) {
-                                if (b == Block.TNT) {
-                                    // --- TNT chain reaction fix --- // added
-                                    setTile(x, y, z, 0); // clear TNT block
-                                    b.explode(this, x, y, z); // spawn PrimedTnt entity
-                                } else {
-                                    // normal explodable blocks
-                                    if (dropBlocks) b.dropItems(this, x, y, z, 0.3F);
-                                    setTile(x, y, z, 0);
-                                    b.explode(this, x, y, z);
-                                }
+                                blastBlock(src, b, x, y, z, dropBlocks);
                             }
                         }
                     }
@@ -182,14 +213,11 @@ public final class LevelInfiniteTerrain extends Level {
         return 1; // safe fallback above bedrock
     }
 
-    // Sky exposure with bounded upward scan so caves are actually dark.
     @Override
     public boolean isLit(int x, int y, int z) {
         if (y < 0) return false;
         if (y >= this.depth) return true;
-        final int MAX_SCAN = 64;
-        int yMax = Math.min(this.depth - 1, y + MAX_SCAN);
-        for (int yy = y + 1; yy <= yMax; yy++) {
+        for (int yy = y + 1; yy < this.depth; yy++) {
             int id = getTile(x, yy, z);
             if (id > 0) {
                 Block b = Block.blocks[id];
@@ -252,7 +280,7 @@ public final class LevelInfiniteTerrain extends Level {
         // --- Mob spawn pass ---
         // Spawn mobs when this level is authoritative (not network mode). Don't rely on
         // `minecraft` being present.
-        if (!this.isNetworkMode() && this.tickCount % 20 == 0) {
+        if (this.doMobSpawning && !this.isNetworkMode() && this.tickCount % 20 == 0) {
             MobSpawner spawner = new MobSpawner(this);
             spawner.spawn(6, this.player, null, true);
         }
@@ -261,6 +289,11 @@ public final class LevelInfiniteTerrain extends Level {
         cleanupInactiveChunks(600); // unload after 600 ticks (~30s at 20TPS)
 
         // === Apocalypse systems ===
+        if (isStickmansHouse()) {
+            var house = getStickmansHouse();
+            if (house != null) house.tickExploration();
+            return;
+        }
         if (player != null) {
             long dist = (long) Math.max(Math.abs(player.x), Math.abs(player.z));
             var loaded = chunks.getAllChunks().values();
@@ -438,7 +471,7 @@ public final class LevelInfiniteTerrain extends Level {
     }
 
     private boolean tryOceanWorldSpawn(BiomeLevelGenerator biomes, int x, int z) {
-        return biomes.groundHeight(x, z, depth) >= waterLevel && tryBiomeSpawn(x, z);
+        return biomes.groundHeight(x, z, depth, flatBiomes) >= waterLevel && tryBiomeSpawn(x, z);
     }
 
     private boolean tryBiomeSpawn(int x, int z) {

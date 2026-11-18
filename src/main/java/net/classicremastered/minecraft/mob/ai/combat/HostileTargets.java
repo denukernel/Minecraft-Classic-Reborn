@@ -3,12 +3,15 @@ package net.classicremastered.minecraft.mob.ai.combat;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
+import net.classicremastered.minecraft.level.tile.LadderBlock;
 import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
-import net.classicremastered.minecraft.level.tile.LadderBlock;
+import net.classicremastered.minecraft.mob.StickFigure;
+import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers;
 import net.classicremastered.minecraft.model.Vec3D;
-import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.path.Pathfinder;
+import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 /** Shared proactive targets for player-hunting mobs, including custom combat paths. */
@@ -76,8 +79,11 @@ public final class HostileTargets {
 
     public static boolean canLocate(Mob mob, Entity target) {
         return target.level == mob.level
+                && (!(mob instanceof StickFigure) || StickmansHouse.canFightBoss(mob.level, target))
                 && (!(target instanceof Player)
                         || hasLineOfSight(mob, target)
+                        || mob instanceof StickFigure boss
+                                && StickFigurePowers.findSupport(boss, target) != null
                         || canReachLadderLanding(mob, target));
     }
 

@@ -40,20 +40,21 @@ public final class SpawnpointCommand implements Command {
             return;
         }
         try {
-            int x = coordinate(args.length == 0 ? "~" : args[0], player.x);
-            int y = coordinate(args.length == 0 ? "~" : args[1], player.bb.y0);
-            int z = coordinate(args.length == 0 ? "~" : args[2], player.z);
             Level level = mc.level;
+            int x = coordinate(args.length == 0 ? "~" : args[0], player.x);
+            int y = coordinate(args.length == 0 ? "~" : args[1], level.worldY(player.bb.y0));
+            double row = level.storageY(y);
+            int z = coordinate(args.length == 0 ? "~" : args[2], player.z);
             boolean infinite =
                     level instanceof LevelInfiniteFlat || level instanceof LevelInfiniteTerrain;
-            if (y < 0
-                    || y >= level.depth
+            if (row < 0
+                    || row >= level.depth
                     || !infinite && (x < 0 || x >= level.width || z < 0 || z >= level.height)) {
                 mc.hud.addChat("&cSpawnpoint is outside world bounds.");
                 return;
             }
             level.xSpawn = x;
-            level.ySpawn = y;
+            level.ySpawn = (int) row;
             level.zSpawn = z;
             level.rotSpawn = player.yRot;
             mc.hud.addChat("&aSpawnpoint set to &f" + x + " " + y + " " + z);

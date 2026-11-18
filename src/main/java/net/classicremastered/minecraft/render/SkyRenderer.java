@@ -29,7 +29,7 @@ public final class SkyRenderer {
 
     // === Nightmare fuel switch (25M+ distance) ===
     private boolean isNightmareZone(Player cam) {
-        if (cam == null) return false;
+        if (cam == null || level.isStickmansHouse()) return false;
         long dist = (long) Math.max(Math.abs(cam.x), Math.abs(cam.z));
         return dist >= 25_000_000L;
     }
@@ -66,7 +66,7 @@ public final class SkyRenderer {
 
     // ---- clouds (infinite sheet)
     public void renderClouds(float partial, float r, float g, float b) {
-        if (level == null || texMgr == null) return;
+        if (level == null || texMgr == null || level.isStickmansHouse()) return;
 
         if (level.player instanceof Player camera
                 && (!isNightmareZone(camera)
@@ -298,11 +298,52 @@ public final class SkyRenderer {
         GL11.glPopMatrix();
     }
 
+    public void renderMinecraftWorld(Player cam, float partial, float far) {
+        float distance = far * .45f;
+        float half = distance * .19f;
+        GL11.glPushAttrib(
+                GL11.GL_ENABLE_BIT
+                        | GL11.GL_COLOR_BUFFER_BIT
+                        | GL11.GL_CURRENT_BIT
+                        | GL11.GL_DEPTH_BUFFER_BIT
+                        | GL11.GL_TEXTURE_BIT);
+        GL11.glPushMatrix();
+        try {
+            GL11.glTranslatef(
+                    cam.xo + (cam.x - cam.xo) * partial,
+                    cam.yo + (cam.y - cam.yo) * partial,
+                    cam.zo + (cam.z - cam.zo) * partial);
+            GL11.glRotatef(-22f, 1, 0, 0);
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDepthMask(false);
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glDisable(GL11.GL_FOG);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_ALPHA_TEST);
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GL11.glColor4f(1, 1, 1, 1);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texMgr.load("/terrain/earth.png"));
+            ShapeRenderer shape = ShapeRenderer.instance;
+            shape.begin();
+            shape.vertexUV(half, -half, distance, 0, 1);
+            shape.vertexUV(-half, -half, distance, 1, 1);
+            shape.vertexUV(-half, half, distance, 1, 0);
+            shape.vertexUV(half, half, distance, 0, 0);
+            shape.end();
+        } finally {
+            GL11.glPopMatrix();
+            GL11.glPopAttrib();
+        }
+    }
+
     public void renderStars(Player cam, float partial) {
         if (level == null || cam == null) return;
         if (starList == -1) buildStarField();
 
-        float alpha = level.getStarBrightness();
+        boolean house = level.isStickmansHouse();
+        float alpha = house ? .8f : level.getStarBrightness();
         if (alpha <= 0.01f) return;
 
         float px = cam.xo + (cam.x - cam.xo) * partial;
@@ -324,7 +365,7 @@ public final class SkyRenderer {
         GL11.glScalef(scale, scale, scale);
         // Keep the star field fixed relative to the sun and moon throughout the day.
         GL11.glRotatef(-90f, 0f, 1f, 0f);
-        GL11.glRotatef(level.getCelestialAngleSmooth() * 360.0f, 1f, 0f, 0f);
+        if (!house) GL11.glRotatef(level.getCelestialAngleSmooth() * 360.0f, 1f, 0f, 0f);
 
         GL11.glDisable(GL11.GL_TEXTURE_2D);
         GL11.glDisable(GL11.GL_LIGHTING);
@@ -345,7 +386,7 @@ public final class SkyRenderer {
                     0.9f);
         } else {
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
-            GL11.glPointSize(2.5f);
+            GL11.glPointSize(house ? 1.5f : 2.5f);
             GL11.glColor4f(1f, 1f, 1f, alpha);
         }
 

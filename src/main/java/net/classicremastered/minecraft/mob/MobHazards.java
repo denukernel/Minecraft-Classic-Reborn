@@ -16,7 +16,10 @@ public final class MobHazards {
     private MobHazards() {}
 
     private static boolean isHeat(int id) {
-        return id == Block.FIRE.id || id == Block.LAVA.id || id == Block.STATIONARY_LAVA.id;
+        return id == Block.FIRE.id
+                || id == Block.LAVA.id
+                || id == Block.STATIONARY_LAVA.id
+                || id == Block.MAGMA.id;
     }
 
     public static boolean isHazard(int id) {
@@ -37,22 +40,36 @@ public final class MobHazards {
     }
 
     public static void addCactusClearance(Level level, AABB sweep, List<AABB> collisions) {
-        addClearance(level, sweep, collisions, false, 0);
+        addClearance(level, sweep, collisions, false, 0, false);
     }
 
     public static void addHorizontalHeatClearance(
-            Level level, AABB sweep, List<AABB> collisions, float lift) {
-        addClearance(level, sweep, collisions, true, LIP_CLEARANCE + lift);
+            Level level, AABB body, AABB sweep, List<AABB> collisions, float lift) {
+        // An entity pushed onto a patch must be able to cross its internal block edges.
+        boolean onMagma =
+                level.getTile(
+                                (int) Math.floor((body.x0 + body.x1) * .5f),
+                                (int) Math.floor(body.y0 - .01f),
+                                (int) Math.floor((body.z0 + body.z1) * .5f))
+                        == Block.MAGMA.id;
+        addClearance(level, sweep, collisions, true, LIP_CLEARANCE + lift, onMagma);
     }
 
     private static void addClearance(
-            Level level, AABB sweep, List<AABB> collisions, boolean heat, float lip) {
+            Level level,
+            AABB sweep,
+            List<AABB> collisions,
+            boolean heat,
+            float lip,
+            boolean onMagma) {
         float pad = CLEARANCE;
         for (int x = (int) Math.floor(sweep.x0 - pad); x < sweep.x1 + pad; x++)
             for (int y = (int) Math.floor(sweep.y0 - lip); y < sweep.y1; y++)
                 for (int z = (int) Math.floor(sweep.z0 - pad); z < sweep.z1 + pad; z++) {
                     int id = level.getTile(x, y, z);
-                    if (heat ? isHeat(id) : id == Block.CACTUS.id) {
+                    if (heat
+                            ? isHeat(id) && !(onMagma && id == Block.MAGMA.id)
+                            : id == Block.CACTUS.id) {
                         AABB box =
                                 new AABB(
                                         x - pad, y, z - pad, x + 1 + pad, y + 1 + lip, z + 1 + pad);

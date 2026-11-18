@@ -30,9 +30,9 @@ public final class LevelGenerator {
         this.progressBar.setTitle("Generating level");
         this.width = var2;
         this.depth = var3;
-        this.height = 64;
-        this.waterLevel = 32;
-        this.blocks = new byte[var2 * var3 << 6];
+        this.height = var4 + Level.OVERWORLD_Y_OFFSET;
+        this.waterLevel = Level.OVERWORLD_Y_OFFSET + var4 / 2;
+        this.blocks = new byte[var2 * var3 * this.height];
         this.progressBar.setText("Raising..");
         LevelGenerator var5 = this;
         CombinedNoise var6 =
@@ -138,7 +138,7 @@ public final class LevelGenerator {
                     }
 
                     if (var26 == 0) {
-                        var28 = Block.LAVA.id;
+                        var28 = Block.BEDROCK.id;
                     }
 
                     var5.blocks[var27] = (byte) var28;
@@ -228,13 +228,13 @@ public final class LevelGenerator {
         this.setProgress(0);
 
         for (var54 = 0; var54 < var5.width; ++var54) {
-            var5.flood(var54, var5.height / 2 - 1, 0, 0, var51);
-            var5.flood(var54, var5.height / 2 - 1, var5.depth - 1, 0, var51);
+            var5.flood(var54, var5.waterLevel - 1, 0, 0, var51);
+            var5.flood(var54, var5.waterLevel - 1, var5.depth - 1, 0, var51);
         }
 
         for (var54 = 0; var54 < var5.depth; ++var54) {
-            var5.flood(0, var5.height / 2 - 1, var54, 0, var51);
-            var5.flood(var5.width - 1, var5.height / 2 - 1, var54, 0, var51);
+            var5.flood(0, var5.waterLevel - 1, var54, 0, var51);
+            var5.flood(var5.width - 1, var5.waterLevel - 1, var54, 0, var51);
         }
 
         var54 = var5.width * var5.depth / 8000;
@@ -280,11 +280,12 @@ public final class LevelGenerator {
         var5 = this;
         var46 = this.width;
         var48 = this.depth;
-        var51 = this.height;
         var53 = new OctaveNoise(this.random, 8);
         OctaveNoise var58 = new OctaveNoise(this.random, 8);
 
         int var63;
+        int layerSize = var5.width * var5.depth;
+        int sandstoneBottom = (Level.OVERWORLD_Y_OFFSET + Level.SANDSTONE_MIN_Y) * layerSize;
         for (var11 = 0; var11 < var46; ++var11) {
             var5.setProgress(var11 * 100 / (var5.width - 1));
 
@@ -302,15 +303,22 @@ public final class LevelGenerator {
                                                         & 255)
                                         == Block.WATER.id
                                 || var28 == Block.STATIONARY_WATER.id)
-                        && var26 <= var51 / 2 - 1
+                        && var26 <= var5.waterLevel - 1
                         && var57) {
                     var5.blocks[var27] = (byte) Block.GRAVEL.id;
                 }
 
                 if (var28 == 0) {
                     var63 = Block.GRASS.id;
-                    if (var26 <= var51 / 2 - 1 && var60) {
+                    if (var26 <= var5.waterLevel - 1 && var60) {
                         var63 = Block.SAND.id;
+                        for (int below = var27 - layerSize;
+                                below >= sandstoneBottom;
+                                below -= layerSize) {
+                            if (var5.blocks[below] == (byte) Block.STONE.id) {
+                                var5.blocks[below] = (byte) Block.SANDSTONE.id;
+                            }
+                        }
                     }
 
                     var5.blocks[var27] = (byte) var63;
@@ -395,9 +403,8 @@ public final class LevelGenerator {
                                             & 255)
                                     == 0) {
                         int var62 = (var27 * var5.depth + var28) * var5.width + var26;
-                        if ((var5.blocks[((var27 - 1) * var5.depth + var28) * var5.width + var26]
-                                        & 255)
-                                == Block.STONE.id) {
+                        int floor = var5.blocks[var62 - var5.depth * var5.width] & 255;
+                        if (floor == Block.STONE.id || floor == Block.SANDSTONE.id) {
                             if (var24 == 0) {
                                 var5.blocks[var62] = (byte) Block.BROWN_MUSHROOM.id;
                             } else if (var24 == 1) {
@@ -410,10 +417,16 @@ public final class LevelGenerator {
         }
 
         net.classicremastered.minecraft.level.structure.Mineshaft.decorateFinite(
-                this.blocks, var2, var3, 64, this.random.nextLong());
+                this.blocks,
+                var2,
+                var3,
+                this.height,
+                this.random.nextLong(),
+                Level.OVERWORLD_Y_OFFSET);
         Level var65;
         (var65 = new Level()).waterLevel = this.waterLevel;
-        var65.setData(var2, 64, var3, this.blocks);
+        var65.verticalOffset = Level.OVERWORLD_Y_OFFSET;
+        var65.setData(var2, this.height, var3, this.blocks);
         var65.createTime = System.currentTimeMillis();
         var65.creator = var1;
         var65.name = "A Nice World";

@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.path;
 
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.RedstoneEngine.Pos;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.level.itemstack.BucketItem;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -11,6 +12,7 @@ import net.classicremastered.minecraft.mob.CrossbowTurret;
 import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.MobHazards;
+import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.phys.AABB;
 
 import java.util.ArrayList;
@@ -25,6 +27,7 @@ final class GroundClearance {
     private final List<AABB> turrets;
     final boolean climbing;
     final float maxDrop;
+    private final int minFeet;
     final boolean waterClutch;
     private final Predicate<Pos> removableFire;
 
@@ -54,11 +57,14 @@ final class GroundClearance {
                 nearbyTurrets(level, mob),
                 Pathfinder.supportsLadders(mob),
                 mob instanceof Defender defender && defender.hasWaterClutchReady(),
+                mob instanceof StickFigure && level.isStickmansHouse()
+                        ? StickmansHouse.BOSS_FLOOR_FEET
+                        : 1,
                 removableFire);
     }
 
     GroundClearance(Level level, float width, float height, boolean swimming, float maxDrop) {
-        this(level, width, height, swimming, maxDrop, List.of(), false, false, null);
+        this(level, width, height, swimming, maxDrop, List.of(), false, false, 1, null);
     }
 
     private GroundClearance(
@@ -70,6 +76,7 @@ final class GroundClearance {
             List<AABB> turrets,
             boolean climbing,
             boolean waterClutch,
+            int minFeet,
             Predicate<Pos> removableFire) {
         this.level = level;
         this.width = Math.max(0.1f, width);
@@ -79,6 +86,7 @@ final class GroundClearance {
         this.turrets = turrets;
         this.climbing = climbing;
         this.waterClutch = waterClutch;
+        this.minFeet = minFeet;
         this.removableFire = removableFire;
         offset = Pathfinder.offset(width);
     }
@@ -213,7 +221,7 @@ final class GroundClearance {
     }
 
     boolean supportedAt(float cx, float y, float cz) {
-        if (y < 1 || y + height > level.depth + 0.001f) return false;
+        if (y < minFeet - .001f || y + height > level.depth + 0.001f) return false;
         if (!bodyClear(cx, y, cz)) return false;
         float half = width * 0.5f - 0.002f;
         int below = (int) Math.floor(y - 0.001f);

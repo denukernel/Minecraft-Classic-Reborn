@@ -124,6 +124,7 @@ public final class TntExplosion {
         if (block.getLiquidType() != LiquidType.NOT_LIQUID) return 100;
         if (block == Block.STONE
                 || block == Block.COBBLESTONE
+                || block == Block.BLACK_COBBLESTONE
                 || block == Block.MOSSY_COBBLESTONE
                 || block == Block.BRICK
                 || block == Block.SLAB

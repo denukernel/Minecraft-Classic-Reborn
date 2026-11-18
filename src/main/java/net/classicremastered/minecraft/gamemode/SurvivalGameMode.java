@@ -9,6 +9,9 @@ import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Player;
 
 public final class SurvivalGameMode extends GameMode {
+    // Seven progress units per normal tick, sixty per diamond tick.
+    private static final int OBSIDIAN_PROGRESS_REQUIRED = 8_400;
+
     public SurvivalGameMode(Minecraft minecraft) {
         super(minecraft);
     }
@@ -84,12 +87,9 @@ public final class SurvivalGameMode extends GameMode {
             return;
         }
         final Block block = Block.blocks[type];
-        final int base = Math.max(0, block.getHardness());
-        final float mult = getToolSpeed(minecraft.player, block);
-        final float required = base + 1f;
         block.spawnBlockParticles(minecraft.level, x, y, z, side, minecraft.particleManager);
-        hits += mult;
-        if (hits >= required) {
+        hits += miningProgress(block);
+        if (hits >= requiredProgress(block)) {
             breakBlock(x, y, z);
             hits = 0;
             hitDelay = 5;
@@ -104,17 +104,22 @@ public final class SurvivalGameMode extends GameMode {
             resetHits();
         } else if ((block != Block.SNOW_BLOCK.id || holdingTool(ToolItem.Kind.SHOVEL))
                 && (block != Block.MAGMA.id || holdingTool(ToolItem.Kind.PICKAXE))) {
-            Block.blocks[block].onBreak(minecraft.level, x, y, z);
+            Block.blocks[block].onMined(minecraft.level, x, y, z, heldTool());
         }
         super.breakBlock(x, y, z);
     }
 
     private boolean holdingTool(ToolItem.Kind kind) {
+        ToolItem tool = heldTool();
+        return tool != null && tool.kind() == kind;
+    }
+
+    private ToolItem heldTool() {
         int selected = minecraft.player.inventory.getSelected();
-        return selected >= 256
+        if (selected >= 256
                 && selected - 256 < Item.items.length
-                && Item.items[selected - 256] instanceof ToolItem tool
-                && tool.kind() == kind;
+                && Item.items[selected - 256] instanceof ToolItem tool) return tool;
+        return null;
     }
 
     @Override
@@ -143,10 +148,8 @@ public final class SurvivalGameMode extends GameMode {
             return;
         }
         Block b = Block.blocks[type];
-        int base = Math.max(0, b.getHardness());
-        float mult = getToolSpeed(minecraft.player, b);
-        float required = base + 1f;
-        minecraft.levelRenderer.cracks = Math.min(1f, (hits + Math.max(0, time) * mult) / required);
+        minecraft.levelRenderer.cracks =
+                Math.min(1f, (hits + Math.max(0, time) * miningProgress(b)) / requiredProgress(b));
     }
 
     @Override
@@ -196,23 +199,15 @@ public final class SurvivalGameMode extends GameMode {
 
     // -------- Tool multiplier logic --------
 
-    private float getToolSpeed(Player player, Block block) {
-        if (player == null || player.inventory == null) return 1.0f;
+    private float miningProgress(Block block) {
+        ToolItem tool = heldTool();
+        if (block == Block.OBSIDIAN) return tool != null && tool.isDiamondPickaxe() ? 60f : 7f;
+        return tool == null ? 1f : tool.miningSpeed(block);
+    }
 
-        int sel = player.inventory.getSelected();
-        if (sel < 256) return 1.0f; // holding a block or empty
-
-        int itemId = sel - 256;
-        if (itemId < 0
-                || itemId >= net.classicremastered.minecraft.level.itemstack.Item.items.length)
-            return 1.0f;
-
-        net.classicremastered.minecraft.level.itemstack.Item it =
-                net.classicremastered.minecraft.level.itemstack.Item.items[itemId];
-        if (it == null) return 1.0f;
-
-        return it instanceof net.classicremastered.minecraft.level.itemstack.ToolItem tool
-                ? tool.miningSpeed(block)
-                : 1f;
+    private static int requiredProgress(Block block) {
+        return block == Block.OBSIDIAN
+                ? OBSIDIAN_PROGRESS_REQUIRED
+                : Math.max(0, block.getHardness()) + 1;
     }
 }

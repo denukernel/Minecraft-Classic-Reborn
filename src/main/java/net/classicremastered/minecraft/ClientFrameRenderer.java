@@ -219,8 +219,13 @@ final class ClientFrameRenderer {
                         if (mc.skyRenderer != null) {
                             if (cameraLiquid == LiquidType.NOT_LIQUID)
                                 mc.skyRenderer.renderGradient(camPlayer, renderPartial, r2.fogEnd);
-                            mc.skyRenderer.renderStars(mc.player, renderPartial);
-                            mc.skyRenderer.renderSunMoon(mc.player, renderPartial);
+                            mc.skyRenderer.renderStars(camPlayer, renderPartial);
+                            if (levelRef.isStickmansHouse()) {
+                                mc.skyRenderer.renderMinecraftWorld(
+                                        camPlayer, renderPartial, r2.fogEnd);
+                            } else {
+                                mc.skyRenderer.renderSunMoon(mc.player, renderPartial);
+                            }
                         }
 
                         // Common path: this dispatches to your LevelRenderer logic.
@@ -230,7 +235,7 @@ final class ClientFrameRenderer {
                             r2.updateFog(cameraLiquid);
                             GL11.glEnable(GL11.GL_FOG);
                         }
-                        lr.sortChunks(camPlayer, 0, renderPartial);
+                        lr.sortChunks(camPlayer, 0, renderPartial, fr);
                         if (!fabulous) lr.renderOpaqueGlass(camPlayer, renderPartial);
 
                         r2.updateFog(cameraLiquid);
@@ -501,6 +506,7 @@ final class ClientFrameRenderer {
                         ++stereoEye;
                     }
                     mc.renderer.renderUnderwaterOverlay(cameraLiquid);
+                    mc.worldPreview.capture(mc);
                     if (!mc.hudHidden) {
                         boolean hideHotbar =
                                 mc.currentScreen instanceof InventoryScreen

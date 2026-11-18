@@ -7,26 +7,15 @@ public class Frustrum {
     public float[] modelview = new float[16];
     public float[] clipping = new float[16];
 
-    public final boolean isBoxInFrustrum(float var1, float var2, float var3, float var4, float var5, float var6) {
-        for (int var7 = 0; var7 < 6; ++var7) {
-            if (this.frustrum[var7][0] * var1 + this.frustrum[var7][1] * var2 + this.frustrum[var7][2] * var3
-                    + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var4 + this.frustrum[var7][1] * var2 + this.frustrum[var7][2] * var3
-                            + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var1 + this.frustrum[var7][1] * var5 + this.frustrum[var7][2] * var3
-                            + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var4 + this.frustrum[var7][1] * var5 + this.frustrum[var7][2] * var3
-                            + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var1 + this.frustrum[var7][1] * var2 + this.frustrum[var7][2] * var6
-                            + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var4 + this.frustrum[var7][1] * var2 + this.frustrum[var7][2] * var6
-                            + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var1 + this.frustrum[var7][1] * var5 + this.frustrum[var7][2] * var6
-                            + this.frustrum[var7][3] <= 0.0F
-                    && this.frustrum[var7][0] * var4 + this.frustrum[var7][1] * var5 + this.frustrum[var7][2] * var6
-                            + this.frustrum[var7][3] <= 0.0F) {
-                return false;
-            }
+    public final boolean isBoxInFrustrum(
+            float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
+        for (int i = 0; i < 6; i++) {
+            float[] plane = frustrum[i];
+            // The corner farthest along the plane normal has the greatest signed distance.
+            float x = plane[0] >= 0 ? maxX : minX;
+            float y = plane[1] >= 0 ? maxY : minY;
+            float z = plane[2] >= 0 ? maxZ : minZ;
+            if (plane[0] * x + plane[1] * y + plane[2] * z + plane[3] <= 0) return false;
         }
 
         return true;

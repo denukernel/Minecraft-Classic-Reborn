@@ -27,18 +27,17 @@ public class TeleportCommand implements Command {
         }
 
         try {
+            Level lvl = mc.level;
             double x = Double.parseDouble(args[0]);
-            double y = Double.parseDouble(args[1]);
+            double y = lvl.storageY(Double.parseDouble(args[1]));
             double z = Double.parseDouble(args[2]);
 
             // --- Prevent teleporting into void ---
             if (y < -20) {
                 if (mc.hud != null)
-                    mc.hud.addChat("&c⚠ Cannot teleport below Y = -20 (void).");
+                    mc.hud.addChat("&c⚠ Cannot teleport below Y = " + lvl.worldY(-20) + " (void).");
                 return;
             }
-
-            Level lvl = mc.level;
 
             // === Finite level clamp ===
             if (!(lvl instanceof LevelInfiniteFlat) && !(lvl instanceof LevelInfiniteTerrain)) {
@@ -71,7 +70,8 @@ public class TeleportCommand implements Command {
             sender.resetInterpolation();
 
             if (mc.hud != null) {
-                mc.hud.addChat("&aTeleported to &7" + (int) x + " " + (int) y + " " + (int) z);
+                mc.hud.addChat(
+                        "&aTeleported to &7" + (int) x + " " + lvl.worldY((int) y) + " " + (int) z);
             }
         } catch (NumberFormatException e) {
             if (mc.hud != null) mc.hud.addChat("&cInvalid coordinates. Usage: &e" + getUsage());

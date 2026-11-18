@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.particle;
 
+import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.render.GunRenderer;
@@ -12,8 +13,8 @@ public final class FoodParticle extends Particle {
     private final float u;
     private final float v;
 
-    private FoodParticle(Player player, Vec3D position, Vec3D velocity, String texture) {
-        super(player.level, position.x, position.y, position.z, 0, 0, 0);
+    private FoodParticle(Level level, Vec3D position, Vec3D velocity, String texture) {
+        super(level, position.x, position.y, position.z, 0, 0, 0);
         this.texture = texture;
         u = .375f + uo * (.125f / 3);
         v = .375f + vo * (.125f / 3);
@@ -48,7 +49,21 @@ public final class FoodParticle extends Particle {
                                     1)
                             .subtract(eye);
             player.level.particleEngine.spawnParticle(
-                    new FoodParticle(player, position, velocity, texture));
+                    new FoodParticle(player.level, position, velocity, texture));
+        }
+    }
+
+    public static void spawnFragments(Level level, Vec3D position, String texture, int count) {
+        if (level.particleEngine == null) return;
+        var random = ThreadLocalRandom.current();
+        for (int i = 0; i < count; i++) {
+            Vec3D velocity =
+                    new Vec3D(
+                            (random.nextFloat() - .5f) * .08f,
+                            (random.nextFloat() - .5f) * .08f,
+                            (random.nextFloat() - .5f) * .08f);
+            level.particleEngine.spawnParticle(
+                    new FoodParticle(level, position, velocity, texture));
         }
     }
 

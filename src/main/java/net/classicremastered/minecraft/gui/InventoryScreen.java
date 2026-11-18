@@ -1,8 +1,9 @@
 package net.classicremastered.minecraft.gui;
 
 import net.classicremastered.minecraft.crafting.CraftingManager;
-import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.crafting.Recipe;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.player.Inventory;
 import net.classicremastered.minecraft.render.ShapeRenderer;
@@ -78,8 +79,8 @@ public class InventoryScreen extends CraftingContainerScreen {
         return gridTop() + 58;
     }
 
-    private CraftingManager.ItemStack craftResult() {
-        return CraftingManager.getInstance().findMatchingRecipe(craftingIds, 2);
+    private Recipe craftResult() {
+        return CraftingManager.getInstance().findMatchingRecipe(craftingIds, craftingCounts, 2);
     }
 
     private void clickCraftSlot(int slot, int button) {
@@ -110,12 +111,12 @@ public class InventoryScreen extends CraftingContainerScreen {
     private void takeCraftResult() {
         var result = craftResult();
         if (result == null
-                || carriedId > 0 && carriedId != result.id
+                || carriedId > 0 && carriedId != result.resultId
                 || carriedCrate != null
-                || carriedCnt + result.count > maxStackFor(result.id)) return;
-        carriedId = result.id;
-        carriedCnt += result.count;
-        CraftingManager.consumeIngredients(craftingIds, craftingCounts);
+                || carriedCnt + result.resultCount > maxStackFor(result.resultId)) return;
+        carriedId = result.resultId;
+        carriedCnt += result.resultCount;
+        result.consume(craftingIds, craftingCounts, 2);
     }
 
     @Override
@@ -343,6 +344,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         final int y0 = panelTop();
 
         boolean creative = creativeInventoryLayout();
+        Recipe result = creative ? null : craftResult();
         drawInventoryBackground();
         GL11.glColor4f(1, 1, 1, 1);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
@@ -366,9 +368,8 @@ public class InventoryScreen extends CraftingContainerScreen {
                         x0 + CRAFT_X + i % 2 * CELL,
                         y0 + CRAFT_Y + i / 2 * CELL);
             }
-            var result = craftResult();
             if (result != null)
-                drawRecipeItem(result.id, result.count, x0 + RESULT_X, y0 + RESULT_Y);
+                drawRecipeItem(result.resultId, result.resultCount, x0 + RESULT_X, y0 + RESULT_Y);
         }
         for (int slot = 0; slot < ARMOR_SLOTS.length; slot++) {
             int sx = armorX(slot), sy = armorY(slot);
@@ -381,34 +382,50 @@ public class InventoryScreen extends CraftingContainerScreen {
             }
         }
         int hover = renderPlayerInventory(mouseX, mouseY);
-        Inventory inv = minecraft.player.inventory;
-        int n = inv.totalSize();
         boolean depthWas = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
         GL11.glDisable(GL11.GL_DEPTH_TEST);
-        int tooltipRaw = hover >= 0 && hover < n ? inv.getId(hover) : -1;
-        int gearSlot = armorSlotAt(mouseX, mouseY);
-        if (gearSlot >= 0) tooltipRaw = minecraft.player.equipment[gearSlot];
         if (!creative) {
             drawRecipeBook(y0, 2, craftingIds, craftingCounts);
             drawRecipeRequirements(
                     x0 + CRAFT_X, y0 + CRAFT_Y, 2, craftingIds, craftingCounts, mouseX, mouseY);
             drawRecipeBookButton(mouseX, mouseY, x0 + BOOK_X, y0 + BOOK_Y);
         }
-        if (carriedId <= 0 && !hasCatalogCursor() && tooltipRaw > 0) {
-            ItemTooltip.draw(
-                    this,
-                    tooltipRaw,
-                    gearSlot < 0 && hover >= 0 ? inv.crate(hover) : null,
-                    gearSlot >= 0
-                            ? Equipment.wear(minecraft.player, gearSlot)
-                            : hover >= 0 ? inv.armorWear(hover) : 0,
-                    mouseX,
-                    mouseY);
+        if (!hasCarriedStack() && !hasCatalogCursor()) {
+            drawHoveredItem(hover, result, mouseX, mouseY);
         }
         renderInventoryExtras(mouseX, mouseY);
         renderCarriedStack(mouseX, mouseY);
         if (depthWas) GL11.glEnable(GL11.GL_DEPTH_TEST);
         super.render(mouseX, mouseY);
+    }
+
+    private void drawHoveredItem(int inventorySlot, Recipe result, int x, int y) {
+        Inventory inventory = minecraft.player.inventory;
+        int gearSlot = armorSlotAt(x, y);
+        if (inventorySlot >= 0 && inventory.getId(inventorySlot) > 0) {
+            ItemTooltip.draw(
+                    this,
+                    inventory.getId(inventorySlot),
+                    inventory.crate(inventorySlot),
+                    inventory.armorWear(inventorySlot),
+                    x,
+                    y);
+        } else if (gearSlot >= 0 && minecraft.player.equipment[gearSlot] > 0) {
+            ItemTooltip.draw(
+                    this,
+                    minecraft.player.equipment[gearSlot],
+                    null,
+                    Equipment.wear(minecraft.player, gearSlot),
+                    x,
+                    y);
+        } else if (!creativeInventoryLayout()) {
+            int ingredient = craftSlotAt(x, y, panelLeft(), panelTop());
+            if (ingredient >= 0 && craftingIds[ingredient] > 0) {
+                ItemTooltip.draw(this, craftingIds[ingredient], null, x, y);
+            } else if (result != null && isCraftResultAt(x, y)) {
+                ItemTooltip.draw(this, result.resultId, null, x, y);
+            }
+        }
     }
 
     protected final int renderPlayerInventory(int mouseX, int mouseY) {
@@ -699,6 +716,10 @@ public class InventoryScreen extends CraftingContainerScreen {
         return (x - startX) / CELL + (y - startY) / CELL * 2;
     }
 
+    private boolean isCraftResultAt(int x, int y) {
+        return inside(x, y, panelLeft() + RESULT_X - 1, panelTop() + RESULT_Y - 1, CELL, CELL);
+    }
+
     private int dragSlotAt(int x, int y, boolean includeResult) {
         int size = minecraft.player.inventory.totalSize();
         if (isRecipeBookArea(x, y, panelTop(), 2)) return -1;
@@ -708,9 +729,7 @@ public class InventoryScreen extends CraftingContainerScreen {
         if (craftSlot >= 0) return size + craftSlot;
         int armorSlot = armorSlotAt(x, y);
         if (armorSlot >= 0) return size + craftingIds.length + armorSlot;
-        if (includeResult
-                && inside(
-                        x, y, panelLeft() + RESULT_X - 1, panelTop() + RESULT_Y - 1, CELL, CELL)) {
+        if (includeResult && isCraftResultAt(x, y)) {
             return size + craftingIds.length + ARMOR_SLOTS.length;
         }
         return -1;
@@ -733,7 +752,7 @@ public class InventoryScreen extends CraftingContainerScreen {
                     clickCraftSlot(craftSlot, button);
                     return;
                 }
-                if (inside(mx, my, gx + RESULT_X - 1, gy + RESULT_Y - 1, CELL, CELL)) {
+                if (isCraftResultAt(mx, my)) {
                     takeCraftResult();
                     return;
                 }

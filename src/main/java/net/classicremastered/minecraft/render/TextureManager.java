@@ -84,7 +84,10 @@ public class TextureManager {
                         }
                     }
 
-                    load(img, textureID, file.startsWith("/gui/hud/"));
+                    load(
+                            img,
+                            textureID,
+                            file.startsWith("/gui/hud/") || file.equals("/terrain/earth.png"));
                     textures.put(file, textureID);
 
                 } else if (file.endsWith(".zip")) {
@@ -100,6 +103,18 @@ public class TextureManager {
                 load(getMissingTexture(), idBuffer.get(0));
                 return idBuffer.get(0);
             }
+        }
+    }
+
+    void bindBlockAtlas(boolean allowAnisotropy) {
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, load(BlockTextureAtlas.RESOURCE));
+        if (settings.smoothing > 0
+                && settings.anisotropic > 0
+                && GLContext.getCapabilities().GL_EXT_texture_filter_anisotropic) {
+            GL11.glTexParameteri(
+                    GL11.GL_TEXTURE_2D,
+                    EXTTextureFilterAnisotropic.GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                    allowAnisotropy ? 16 : 1);
         }
     }
 

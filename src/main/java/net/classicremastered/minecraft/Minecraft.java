@@ -7,6 +7,7 @@ import net.classicremastered.minecraft.gamemode.SurvivalGameMode;
 import net.classicremastered.minecraft.gui.*;
 import net.classicremastered.minecraft.lang.LanguageManager;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.level.LevelInfiniteFlat;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.LevelIO;
@@ -491,38 +492,7 @@ public final class Minecraft implements Runnable {
 
                             // Let mods tick once per frame (after LWJGL is ready)
                             com.mcraft.api.hooks.Hooks.onClientTick(this);
-                            if (this.soundPC != null && this.player != null) {
-                                // Update distance for Far Lands checks
-                                long dist =
-                                        (long)
-                                                Math.max(
-                                                        Math.abs(this.player.x),
-                                                        Math.abs(this.player.z));
-                                this.soundPC.playerDist = dist;
-                                this.soundPC.farlandsActive = (dist >= 1_000_000);
-
-                                // Tick audio corruption
-                                this.soundPC.tickFarlandsAudio();
-                                String msg = this.soundPC.maybeGetHerobrineMessage();
-                                if (msg != null && this.hud != null) {
-                                    this.hud.addChat(msg);
-                                }
-                            }
-                            if (this.soundPC.shouldSpawnHerobrineFigure()
-                                    && this.level != null
-                                    && this.player != null) {
-                                FakeHerobrine ghost = new FakeHerobrine(this.level);
-
-                                // Pick random position ~20–40 blocks away
-                                double angle = this.soundPC.rng.nextDouble() * Math.PI * 2;
-                                double dist = 20 + this.soundPC.rng.nextDouble() * 20;
-                                float x = (float) (this.player.x + Math.cos(angle) * dist);
-                                float z = (float) (this.player.z + Math.sin(angle) * dist);
-                                int y = this.level.getHighestTile((int) x, (int) z);
-
-                                ghost.setPos(x, y, z);
-                                this.level.addEntity(ghost);
-                            }
+                            tickFarLandsEffects();
                             ClientFrameRenderer.render(this);
 
                             if (this.settings.limitFramerate) {
@@ -809,7 +779,7 @@ public final class Minecraft implements Runnable {
             } catch (Throwable error) {
                 System.err.println("[Crash] Could not close the inventory before saving: " + error);
             }
-            File destination = world.saveFile;
+            File destination = StickmansHouse.homeLevel(world).saveFile;
             if (destination == null) {
                 File levels = new File(getMinecraftDir(), "levels");
                 String id = java.util.UUID.randomUUID().toString().substring(0, 8);
@@ -1116,6 +1086,30 @@ public final class Minecraft implements Runnable {
         }
     }
 
+    private void tickFarLandsEffects() {
+        if (soundPC == null) return;
+        if (level == null || player == null || level.isStickmansHouse()) {
+            soundPC.farlandsActive = false;
+            soundPC.playerDist = 0;
+            return;
+        }
+
+        soundPC.playerDist = (long) Math.max(Math.abs(player.x), Math.abs(player.z));
+        soundPC.farlandsActive = soundPC.playerDist >= 1_000_000;
+        soundPC.tickFarlandsAudio();
+        String message = soundPC.maybeGetHerobrineMessage();
+        if (message != null && hud != null) hud.addChat(message);
+        if (!soundPC.shouldSpawnHerobrineFigure()) return;
+
+        FakeHerobrine ghost = new FakeHerobrine(level);
+        double angle = soundPC.rng.nextDouble() * Math.PI * 2;
+        double distance = 20 + soundPC.rng.nextDouble() * 20;
+        float x = (float) (player.x + Math.cos(angle) * distance);
+        float z = (float) (player.z + Math.sin(angle) * distance);
+        ghost.setPos(x, level.getHighestTile((int) x, (int) z), z);
+        level.addEntity(ghost);
+    }
+
     public final boolean isOnline() {
         return this.networkManager != null;
     }
@@ -1192,9 +1186,11 @@ public final class Minecraft implements Runnable {
     }
 
     public final void setLevel(Level var1) {
+        var1 = StickmansHouse.activeLevel(var1);
         net.classicremastered.minecraft.chat.commands.SpawnMobCommand.worldChanged(this);
         previousGameMode = null;
         debugBlockTarget = null;
+        selected = null;
         BowItem.cancelDraw(this.player);
         if (this.soundPC != null) this.soundPC.stopFarLandsSoundtrack();
         if (isDebugger()) System.out.println("[setLevel] JDWP detected (debugger).");
@@ -1207,6 +1203,7 @@ public final class Minecraft implements Runnable {
         }
 
         boolean changingWorld = this.level != var1;
+        if (changingWorld) worldPreview.clear();
         this.level = var1;
 
         if (var1 != null) {
@@ -1349,17 +1346,40 @@ public final class Minecraft implements Runnable {
         System.gc();
     }
 
+    public void respawnPlayer() {
+        if (level != null && level.isStickmansHouse() && StickmansHouse.homeLevel(level) != level) {
+            Level home = StickmansHouse.travel(level, player);
+            player.resetPos();
+            setLevel(home);
+        } else {
+            player.resetPos();
+        }
+    }
+
     public boolean saveCurrentLevel() {
-        if (crashLatched
-                || level == null
-                || isOnline()
-                || level.isNetworkMode()
-                || level.saveFile == null) {
+        Level home = StickmansHouse.homeLevel(level);
+        if (crashLatched || level == null || isOnline() || level.isNetworkMode()) {
             return true;
         }
         returnInventoryBeforeSave();
-        return levelIo.save(level, level.saveFile);
+        if (home.saveFile == null) {
+            try {
+                home.saveFile =
+                        net.classicremastered.minecraft.level.WorldStorage.create(
+                                getMinecraftDir(),
+                                home.name == null || home.name.isBlank() ? "New World" : home.name);
+            } catch (java.io.IOException | RuntimeException failure) {
+                System.err.println("Could not create world folder: " + failure.getMessage());
+                return false;
+            }
+        }
+        if (!levelIo.save(home, home.saveFile)) return false;
+        worldPreview.save(home, level);
+        return true;
     }
+
+    final net.classicremastered.minecraft.client.screenshot.WorldPreview worldPreview =
+            new net.classicremastered.minecraft.client.screenshot.WorldPreview();
 
     private void prepareInfiniteTerrain(Level world) {
         var chunks =

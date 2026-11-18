@@ -12,7 +12,8 @@ public final class GameOverScreen extends GuiScreen {
         this.buttons.add(new Button(0, this.width / 2 - 100, this.height / 4 + 48, "Respawn"));
 
         // Generate new level
-        this.buttons.add(new Button(1, this.width / 2 - 100, this.height / 4 + 72, "Generate new level..."));
+        this.buttons.add(
+                new Button(1, this.width / 2 - 100, this.height / 4 + 72, "Generate new level..."));
 
         // Load level
         Button loadBtn = new Button(2, this.width / 2 - 100, this.height / 4 + 96, "Load level...");
@@ -22,9 +23,7 @@ public final class GameOverScreen extends GuiScreen {
     @Override
     protected final void onButtonClick(Button button) {
         if (button.id == 0) {
-            // Respawn: reset player position and close screen
-            this.minecraft.player.resetPos();
-            this.minecraft.player.health = 20;
+            this.minecraft.respawnPlayer();
             this.minecraft.setCurrentScreen(null);
         }
 

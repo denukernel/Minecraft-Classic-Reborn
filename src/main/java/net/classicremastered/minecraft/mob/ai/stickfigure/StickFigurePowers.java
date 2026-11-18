@@ -3,8 +3,11 @@ package net.classicremastered.minecraft.mob.ai.stickfigure;
 import net.classicremastered.minecraft.*;
 import net.classicremastered.minecraft.entity.*;
 import net.classicremastered.minecraft.level.MobSpawner;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.level.itemstack.*;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.SandBlock;
+import net.classicremastered.minecraft.level.tile.TNTBlock;
 import net.classicremastered.minecraft.mob.*;
 import net.classicremastered.minecraft.model.StickFigureModel;
 import net.classicremastered.minecraft.model.Vec3D;
@@ -50,6 +53,7 @@ public final class StickFigurePowers implements java.io.Serializable {
     private transient Player victim;
     private transient BlockThrow heldBlock;
     private transient Mob pendingMob;
+    private transient boolean aimingAtTntPillar;
     private static final Map<Player, StickFigure> physicsVictims = new java.util.WeakHashMap<>();
     private int physicsCooldown;
     private boolean stolenPhysicsGun;
@@ -57,6 +61,7 @@ public final class StickFigurePowers implements java.io.Serializable {
     private transient boolean jumpWasDown;
     private float anchorX, anchorY, anchorZ;
     private float rushX, rushZ;
+    private int breakCooldown;
 
     private record BlockThrow(int id, int size, List<int[]> cells) {}
 
@@ -97,6 +102,7 @@ public final class StickFigurePowers implements java.io.Serializable {
         victim = null;
         heldBlock = null;
         pendingMob = null;
+        aimingAtTntPillar = false;
         phase = Phase.IDLE;
         phaseTicks = 0;
         boss.strikeTicks = 0;
@@ -139,6 +145,7 @@ public final class StickFigurePowers implements java.io.Serializable {
         return target != null
                 && !target.removed
                 && target.level == boss.level
+                && StickmansHouse.canFightBoss(boss.level, target)
                 && (!(target instanceof Mob mob) || mob.health > 0)
                 && !CreativeModeHelper.shouldIgnoreTarget(target);
     }
@@ -178,6 +185,7 @@ public final class StickFigurePowers implements java.io.Serializable {
         if (rushCooldown > 0) rushCooldown--;
         if (comboCooldown > 0) comboCooldown--;
         if (fireballCooldown > 0) fireballCooldown--;
+        if (breakCooldown > 0) breakCooldown--;
         if (boss.isEnraged()) throwCooldown = Math.min(throwCooldown, boss.attackInterval(60));
         if (boss.health <= 0
                 || boss.removed
@@ -320,7 +328,12 @@ public final class StickFigurePowers implements java.io.Serializable {
             stopMoving(boss);
             if (phaseTicks < THROW_RELEASE_TICK) {
                 if ((heldBlock == null && pendingMob == null) || !validThrowTarget(boss, target)) {
-                    throwCooldown = 20;
+                    throwCooldown = boss.attackInterval(180);
+                    cancel(boss);
+                    return false;
+                }
+                if (!canThrowAt(boss, target)) {
+                    throwCooldown = boss.attackInterval(180);
                     cancel(boss);
                     return false;
                 }
@@ -338,11 +351,12 @@ public final class StickFigurePowers implements java.io.Serializable {
                     }
                 }
                 if (!released && heldBlock != null && heldBlock.size() > 1) {
-                    released = releaseBlock(boss, target, findBlock(boss, heldBlock.size()));
+                    released =
+                            releaseBlock(boss, target, findBlock(boss, target, heldBlock.size()));
                 }
-                if (!released) released = releaseBlock(boss, target, findBlock(boss, 1));
+                if (!released) released = releaseBlock(boss, target, findBlock(boss, target, 1));
                 if (!released) {
-                    throwCooldown = 20;
+                    throwCooldown = boss.attackInterval(180);
                     cancel(boss);
                     return false;
                 }
@@ -360,8 +374,13 @@ public final class StickFigurePowers implements java.io.Serializable {
                 cancel(boss);
                 return false;
             }
+            if (aimingAtTntPillar) stopMoving(boss);
             if (++phaseTicks >= 12) {
-                if (boss.isEnraged()) shootFireball(boss, target);
+                if (aimingAtTntPillar) {
+                    Vec3D aim = tntPillarAim(boss, target);
+                    if (aim != null) launchFireball(boss, fireballOrigin(boss), aim, true);
+                    aimingAtTntPillar = false;
+                } else if (boss.isEnraged()) shootFireball(boss, target);
                 fireballCooldown = boss.attackInterval(50);
                 phase = Phase.IDLE;
                 phaseTicks = 0;
@@ -371,6 +390,17 @@ public final class StickFigurePowers implements java.io.Serializable {
         if (target == null || target.removed || CreativeModeHelper.shouldIgnoreTarget(target))
             return false;
         if (target instanceof Player player && beginPhysicsGun(boss, player)) return true;
+        if (fireballCooldown == 0) {
+            Vec3D aim = tntPillarAim(boss, target);
+            if (aim != null) {
+                aimingAtTntPillar = true;
+                faceThrow(boss, aim.x - boss.x, aim.z - boss.z);
+                stopMoving(boss);
+                beginFireball(boss);
+                return true;
+            }
+        }
+        if (breakCooldown == 0 && breakPlayerSupport(boss, target)) return true;
         dodgeArrow(boss);
         float distance = boss.distanceTo(target);
         boolean canStartThrow =
@@ -389,10 +419,7 @@ public final class StickFigurePowers implements java.io.Serializable {
                 && distance > 3
                 && distance < 40
                 && visible(boss, target)) {
-            phase = Phase.FIREBALL;
-            phaseTicks = 0;
-            boss.strikeTicks = 14;
-            sound(boss, "random/fuse", 1.7f);
+            beginFireball(boss);
             return true;
         }
         if (comboCooldown == 0
@@ -402,13 +429,13 @@ public final class StickFigurePowers implements java.io.Serializable {
                 && beginCombo(boss, player)) return true;
         if (canStartThrow) {
             if (boss.isEnraged() && random.nextInt(boss.attackInterval(6)) == 0)
-                heldBlock = findBlock(boss, 2);
-            if (heldBlock == null) heldBlock = findBlock(boss, 1);
+                heldBlock = findBlock(boss, target, 2);
+            if (heldBlock == null) heldBlock = findBlock(boss, target, 1);
             if (heldBlock != null) {
                 beginThrow(boss, target);
                 return true;
             }
-            throwCooldown = 20;
+            throwCooldown = boss.attackInterval(180);
         }
         if (rushCooldown == 0
                 && distance > 4
@@ -431,6 +458,87 @@ public final class StickFigurePowers implements java.io.Serializable {
 
     private static boolean jumpDown(Player player) {
         return player.input != null && player.input.jumping;
+    }
+
+    public record SupportColumn(int x, int z, int bottom, int top) {}
+
+    public static SupportColumn findSupport(StickFigure boss, Entity target) {
+        if (!(target instanceof Player)
+                || CombatRules.difficulty(boss.level).compareTo(Difficulty.HARD) < 0
+                || !validThrowTarget(boss, target)
+                || target.bb.y0 - boss.bb.y0 < .75f) return null;
+        int floor = (int) Math.floor(boss.bb.y0);
+        int top = (int) Math.floor(target.bb.y0 - .01f);
+        if (top < floor || top >= boss.level.depth) return null;
+        for (int x = (int) Math.floor(target.bb.x0);
+                x <= (int) Math.floor(target.bb.x1 - .001f);
+                x++) {
+            for (int z = (int) Math.floor(target.bb.z0);
+                    z <= (int) Math.floor(target.bb.z1 - .001f);
+                    z++) {
+                int bottom = top;
+                while (bottom >= floor && breakableSupport(boss, x, bottom, z) != null) bottom--;
+                if (bottom < top && bottom + 1 <= floor + 2)
+                    return new SupportColumn(x, z, bottom + 1, top);
+            }
+        }
+        return null;
+    }
+
+    private static Block breakableSupport(StickFigure boss, int x, int y, int z) {
+        int id = boss.level.getTile(x, y, z);
+        Block block = id > 0 ? Block.blocks[id] : null;
+        if (block == null
+                || block == Block.BEDROCK
+                || block.getHardness() < 0
+                || block.getCollisionBox(x, y, z) == null
+                || block == Block.OBSIDIAN
+                        && boss.level.isStickmansHouse()
+                        && !StickmansHouse.isLooseObsidian(x, y, z)) return null;
+        return block;
+    }
+
+    private boolean breakPlayerSupport(StickFigure boss, Entity target) {
+        if (Math.hypot(target.x - boss.x, target.z - boss.z) > 4) return false;
+        SupportColumn support = findSupport(boss, target);
+        if (support == null) return false;
+        int x = support.x(), z = support.z();
+        Vec3D hand = new Vec3D(boss.x, boss.bb.y0 + 1.5f, boss.z);
+        int y = support.top();
+        Block topBlock = breakableSupport(boss, x, y, z);
+        boolean reachable = false;
+        int lastReachableY = Math.min(y, (int) Math.floor(hand.y + 4.5f));
+        for (int anchor = support.bottom(); anchor <= lastReachableY; anchor++) {
+            Block block = breakableSupport(boss, x, anchor, z);
+            var bounds = block.getCollisionBox(x, anchor, z);
+            Vec3D center = new Vec3D(x + .5f, (bounds.y0 + bounds.y1) * .5f, z + .5f);
+            if (hand.distance(center) > 4.5f) continue;
+            MovingObjectPosition hit = boss.level.clip(hand, center, true);
+            if (hit == null || hit.x != x || hit.y != anchor || hit.z != z) continue;
+            reachable = true;
+            if (block == topBlock && (block == Block.TNT || block instanceof SandBlock)) {
+                y = anchor;
+                break;
+            }
+        }
+        if (!reachable) return false;
+        // Pull down rigid columns from the top so removing their base cannot leave them floating.
+        Block block = breakableSupport(boss, x, y, z);
+        if (block == Block.TNT) {
+            if (!TNTBlock.ignite(boss.level, x, y, z, boss)) return false;
+        } else {
+            if (!boss.level.setTile(x, y, z, 0)) return false;
+            block.onBreak(boss.level, x, y, z);
+            if (boss.level.particleEngine != null)
+                block.spawnBreakParticles(boss.level, x, y, z, boss.level.particleEngine);
+        }
+        faceThrow(boss, x + .5f - boss.x, z + .5f - boss.z);
+        boss.strikeTicks = 12;
+        boss.kicking = false;
+        breakCooldown = boss.attackInterval(20);
+        stopMoving(boss);
+        sound(boss, "mob/irongolem/hit", .8f);
+        return true;
     }
 
     private void escapeCombo(StickFigure boss) {
@@ -486,6 +594,17 @@ public final class StickFigurePowers implements java.io.Serializable {
             cancel(boss);
             return true;
         }
+        if (boss.level.isStickmansHouse()
+                && !net.classicremastered.minecraft.path.Pathfinder.canWalkStraight(
+                        boss.level,
+                        boss,
+                        boss.x + rushX * .65f,
+                        boss.bb.y0,
+                        boss.z + rushZ * .65f)) {
+            stopMoving(boss);
+            cancel(boss);
+            return true;
+        }
         faceThrow(boss, rushX, rushZ);
         boss.xd = rushX * .52f;
         boss.zd = rushZ * .52f;
@@ -511,10 +630,8 @@ public final class StickFigurePowers implements java.io.Serializable {
                 || physicsVictims.containsKey(player)
                 || player.bossComboOwner != null
                 || player.inventory.getSelected() != 266
-                || !visible(boss, player))
-            return false;
-        if (!player.inventory.removeSelected(1))
-            return false;
+                || !visible(boss, player)) return false;
+        if (!player.inventory.removeSelected(1)) return false;
         PhysicsGunItem.drop(player);
         victim = player;
         stolenPhysicsGun = true;
@@ -536,6 +653,7 @@ public final class StickFigurePowers implements java.io.Serializable {
                 && boss.health > 0
                 && !boss.removed
                 && player.level == boss.level
+                && StickmansHouse.canFightBoss(boss.level, player)
                 && boss.distanceTo(player) <= PhysicsGunItem.MAX_RANGE
                 && player.riding == null
                 && player.rider == null
@@ -545,8 +663,7 @@ public final class StickFigurePowers implements java.io.Serializable {
 
     public static boolean movePhysicsVictim(Player player) {
         StickFigure boss = physicsVictims.get(player);
-        if (boss == null)
-            return false;
+        if (boss == null) return false;
         if (!(boss.ai instanceof StickFigureAI ai)) {
             physicsVictims.remove(player);
             return false;
@@ -560,26 +677,31 @@ public final class StickFigurePowers implements java.io.Serializable {
         }
         float sway = (float) Math.sin(powers.phaseTicks * .13f) * 3;
         Vec3D start = new Vec3D(boss.x, boss.bb.y0 + 1.5f, boss.z);
-        Vec3D target = new Vec3D(
-                boss.x + powers.anchorX * 4 - powers.anchorZ * sway,
-                boss.bb.y0 + 2.5f + (float) Math.sin(powers.phaseTicks * .09f),
-                boss.z + powers.anchorZ * 4 + powers.anchorX * sway);
-        MovingObjectPosition wall = boss.level.clip(new Vec3D(start.x, start.y, start.z), target, true);
+        Vec3D target =
+                new Vec3D(
+                        boss.x + powers.anchorX * 4 - powers.anchorZ * sway,
+                        boss.bb.y0 + 2.5f + (float) Math.sin(powers.phaseTicks * .09f),
+                        boss.z + powers.anchorZ * 4 + powers.anchorX * sway);
+        MovingObjectPosition wall =
+                boss.level.clip(new Vec3D(start.x, start.y, start.z), target, true);
         if (wall != null) {
             float distance = Math.max(0, start.distance(wall.vec) - player.bbWidth - .2f);
             float fraction = distance / Math.max(.01f, start.distance(target));
-            target = start.add(
-                    (target.x - start.x) * fraction,
-                    (target.y - start.y) * fraction,
-                    (target.z - start.z) * fraction);
+            target =
+                    start.add(
+                            (target.x - start.x) * fraction,
+                            (target.y - start.y) * fraction,
+                            (target.z - start.z) * fraction);
         }
         player.xd = player.xd * .45f + (target.x - player.x) * .22f;
         player.yd = player.yd * .45f + (target.y - (player.bb.y0 + player.bb.y1) * .5f) * .22f;
         player.zd = player.zd * .45f + (target.z - player.z) * .22f;
-        float speed = (float) Math.sqrt(
-                player.xd * player.xd
-                        + player.yd * player.yd
-                        + player.zd * player.zd);
+        float speed =
+                (float)
+                        Math.sqrt(
+                                player.xd * player.xd
+                                        + player.yd * player.yd
+                                        + player.zd * player.zd);
         if (speed > .9f) {
             player.xd *= .9f / speed;
             player.yd *= .9f / speed;
@@ -592,21 +714,21 @@ public final class StickFigurePowers implements java.io.Serializable {
     }
 
     public void renderPhysicsGun(StickFigure boss, float partial) {
-        if (!stolenPhysicsGun || phase != Phase.PHYSICS_GUN || victim == null)
-            return;
+        if (!stolenPhysicsGun || phase != Phase.PHYSICS_GUN || victim == null) return;
         float yaw = boss.yRotO + (boss.yRot - boss.yRotO) * partial;
         double angle = Math.toRadians(yaw);
         float x = boss.xo + (boss.x - boss.xo) * partial;
         float y = boss.yo + (boss.y - boss.yo) * partial + boss.bb.y0 - boss.y + 1.3f;
         float z = boss.zo + (boss.z - boss.zo) * partial;
-        var pose = new net.classicremastered.minecraft.render.GunRenderer.Pose(
-                x + (float) Math.cos(angle) * .25f - (float) Math.sin(angle) * .4f,
-                y,
-                z + (float) Math.sin(angle) * .25f + (float) Math.cos(angle) * .4f,
-                180 - yaw,
-                0,
-                0,
-                .68f);
+        var pose =
+                new net.classicremastered.minecraft.render.GunRenderer.Pose(
+                        x + (float) Math.cos(angle) * .25f - (float) Math.sin(angle) * .4f,
+                        y,
+                        z + (float) Math.sin(angle) * .25f + (float) Math.cos(angle) * .4f,
+                        180 - yaw,
+                        0,
+                        0,
+                        .68f);
         org.lwjgl.opengl.GL11.glPushMatrix();
         try {
             pose.apply();
@@ -627,17 +749,20 @@ public final class StickFigurePowers implements java.io.Serializable {
         List<Entity> nearby =
                 boss.level.blockMap.getEntities(boss, boss.bb.grow(7, 3, 7), new ArrayList<>());
         for (Entity entity : nearby)
-            if (entity instanceof Arrow arrow && !arrow.removed && !arrow.isEmbedded()
+            if (entity instanceof Arrow arrow
+                    && !arrow.removed
+                    && !arrow.isEmbedded()
                     && arrow.getOwner() != boss) {
-                float vx = arrow.xd, vz = arrow.zd, speed = vx * vx + vz * vz,
-                      dx = arrow.x - boss.x, dz = arrow.z - boss.z;
-                if (speed < .001f || dx * vx + dz * vz >= 0)
-                    continue;
+                float vx = arrow.xd,
+                        vz = arrow.zd,
+                        speed = vx * vx + vz * vz,
+                        dx = arrow.x - boss.x,
+                        dz = arrow.z - boss.z;
+                if (speed < .001f || dx * vx + dz * vz >= 0) continue;
                 float time = -(dx * vx + dz * vz) / speed;
                 if (time > 12
                         || (dx + vx * time) * (dx + vx * time) + (dz + vz * time) * (dz + vz * time)
-                                > 1.5f)
-                    continue;
+                                > 1.5f) continue;
                 boss.evadeArrow(arrow);
             }
     }
@@ -645,28 +770,99 @@ public final class StickFigurePowers implements java.io.Serializable {
     public boolean shootFireball(StickFigure boss, Entity target) {
         if (!boss.isEnraged() || !validThrowTarget(boss, target) || !visible(boss, target))
             return false;
-        float px = boss.x, py = boss.bb.y0 + 1.4f, pz = boss.z;
-        float dx = target.x - px,
-                dy = target.bb.y0 + target.bbHeight * .5f - py,
-                dz = target.z - pz,
+        return launchFireball(
+                boss,
+                fireballOrigin(boss),
+                new Vec3D(target.x, target.bb.y0 + target.bbHeight * .5f, target.z),
+                false);
+    }
+
+    private void beginFireball(StickFigure boss) {
+        phase = Phase.FIREBALL;
+        phaseTicks = 0;
+        boss.strikeTicks = 14;
+        sound(boss, "random/fuse", 1.7f);
+    }
+
+    private static Vec3D fireballOrigin(StickFigure boss) {
+        return new Vec3D(boss.x, boss.bb.y0 + 1.4f, boss.z);
+    }
+
+    private static Vec3D tntPillarAim(StickFigure boss, Entity target) {
+        if (!boss.level.isStickmansHouse()
+                || CombatRules.difficulty(boss.level).compareTo(Difficulty.HARD) < 0
+                || !(target instanceof Player)
+                || !target.onGround
+                || !validThrowTarget(boss, target)) return null;
+        int top = (int) Math.floor(target.bb.y0 - .01f);
+        for (int x = (int) Math.floor(target.bb.x0);
+                x <= (int) Math.floor(target.bb.x1 - .001f);
+                x++) {
+            for (int z = (int) Math.floor(target.bb.z0);
+                    z <= (int) Math.floor(target.bb.z1 - .001f);
+                    z++) {
+                int y = top;
+                while (y >= StickmansHouse.BOSS_FLOOR_FEET
+                        && boss.level.getTile(x, y, z) == Block.TNT.id) y--;
+                int base = y + 1;
+                if (top <= base) continue;
+                Vec3D aim = clearPillarShot(boss, x, base, z);
+                if (aim != null) return aim;
+            }
+        }
+        return null;
+    }
+
+    private static Vec3D clearPillarShot(StickFigure boss, int x, int base, int z) {
+        Vec3D aim = new Vec3D(x + .5f, base + .5f, z + .5f);
+        Vec3D start = fireballOrigin(boss);
+        float distance = start.distance(aim);
+        if (distance <= 3 || distance >= 40) return null;
+
+        // Trace the aimed arc so cover between the boss and the base can stop the windup.
+        Vec3D velocity = fireballVelocity(start, aim, true);
+        Vec3D position = start;
+        float stepY = velocity.y;
+        int ticks = (int) Math.ceil(distance / 1.35f);
+        for (int i = 0; i < ticks; i++) {
+            stepY -= BossFireball.GRAVITY;
+            Vec3D next = position.add(velocity.x, stepY, velocity.z);
+            MovingObjectPosition hit =
+                    boss.level.clip(new Vec3D(position.x, position.y, position.z), next, true);
+            if (hit != null) return hit.x == x && hit.y == base && hit.z == z ? aim : null;
+            position = next;
+        }
+        return null;
+    }
+
+    private static Vec3D fireballVelocity(Vec3D start, Vec3D aim, boolean exactTicks) {
+        float dx = aim.x - start.x,
+                dy = aim.y - start.y,
+                dz = aim.z - start.z,
                 length = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (length < .01f) return false;
         float flightTicks = length / 1.35f;
+        if (exactTicks) flightTicks = (float) Math.ceil(flightTicks);
         float launchY = dy / flightTicks + BossFireball.GRAVITY * (flightTicks + 1f) * .5f;
+        return new Vec3D(dx / flightTicks, launchY, dz / flightTicks);
+    }
+
+    private static boolean launchFireball(
+            StickFigure boss, Vec3D start, Vec3D aim, boolean exactTicks) {
+        if (start.distance(aim) < .01f) return false;
         boss.level.addEntity(
                 new BossFireball(
                         boss.level,
                         boss,
-                        px,
-                        py,
-                        pz,
-                        new Vec3D(dx / flightTicks, launchY, dz / flightTicks)));
+                        start.x,
+                        start.y,
+                        start.z,
+                        fireballVelocity(start, aim, exactTicks)));
         sound(boss, "random/bow", .55f);
         return true;
     }
 
     public boolean throwLargeBlock(StickFigure boss, Entity target) {
-        return canThrowAt(boss, target) && releaseBlock(boss, target, findBlock(boss, 2));
+        return canThrowAt(boss, target) && releaseBlock(boss, target, findBlock(boss, target, 2));
     }
 
     private void beginThrow(StickFigure boss, Entity target) {
@@ -685,10 +881,10 @@ public final class StickFigurePowers implements java.io.Serializable {
             launchMob(boss, target, passive);
             return true;
         }
-        return releaseBlock(boss, target, findBlock(boss, 1));
+        return releaseBlock(boss, target, findBlock(boss, target, 1));
     }
 
-    private static BlockThrow findBlock(StickFigure boss, int size) {
+    private static BlockThrow findBlock(StickFigure boss, Entity target, int size) {
         int bx = (int) Math.floor(boss.x),
                 by = (int) Math.floor(boss.bb.y0),
                 bz = (int) Math.floor(boss.z);
@@ -698,13 +894,21 @@ public final class StickFigurePowers implements java.io.Serializable {
             for (int z = bz - reach; z <= bz + reach; z++)
                 for (int x = bx - reach; x <= bx + reach; x++) {
                     int id = boss.level.getTile(x, y, z);
-                    if (!GravityGunItem.canGrabBlock(id) || nearFootprint(boss, x, z)) continue;
+                    boolean grabbable =
+                            id == Block.OBSIDIAN.id
+                                    ? !boss.level.isStickmansHouse()
+                                            || StickmansHouse.isLooseObsidian(x, y, z)
+                                    : GravityGunItem.canGrabBlock(id);
+                    if (!grabbable || nearFootprint(boss, x, z)) continue;
                     int[] cell = {x, y, z};
-                    if (size == 1)
-                        return new BlockThrow(id, size, List.of(cell));
+                    if (size == 1) {
+                        if (prepareBlockThrow(boss, target, id, size) != null)
+                            return new BlockThrow(id, size, List.of(cell));
+                        continue;
+                    }
                     List<int[]> cells = candidates.computeIfAbsent(id, k -> new ArrayList<>());
                     cells.add(cell);
-                    if (cells.size() == 8)
+                    if (cells.size() == 8 && prepareBlockThrow(boss, target, id, size) != null)
                         return new BlockThrow(id, size, cells);
                 }
         return null;
@@ -715,8 +919,7 @@ public final class StickFigurePowers implements java.io.Serializable {
     }
 
     private static boolean releaseBlock(StickFigure boss, Entity target, BlockThrow block) {
-        if (block == null)
-            return false;
+        if (block == null) return false;
         int id = block.id();
         for (int[] cell : block.cells())
             if (nearFootprint(boss, cell[0], cell[2])
@@ -750,8 +953,7 @@ public final class StickFigurePowers implements java.io.Serializable {
 
     private static Mob findThrowableMob(StickFigure boss) {
         for (Object o : boss.level.findEntities(boss, boss.bb.grow(6, 3, 6)))
-            if (o instanceof Mob passive && canThrowMob(boss, passive))
-                return passive;
+            if (o instanceof Mob passive && canThrowMob(boss, passive)) return passive;
         return null;
     }
 
@@ -785,9 +987,10 @@ public final class StickFigurePowers implements java.io.Serializable {
         float vx = target.xd * motionScale, vz = target.zd * motionScale;
         float time = Math.max(1, ((float) Math.hypot(dx, dz) - grip.z) / speed);
         for (int i = 0; i < 5; i++)
-            time = Math.max(
-                    1,
-                    ((float) Math.hypot(dx + vx * time, dz + vz * time) - grip.z) / speed);
+            time =
+                    Math.max(
+                            1,
+                            ((float) Math.hypot(dx + vx * time, dz + vz * time) - grip.z) / speed);
         dx += vx * time;
         dz += vz * time;
         float distance = (float) Math.hypot(dx, dz);
@@ -802,9 +1005,10 @@ public final class StickFigurePowers implements java.io.Serializable {
                         (dx - offsetX) / time,
                         dy / time + BossThrownBlock.GRAVITY * (time + 1) * .5f,
                         (dz - offsetZ) / time);
-        BossThrownBlock block = size == 2
-                ? new BossThrownBlock(boss.level, boss, id, x, y, z, velocity, size)
-                : new BossThrownBlock(boss.level, boss, id, x, y, z, velocity);
+        BossThrownBlock block =
+                size == 2
+                        ? new BossThrownBlock(boss.level, boss, id, x, y, z, velocity, size)
+                        : new BossThrownBlock(boss.level, boss, id, x, y, z, velocity);
         // A clear sightline alone does not account for the width of the thrown block.
         // The giant cube needs enough room to clear the boss before it can detonate.
         var bounds = block.bb;

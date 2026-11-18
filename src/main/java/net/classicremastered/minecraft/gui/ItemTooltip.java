@@ -7,6 +7,7 @@ import net.classicremastered.minecraft.level.itemstack.PackedTurret;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
 import net.classicremastered.minecraft.mob.TurretVariant;
+
 import org.lwjgl.opengl.GL11;
 
 final class ItemTooltip {

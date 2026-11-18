@@ -7,11 +7,18 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.level.tile.Tile$SoundType;
+import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.nbt.CompoundTag;
 
 public class Chicken extends Mob {
 
+    private static final long serialVersionUID = -9079409125521296344L;
     private static final float WIDTH = .6F;
     private static final float HEIGHT = .95F;
+    private static final float CHICK_SCALE = .5F;
+    private static final int GROWTH_TICKS = 24000;
+    private int growthTicks;
+    private int eggLayTicks;
 
     @Override
     public float getRenderBrightness(float partial) {
@@ -37,6 +44,40 @@ public class Chicken extends Mob {
         initSounds();
     }
 
+    public static Chicken hatch(Level level, float x, float feetY, float z) {
+        Chicken chick = new Chicken(level, x, feetY, z);
+        chick.growthTicks = GROWTH_TICKS;
+        chick.setSize(WIDTH * CHICK_SCALE, HEIGHT * CHICK_SCALE);
+        chick.setPos(x, feetY + chick.bbHeight * .5f, z);
+        chick.persistent = true;
+        return chick;
+    }
+
+    @Override
+    public boolean isBaby() {
+        return growthTicks > 0;
+    }
+
+    @Override
+    protected float modelScale() {
+        return isBaby() ? CHICK_SCALE : super.modelScale();
+    }
+
+    @Override
+    public void savePersistence(CompoundTag tag) {
+        super.savePersistence(tag);
+        tag.putInt("GrowthTicks", growthTicks);
+        tag.putInt("EggLayTicks", eggLayTicks);
+    }
+
+    @Override
+    public void loadPersistence(CompoundTag tag) {
+        super.loadPersistence(tag);
+        growthTicks = tag.getInt("GrowthTicks");
+        eggLayTicks = tag.getInt("EggLayTicks");
+        setSize(WIDTH * modelScale(), HEIGHT * modelScale());
+    }
+
     @Override
     protected final int healthLimit() {
         return 4;
@@ -45,7 +86,7 @@ public class Chicken extends Mob {
     private void readObject(java.io.ObjectInputStream in)
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
-        setSize(WIDTH, HEIGHT);
+        setSize(WIDTH * modelScale(), HEIGHT * modelScale());
         initSounds();
     }
 
@@ -83,6 +124,40 @@ public class Chicken extends Mob {
 
         this.wingSpeed *= 0.9F;
         this.wingRotation += this.wingSpeed * 2.0F;
+
+        if (health > 0 && !removed && !level.isNetworkMode()) {
+            if (isBaby()) tickGrowth();
+            else if (level.doMobLoot && riding == null && rider == null) tickEggLaying();
+        }
+    }
+
+    private void tickGrowth() {
+        if (growthTicks > 1) {
+            growthTicks--;
+            return;
+        }
+
+        float feet = bb.y0;
+        AABB grown =
+                new AABB(
+                        x - WIDTH / 2,
+                        feet,
+                        z - WIDTH / 2,
+                        x + WIDTH / 2,
+                        feet + HEIGHT,
+                        z + WIDTH / 2);
+        if (!level.getCubes(grown).isEmpty()) return;
+        growthTicks = 0;
+        setSize(WIDTH, HEIGHT);
+        bb = grown;
+    }
+
+    private void tickEggLaying() {
+        if (eggLayTicks <= 0) eggLayTicks = 6000 + level.random.nextInt(6000);
+        if (--eggLayTicks == 0) {
+            ItemRegistry.bootstrap();
+            level.addEntity(new DroppedItem(level, x, bb.y0 + .2f, z, Item.EGG.id));
+        }
     }
 
     @Override
@@ -95,7 +170,7 @@ public class Chicken extends Mob {
         if (dead || removed) return;
         super.die(killer);
 
-        if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
+        if (level == null || level.isNetworkMode() || !level.doMobLoot || isBaby()) return;
         ItemRegistry.bootstrap();
         level.addEntity(new DroppedItem(level, x, y, z, Item.RAW_CHICKEN.id));
 

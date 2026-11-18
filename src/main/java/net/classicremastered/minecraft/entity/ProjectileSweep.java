@@ -8,7 +8,7 @@ import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 /** Moves a centered projectile to its first contact along the current velocity. */
 public final class ProjectileSweep {
-    public record Impact(Mob mob, Vec3D blockContact) {}
+    public record Impact(Mob mob, Vec3D blockContact, AABB blockBounds) {}
 
     private ProjectileSweep() {}
 
@@ -77,7 +77,7 @@ public final class ProjectileSweep {
                                 clamp(start.y + dy, block.y0, block.y1),
                                 clamp(start.z + dz, block.z0, block.z1))
                         : null;
-        return new Impact(victim, contact);
+        return new Impact(victim, contact, victim == null ? block : null);
     }
 
     private static float clamp(float value, float min, float max) {

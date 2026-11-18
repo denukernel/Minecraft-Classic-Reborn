@@ -1,6 +1,7 @@
 package net.classicremastered.minecraft;
 
 import net.classicremastered.minecraft.sound.PaulsCodeSoundManager;
+import net.classicremastered.minecraft.mob.Steve;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -84,24 +85,17 @@ public class ResourceDownloadThread extends Thread {
             // Register assets into PaulsCode.
             if (mc.soundPC instanceof PaulsCodeSoundManager) {
                 PaulsCodeSoundManager sm = mc.soundPC;
-                scanDir(
-                        new File(resDir, "sound"),
-                        (f, rel) -> {
-                            sm.registerSound(f, rel);
-                            sfxCount++;
-                        });
-                scanDir(
-                        new File(resDir, "newsound"),
-                        (f, rel) -> {
-                            sm.registerSound(f, rel);
-                            sfxCount++;
-                        });
-                scanDir(
-                        new File(resDir, "sound3"),
-                        (f, rel) -> {
-                            sm.registerSound(f, rel);
-                            sfxCount++;
-                        }); // <--- added
+                for (String folder : new String[] {"sound", "newsound", "sound3"}) {
+                    scanDir(
+                            new File(resDir, folder),
+                            (file, path) -> {
+                                sm.registerSound(file, path);
+                                if (path.equalsIgnoreCase("ambient/cave/cave4.ogg")) {
+                                    sm.registerSound(file, Steve.CAVE_SOUND + ".ogg");
+                                }
+                                sfxCount++;
+                            });
+                }
                 registerBundledSound(sm, "mob/cow/classic_idle.ogg");
                 registerBundledSound(sm, "mob/cow/classic_hurt.ogg");
                 for (String clip :

@@ -519,7 +519,8 @@ public abstract class Entity implements Serializable {
                 && this instanceof Mob mob
                 && mob.health > 0
                 && !(mob instanceof Player)) {
-            MobHazards.addHorizontalHeatClearance(level, bb.expand(dx, 0, dz), collisions, lift);
+            MobHazards.addHorizontalHeatClearance(
+                    level, bb, bb.expand(dx, 0, dz), collisions, lift);
         }
     }
 

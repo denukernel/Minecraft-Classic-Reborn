@@ -4,7 +4,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import net.classicremastered.minecraft.CombatRules;
+import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
+import net.classicremastered.minecraft.player.DeathMessages;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
 import net.classicremastered.minecraft.player.Player;
 
@@ -24,6 +27,13 @@ public final class StickFigure extends Mob {
 
     public boolean isEnraged() {
         return health > 0 && health <= MAX_HEALTH / 4;
+    }
+
+    @Override
+    public void hurt(Entity source, int damage) {
+        if (StickmansHouse.canFightBoss(level, DeathMessages.resolveAttacker(source))) {
+            super.hurt(source, damage);
+        }
     }
 
     public int attackDamage(int damage) {

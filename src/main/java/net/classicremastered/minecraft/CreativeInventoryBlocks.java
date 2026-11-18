@@ -21,6 +21,7 @@ public final class CreativeInventoryBlocks {
     static {
         (allowedBlocks = new ArrayList()).add(Block.STONE);
         allowedBlocks.add(Block.COBBLESTONE);
+        allowedBlocks.add(Block.BLACK_COBBLESTONE);
         allowedBlocks.add(Block.BRICK);
         allowedBlocks.add(Block.DIRT);
         allowedBlocks.add(Block.WOOD);

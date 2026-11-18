@@ -41,11 +41,12 @@ public final class DesertPyramid implements Structure {
             for (int dz = 0; dz <= 20; dz += 10) {
                 if (biomes.biomeAt(x + dx, z + dz, flat) != BiomeLevelGenerator.Biome.DESERT)
                     return null;
-                int y = flat ? 34 : biomes.groundHeight(x + dx, z + dz, depth);
+                int y = biomes.groundHeight(x + dx, z + dz, depth, flat);
                 low = Math.min(low, y);
                 high = Math.max(high, y);
             }
-        if (high - low > 6 || low < Math.max(14, depth / 2) || low + 15 >= depth) return null;
+        if (high - low > 6 || low < Math.max(14, biomes.seaLevel(depth) + 2) || low + 15 >= depth)
+            return null;
         return new Site(x, low, z);
     }
 

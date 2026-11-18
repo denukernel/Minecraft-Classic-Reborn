@@ -200,6 +200,10 @@ public final class LevelRenderer {
     }
 
     public final int sortChunks(Player player, int pass, float partial) {
+        return sortChunks(player, pass, partial, pass == 0 ? FrustrumImpl.update() : null);
+    }
+
+    public final int sortChunks(Player player, int pass, float partial, Frustrum frustum) {
         long start = System.nanoTime();
         try {
             boolean infinite = isInfiniteLevel();
@@ -216,7 +220,6 @@ public final class LevelRenderer {
                         Arrays.sort(loadQueue, new ChunkDistanceComparator(player));
                     }
                 }
-                Frustrum frustum = FrustrumImpl.update();
                 if (infinite) for (Chunk c : renderWindow) c.clip(frustum);
                 else for (Chunk c : loadQueue) c.clip(frustum);
                 updateSomeChunks();
@@ -234,13 +237,13 @@ public final class LevelRenderer {
             buffer.clear();
             if (len > 0) {
                 buffer.put(chunkDataCache, 0, len).flip();
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureManager.load(BlockTextureAtlas.RESOURCE));
+                textureManager.bindBlockAtlas(!level.isStickmansHouse());
                 GL11.glCallLists(buffer);
             }
             if (pass == 0) renderPistonMotion(partial);
             if (pass == 0)
                 net.classicremastered.minecraft.level.ChestController.render(
-                        level, textureManager, FrustrumImpl.update());
+                        level, textureManager, frustum);
             return len;
         } finally {
             net.classicremastered.minecraft.util.Debug.recordSortChunks(System.nanoTime() - start);

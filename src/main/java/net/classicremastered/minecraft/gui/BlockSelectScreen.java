@@ -254,6 +254,7 @@ public final class BlockSelectScreen extends InventoryScreen {
                 12,
                 15);
         var inv = minecraft.player.inventory;
+        int hoveredHotbarSlot = catalogHotbarSlotAt(mx, my);
         for (int slot = 0; slot < 9; slot++) {
             int sx = x + 9 + slot * 18;
             if (slot == inv.selected) drawBox(sx, y + 112, sx + 16, y + 128, 0x60FFFFFF);
@@ -272,6 +273,14 @@ public final class BlockSelectScreen extends InventoryScreen {
             renderCatalogCursor(mx, my);
         } else if (hover >= 0) {
             ItemTooltip.draw(this, ids.get(hover), null, mx, my);
+        } else if (hoveredHotbarSlot >= 0 && inv.getId(hoveredHotbarSlot) > 0) {
+            ItemTooltip.draw(
+                    this,
+                    inv.getId(hoveredHotbarSlot),
+                    inv.crate(hoveredHotbarSlot),
+                    inv.armorWear(hoveredHotbarSlot),
+                    mx,
+                    my);
         } else {
             drawTabTooltip(mx, my);
         }

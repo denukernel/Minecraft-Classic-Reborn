@@ -9,6 +9,8 @@ import net.classicremastered.minecraft.level.generator.BiomeLevelGenerator;
 import net.classicremastered.minecraft.level.generator.FlatLevelGenerator;
 import net.classicremastered.minecraft.level.generator.LevelGenerator;
 
+import java.util.Map;
+
 public final class GenerateLevelScreen extends GuiScreen {
 
     public interface Receiver {
@@ -28,7 +30,10 @@ public final class GenerateLevelScreen extends GuiScreen {
     private boolean biomes = true;
 
     private String seedString = "";
+    private String worldName = "New World";
+    private Map<String, Boolean> rules = GameRulesScreen.values(null);
     private GuiTextField seedField;
+    private GuiTextField nameField;
 
     public GenerateLevelScreen(GuiScreen parent) {
         this(parent, null);
@@ -42,55 +47,42 @@ public final class GenerateLevelScreen extends GuiScreen {
 
     @Override
     public void onOpen() {
-        this.buttons.clear();
-        int rows = 7 + (!infinite ? 1 : 0);
-        int y = Math.max(8, (this.height - rows * 24 + 4) / 2);
-        int cx = this.width / 2;
-
-        // World type selector
-        this.buttons.add(
-                new Button(2, cx - 100, y, "World Type: " + (infinite ? "Infinite" : "Finite")));
-        int line = 1;
-
-        this.buttons.add(
-                new Button(
-                        4,
-                        cx - 100,
-                        y + 24 * line++,
-                        "Terrain: " + (biomes ? "Biomes" : "Classic")));
-        if (!infinite) {
-            this.buttons.add(
-                    new Button(0, cx - 100, y + 24 * line, "World Size: " + SIZE_NAMES[sizeIndex]));
-            line++;
-        }
-        this.buttons.add(
-                new Button(1, cx - 100, y + 24 * line++, "Flat World: " + (flat ? "ON" : "OFF")));
-
-        this.buttons.add(
-                new Button(
-                        3,
-                        cx - 100,
-                        y + 24 * line,
-                        "Mode: " + (creative ? "CREATIVE" : "SURVIVAL")));
-        line++;
-
-        // Seed text field
-        this.seedField = new GuiTextField(this.fontRenderer, cx - 100, y + 24 * line, 200, 20);
-        this.seedField.setMaxLength(64);
-        this.seedField.setText(seedString != null ? seedString : "");
-        line++;
-
-        this.buttons.add(new Button(10, cx - 100, y + 24 * line, "Generate"));
-        this.buttons.add(new Button(11, cx - 100, y + 24 * (line + 1), "Cancel"));
+        buttons.clear();
+        int y = Math.max(24, (height - 174) / 2);
+        int left = width / 2 - 108;
+        int right = width / 2 + 2;
+        nameField = new GuiTextField(fontRenderer, left, y + 12, 216, 20, false);
+        nameField.setMaxLength(64);
+        nameField.setText(worldName);
+        nameField.setFocused(true);
+        seedField = new GuiTextField(fontRenderer, left, y + 48, 216, 20);
+        seedField.setMaxLength(64);
+        seedField.setText(seedString);
+        buttons.add(
+                new Button(2, left, y + 76, 106, 20, infinite ? "Infinite World" : "Finite World"));
+        buttons.add(new Button(4, right, y + 76, 106, 20, biomes ? "Biomes" : "Classic Terrain"));
+        Button size = new Button(0, left, y + 100, 106, 20, "Size: " + SIZE_NAMES[sizeIndex]);
+        size.active = !infinite;
+        buttons.add(size);
+        buttons.add(new Button(1, right, y + 100, 106, 20, "Flat: " + (flat ? "ON" : "OFF")));
+        buttons.add(new Button(3, left, y + 124, 106, 20, creative ? "Creative" : "Survival"));
+        buttons.add(new Button(5, right, y + 124, 106, 20, "Game Rules..."));
+        buttons.add(new Button(10, left, y + 152, 106, 20, "Create World"));
+        buttons.add(new Button(11, right, y + 152, 106, 20, "Cancel"));
     }
 
     @Override
     public void tick() {
         if (seedField != null) seedField.updateCursorCounter();
+        if (nameField != null) nameField.updateCursorCounter();
     }
 
     @Override
     protected void onKeyPress(char c, int key) {
+        if (nameField != null && nameField.textboxKeyTyped(c, key)) {
+            worldName = nameField.getText();
+            return;
+        }
         if (seedField != null && seedField.textboxKeyTyped(c, key)) {
             seedString = seedField.getText();
             return;
@@ -100,8 +92,9 @@ public final class GenerateLevelScreen extends GuiScreen {
 
     @Override
     protected void onMouseClick(int x, int y, int button) {
-        super.onMouseClick(x, y, button);
         if (seedField != null) seedField.mouseClicked(x, y, button);
+        if (nameField != null) nameField.mouseClicked(x, y, button);
+        super.onMouseClick(x, y, button);
     }
 
     @Override
@@ -113,13 +106,13 @@ public final class GenerateLevelScreen extends GuiScreen {
 
         if (b.id == 0) { // World Size
             sizeIndex = (sizeIndex + 1) % SIZE_NAMES.length;
-            b.text = "World Size: " + SIZE_NAMES[sizeIndex];
+            b.text = "Size: " + SIZE_NAMES[sizeIndex];
             return;
         }
 
         if (b.id == 1) { // Flat toggle (finite only)
             flat = !flat;
-            b.text = "Flat World: " + (flat ? "ON" : "OFF");
+            b.text = "Flat: " + (flat ? "ON" : "OFF");
             return;
         }
 
@@ -137,11 +130,21 @@ public final class GenerateLevelScreen extends GuiScreen {
 
         if (b.id == 3) { // Mode toggle
             creative = !creative;
-            b.text = "Mode: " + (creative ? "CREATIVE" : "SURVIVAL");
+            b.text = creative ? "Creative" : "Survival";
+            return;
+        }
+
+        if (b.id == 5) {
+            minecraft.setCurrentScreen(new GameRulesScreen(this, rules, values -> rules = values));
             return;
         }
 
         if (b.id == 10) { // Generate
+            if (receiver == null && !minecraft.saveCurrentLevel()) {
+                minecraft.setCurrentScreen(
+                        new ErrorScreen("Save failed", "The current world is still open.", this));
+                return;
+            }
             seedString = seedField.getText().trim();
             long seed = resolveSeed();
 
@@ -155,12 +158,8 @@ public final class GenerateLevelScreen extends GuiScreen {
                 this.minecraft.progressBar.setProgress(0);
                 level =
                         flat && !biomes
-                                ? new LevelInfiniteFlat(seed, 64)
-                                : new LevelInfiniteTerrain(seed, 64, biomes, flat);
-                level.name =
-                        biomes
-                                ? (flat ? "Infinite Flat Biomes" : "Infinite Biomes")
-                                : flat ? "Infinite Flat" : "Infinite Terrain";
+                                ? LevelInfiniteFlat.createOverworld(seed)
+                                : LevelInfiniteTerrain.createOverworld(seed, biomes, flat);
             } else if (biomes) {
                 level = new BiomeLevelGenerator(seed).generate(creator, size, flat);
             } else if (flat) {
@@ -172,6 +171,7 @@ public final class GenerateLevelScreen extends GuiScreen {
             }
             level.creator =
                     this.minecraft.session != null ? this.minecraft.session.username : "anonymous";
+            level.name = worldName.isBlank() ? "New World" : worldName.strip();
             applyGamemode(level);
         }
     }
@@ -201,8 +201,9 @@ public final class GenerateLevelScreen extends GuiScreen {
             level.creativeMode = false;
         }
 
-        this.minecraft.gamemode.prepareLevel(level);
         this.minecraft.gamemode.apply(level);
+        GameRulesScreen.apply(level, rules);
+        this.minecraft.gamemode.prepareLevel(level);
 
         if (receiver != null) {
             receiver.onGenerated(level);
@@ -210,6 +211,14 @@ public final class GenerateLevelScreen extends GuiScreen {
         }
 
         this.minecraft.setLevel(level);
+        if (!minecraft.saveCurrentLevel()) {
+            minecraft.setCurrentScreen(
+                    new ErrorScreen(
+                            "Save failed",
+                            "The new world is open. Save again to retry.",
+                            new PauseScreen()));
+            return;
+        }
         this.minecraft.setCurrentScreen(null);
         this.minecraft.grabMouse();
     }
@@ -222,10 +231,14 @@ public final class GenerateLevelScreen extends GuiScreen {
                 this.fontRenderer,
                 "Generate new level",
                 this.width / 2,
-                Math.max(0, ((Button) this.buttons.get(0)).y - 14),
+                Math.max(0, Math.max(24, (height - 174) / 2) - 17),
                 0xFFFFFF);
 
-        if (seedField != null) seedField.drawTextBox();
+        int y = Math.max(24, (height - 174) / 2);
+        drawString(fontRenderer, "World Name", width / 2 - 108, y, 0xDDDDDD);
+        drawString(fontRenderer, "Seed (optional)", width / 2 - 108, y + 36, 0xDDDDDD);
+        nameField.drawTextBox();
+        seedField.drawTextBox();
 
         super.render(mx, my);
     }

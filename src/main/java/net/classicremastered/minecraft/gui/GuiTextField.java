@@ -5,6 +5,7 @@ import org.lwjgl.input.Keyboard;
 public class GuiTextField {
     private final FontRenderer fontRenderer;
     private final int xPos, yPos, width, height;
+    private final boolean numeric;
     private String text = "";
     private int maxLength = 64;
     private int cursorPos = 0;
@@ -12,7 +13,13 @@ public class GuiTextField {
     private boolean focused = false;
 
     public GuiTextField(FontRenderer fontRenderer, int x, int y, int width, int height) {
+        this(fontRenderer, x, y, width, height, true);
+    }
+
+    public GuiTextField(
+            FontRenderer fontRenderer, int x, int y, int width, int height, boolean numeric) {
         this.fontRenderer = fontRenderer;
+        this.numeric = numeric;
         this.xPos = x;
         this.yPos = y;
         this.width = width;
@@ -21,7 +28,7 @@ public class GuiTextField {
 
     public void setText(String text) {
         if (text == null) text = "";
-        this.text = filterNumeric(text);
+        this.text = numeric ? filterNumeric(text) : text;
         if (this.text.length() > maxLength) this.text = this.text.substring(0, maxLength);
         this.cursorPos = this.text.length();
     }
@@ -56,7 +63,8 @@ public class GuiTextField {
         fontRenderer.render(shown, xPos + 4, yPos + (height - 8) / 2, 0xE0E0E0);
 
         if (this.focused && (this.cursorCounter / 6) % 2 == 0) {
-            int cx = xPos + 4 + fontRenderer.getWidth(shown.substring(0, cursorPos));
+            int relativeCursor = Math.max(0, cursorPos - (text.length() - shown.length()));
+            int cx = xPos + 4 + fontRenderer.getWidth(shown.substring(0, relativeCursor));
             GuiScreen.drawBox(cx, yPos + 2, cx + 1, yPos + height - 2, 0xFFD0D0D0);
         }
     }
@@ -94,8 +102,9 @@ public class GuiTextField {
             return true;
         }
 
-        // Numeric-only input
-        if ((c >= '0' && c <= '9') || (c == '-' && cursorPos == 0 && !text.contains("-"))) {
+        if (numeric
+                ? (c >= '0' && c <= '9') || (c == '-' && cursorPos == 0 && !text.contains("-"))
+                : c >= ' ' && !Character.isISOControl(c) && c != '§' && c != '&') {
             if (text.length() < maxLength) {
                 text = text.substring(0, cursorPos) + c + text.substring(cursorPos);
                 cursorPos++;

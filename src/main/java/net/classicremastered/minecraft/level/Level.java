@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.level;
 
+import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.MovingObjectPosition;
@@ -7,6 +8,7 @@ import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.GlassBlock;
 import net.classicremastered.minecraft.level.tile.LiquidBlock;
+import net.classicremastered.minecraft.level.tile.TNTBlock;
 import net.classicremastered.minecraft.mob.Creeper;
 import net.classicremastered.minecraft.mob.IronGolem;
 import net.classicremastered.minecraft.mob.Mob;
@@ -31,6 +33,9 @@ import java.util.concurrent.ThreadLocalRandom;
 public class Level implements Serializable {
 
     public static final long serialVersionUID = 0L;
+    public static final int OVERWORLD_Y_OFFSET = 75;
+    public static final int OVERWORLD_HEIGHT = OVERWORLD_Y_OFFSET + 64;
+    public static final int SANDSTONE_MIN_Y = -30;
     public int width;
     public int height;
     public int depth;
@@ -56,6 +61,21 @@ public class Level implements Serializable {
     public Long biomeSeed;
     public boolean flatBiomes;
     public boolean oceanBiomes;
+    public boolean largeBiomes;
+    // Array rows are zero-based. The origin maps them to player-facing coordinates.
+    public int verticalOffset;
+
+    public int worldY(int row) {
+        return row - verticalOffset;
+    }
+
+    public float worldY(float row) {
+        return row - verticalOffset;
+    }
+
+    public double storageY(double y) {
+        return y + verticalOffset;
+    }
 
     public RedstoneEngine redstone() {
         if (redstoneEngine == null) redstoneEngine = new RedstoneEngine(this);
@@ -102,6 +122,10 @@ public class Level implements Serializable {
     public boolean doMobLoot = true;
     public boolean keepInventory = false;
     public boolean doDayNightCycle = true;
+    private transient StickmansHouse stickmansHouse;
+    boolean stickmansHouseArena;
+    int stickmansHouseStage;
+
     public java.util.Set<net.classicremastered.minecraft.level.structure.GeneratedHouse> generatedHouses = java.util.concurrent.ConcurrentHashMap
             .newKeySet();
     private static final int SKY_DAY = 0x66B1FF; // light blue
@@ -735,8 +759,29 @@ public class Level implements Serializable {
                 : var4.isSolid();
     }
 
+    public boolean isStickmansHouse() {
+        return stickmansHouseArena;
+    }
+
+    public StickmansHouse getStickmansHouse() {
+        return stickmansHouse;
+    }
+
+    public void setStickmansHouse(StickmansHouse house) {
+        stickmansHouse = house;
+    }
+
+    public int getStickmansHouseStage() {
+        return stickmansHouseStage;
+    }
+
+    public void setStickmansHouseStage(int stage) {
+        stickmansHouseStage = stage;
+    }
+
     public void tickEntities() {
         this.blockMap.tickAll();
+        if (stickmansHouseArena) StickmansHouse.tick(this);
         lightEngine.refreshBurningEntities();
     }
 
@@ -1234,7 +1279,7 @@ public class Level implements Serializable {
     public void tickTime() {
         lastTimeOfDay = timeOfDay;
         lastDayTimeQuarter = dayTimeQuarter;
-        if (doDayNightCycle) {
+        if (doDayNightCycle && !stickmansHouseArena) {
             dayTimeQuarter += DAY_TIME_QUARTERS_PER_TICK;
             timeOfDay = (timeOfDay + dayTimeQuarter / 4) % dayLength;
             dayTimeQuarter %= 4;
@@ -1286,7 +1331,8 @@ public class Level implements Serializable {
     }
 
     public boolean hasRainbowSky() {
-        return forceRainbowSky
+        return !stickmansHouseArena
+                && forceRainbowSky
                 && player != null
                 && Math.max(Math.abs(player.x), Math.abs(player.z)) > 30_000_000;
     }
@@ -1303,6 +1349,10 @@ public class Level implements Serializable {
     }
 
     public void updateDayNightColorsSmooth() {
+        if (stickmansHouseArena) {
+            skyColor = fogColor = cloudColor = 0;
+            return;
+        }
         if (hasRainbowSky()) {
             // Rainbow sky ignores day/night cycle
             float hue = (this.tickCount % 720) / 720.0f; // cycle ~36s
@@ -2286,13 +2336,25 @@ public class Level implements Serializable {
     }
 
     protected static boolean canBlastDestroy(Block block, Entity source) {
-        return block.canExplode()
-                || (source instanceof Creeper
-                        && (block == Block.STONE || block == Block.COBBLESTONE));
+        return block != Block.OBSIDIAN
+                && (block.canExplode()
+                        || (source instanceof Creeper
+                                && (block == Block.STONE || block == Block.COBBLESTONE)));
     }
 
     public void explode(Entity var1, float var2, float var3, float var4, float var5) {
         explode(var1, var2, var3, var4, var5, true);
+    }
+
+    protected final void blastBlock(
+            Entity source, Block block, int x, int y, int z, boolean dropBlocks) {
+        if (block == Block.TNT) {
+            TNTBlock.ignite(this, x, y, z, source);
+            return;
+        }
+        if (dropBlocks) block.dropItems(this, x, y, z, .3f);
+        setTile(x, y, z, 0);
+        block.explode(this, x, y, z);
     }
 
     public void explode(
@@ -2323,10 +2385,7 @@ public class Level implements Serializable {
                             && var15 * var15 + var16 * var16 + var17 * var17 < var5 * var5
                             && (var19 = this.getTile(var12, var13, var14)) > 0
                             && canBlastDestroy(Block.blocks[var19], var1)) {
-                        if (dropBlocks)
-                            Block.blocks[var19].dropItems(this, var12, var13, var14, 0.3F);
-                        this.setTile(var12, var13, var14, 0);
-                        Block.blocks[var19].explode(this, var12, var13, var14);
+                        blastBlock(var1, Block.blocks[var19], var12, var13, var14, dropBlocks);
                     }
                 }
             }
@@ -2370,7 +2429,7 @@ public class Level implements Serializable {
     }
 
     public void setTime(int time) {
-        this.timeOfDay = Math.floorMod(time, dayLength);
+        this.timeOfDay = stickmansHouseArena ? 0 : Math.floorMod(time, dayLength);
         this.dayTimeQuarter = this.lastDayTimeQuarter = 0;
         // A time jump is immediate, rather than an interpolation across the old day.
         this.lastTimeOfDay = this.timeOfDay;
