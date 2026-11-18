@@ -37,6 +37,7 @@ final class WorldStateNbtCodec {
         if (level.verticalOffset != 0) root.putInt("MinY", level.worldY(0));
         root.putBoolean("DoMobSpawning", level.doMobSpawning);
         root.putBoolean("DoMobLoot", level.doMobLoot);
+        root.putBoolean("DoDefendersFollowPlayer", level.doDefendersFollowPlayer);
         root.putBoolean("KeepInventory", level.keepInventory);
         ListTag drops = new ListTag("DroppedEntities", (byte) 10);
         ListTag moving = new ListTag("MovingBlocks", (byte) 10);
@@ -134,6 +135,9 @@ final class WorldStateNbtCodec {
         level.redstone().load(root);
         level.doMobSpawning = !root.hasKey("DoMobSpawning") || root.getBoolean("DoMobSpawning");
         level.doMobLoot = !root.hasKey("DoMobLoot") || root.getBoolean("DoMobLoot");
+        level.doDefendersFollowPlayer =
+                !root.hasKey("DoDefendersFollowPlayer")
+                        || root.getBoolean("DoDefendersFollowPlayer");
         level.keepInventory = root.getBoolean("KeepInventory");
         ListTag drops = root.getList("DroppedEntities");
         for (int i = 0; i < drops.size(); i++) {

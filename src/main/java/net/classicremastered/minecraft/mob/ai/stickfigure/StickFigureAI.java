@@ -1,8 +1,12 @@
 package net.classicremastered.minecraft.mob.ai.stickfigure;
 
+import java.util.Map;
+import java.util.WeakHashMap;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
+import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
+import net.classicremastered.minecraft.level.itemstack.MobBattle;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
@@ -10,6 +14,7 @@ import net.classicremastered.minecraft.mob.ai.goal.combat.AvoidTntGoal;
 import net.classicremastered.minecraft.mob.ai.goal.combat.MeleeAttackGoal;
 import net.classicremastered.minecraft.mob.ai.goal.stickfigure.BossCombatGoal;
 import net.classicremastered.minecraft.mob.ai.goal.stickfigure.BossStrikeGoal;
+import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 /** Telegraph, strike, recover. Every second strike is a longer-reaching kick. */
 public final class StickFigureAI extends BasicAttackAI {
@@ -20,6 +25,8 @@ public final class StickFigureAI extends BasicAttackAI {
     private transient StickFigureMovement movement;
     private transient net.classicremastered.minecraft.mob.ai.goal.GoalSelector combatGoals;
     private transient AvoidTntGoal avoidTnt;
+    private transient Map<Entity, Integer> lastEnragedStrike;
+    private transient Entity enragedStrikeTarget;
     public transient boolean specialMovement;
 
     public StickFigureMovement movement() {
@@ -86,7 +93,8 @@ public final class StickFigureAI extends BasicAttackAI {
 
     @Override
     protected void doAttack() {
-        if (movement().recoverArenaFloor(this, (StickFigure) mob)) {
+        StickFigure boss = (StickFigure) mob;
+        if (movement().recoverArenaFloor(this, boss)) {
             if (evading && avoidTnt != null) avoidTnt.stop();
             evading = false;
             specialMovement = true;
@@ -99,7 +107,7 @@ public final class StickFigureAI extends BasicAttackAI {
             if (!wasEvading) {
                 cancelAttack();
                 if (CombatRules.difficulty(level).compareTo(Difficulty.HARD) >= 0) {
-                    ((StickFigure) mob).dodgeTicks = 0;
+                    boss.dodgeTicks = 0;
                     mob.xd = mob.zd = 0;
                 }
             }
@@ -110,12 +118,14 @@ public final class StickFigureAI extends BasicAttackAI {
         var previousTarget = attackTarget;
         var player = level.getPlayer();
         float range = getSightRange();
-        if (level.isStickmansHouse()
+        Entity enragedTarget = selectEnragedTarget(boss);
+        if (enragedTarget != null) {
+            setPursuitTarget(enragedTarget);
+        } else if (level.isStickmansHouse()
                 && player != null
                 && mob.distanceToSqr(player) > range * range
                 && Math.hypot(player.x - mob.x, player.z - mob.z) <= range
-                && StickFigurePowers.findSupport((StickFigure) mob, player) != null)
-            setPursuitTarget(player);
+                && StickFigurePowers.findSupport(boss, player) != null) setPursuitTarget(player);
         else selectCombatTarget();
         if (previousTarget != null && attackTarget == null) cancelAttack();
         if (combatGoals == null) combatGoals = createGoalSelector(new BossCombatGoal(this));
@@ -123,8 +133,59 @@ public final class StickFigureAI extends BasicAttackAI {
     }
 
     private void cancelAttack() {
+        enragedStrikeTarget = null;
         powers.cancel((StickFigure) mob);
         movement().cancel();
+    }
+
+    private Entity selectEnragedTarget(StickFigure boss) {
+        if (!boss.isEnraged()
+                || powers.blocksNavigation()
+                || MobBattle.target(boss) != null
+                || CombatRules.difficulty(level) == Difficulty.PEACEFUL) return null;
+        if (boss.strikeTicks > 0
+                && enragedStrikeTarget instanceof Mob target
+                && target.level == level
+                && !target.removed
+                && target.health > 0
+                && StickmansHouse.canFightBoss(level, target)
+                && !CreativeModeHelper.shouldIgnoreTarget(target)) return target;
+        enragedStrikeTarget = null;
+        Mob nearest = null;
+        Mob strike = null;
+        int oldestStrike = Integer.MAX_VALUE;
+        float nearestDistance = Float.POSITIVE_INFINITY;
+        float strikeDistance = Float.POSITIVE_INFINITY;
+        for (Mob attacker : StickFigurePowers.nearbyAttackers(boss)) {
+            float distance = boss.distanceToSqr(attacker);
+            if (distance < nearestDistance) {
+                nearest = attacker;
+                nearestDistance = distance;
+            }
+            if (!withinMeleeReach(attacker, 2f)) continue;
+            int lastStrike =
+                    lastEnragedStrike == null
+                            ? Integer.MIN_VALUE
+                            : lastEnragedStrike.getOrDefault(attacker, Integer.MIN_VALUE);
+            if (lastStrike < oldestStrike
+                    || lastStrike == oldestStrike && distance < strikeDistance) {
+                strike = attacker;
+                oldestStrike = lastStrike;
+                strikeDistance = distance;
+            }
+        }
+        return strike != null ? strike : nearest;
+    }
+
+    @Override
+    public boolean attack(Entity target) {
+        if (!super.attack(target)) return false;
+        if (mob instanceof StickFigure boss && boss.isEnraged()) {
+            enragedStrikeTarget = target;
+            if (lastEnragedStrike == null) lastEnragedStrike = new WeakHashMap<>();
+            lastEnragedStrike.put(target, boss.tickCount);
+        }
+        return true;
     }
 
     public void defaultAttack() {

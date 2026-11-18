@@ -16,7 +16,6 @@ public final class HouseVandalizer extends Zombie {
     public int throwTicks;
     public HouseVandalizer(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        modelName = "housevandalizer";
         textureName = "/mob/house-vandalizer.png";
         health = lastHealth = 30;
         helmet = armor = false;

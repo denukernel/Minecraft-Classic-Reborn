@@ -16,7 +16,6 @@ public class TNTThrower extends HumanoidMob {
             this.random = new Random();
 
         this.heightOffset = 1.62F;
-        this.modelName = "tntthrower";
         this.textureName = "/mob/tntthrower.png";
         this.deathScore = 250;
         this.coinDrop = 4;

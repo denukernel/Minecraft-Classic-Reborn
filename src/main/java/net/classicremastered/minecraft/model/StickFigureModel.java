@@ -25,7 +25,7 @@ public final class StickFigureModel extends Model {
             rightShin,
             leftLeg,
             leftShin;
-    private int strikeTicks, throwTicks = -1, heldBlockId, heldBlockSize;
+    private int strikeTicks, combatTicks, throwTicks = -1, heldBlockId, heldBlockSize;
     private boolean kicking, holdingPhysicsGun;
     private StickFigurePowers.Phase combatPhase = StickFigurePowers.Phase.IDLE;
     private float swimAmount, previousSwimAmount, swimBlend;
@@ -84,6 +84,7 @@ public final class StickFigureModel extends Model {
         throwTicks = -1;
         holdingPhysicsGun = false;
         combatPhase = StickFigurePowers.Phase.IDLE;
+        combatTicks = 0;
         heldBlockId = heldBlockSize = 0;
         if (entity instanceof StickFigure s) {
             strikeTicks = s.strikeTicks;
@@ -92,6 +93,7 @@ public final class StickFigureModel extends Model {
             swimAmount = s.getSwimAmount(1);
             if (s.ai instanceof StickFigureAI ai) {
                 combatPhase = ai.powers.phase;
+                combatTicks = ai.powers.phaseTicks;
                 holdingPhysicsGun = combatPhase == StickFigurePowers.Phase.PHYSICS_GUN;
                 if (combatPhase == StickFigurePowers.Phase.THROW) {
                     throwTicks = ai.powers.phaseTicks;
@@ -161,7 +163,9 @@ public final class StickFigureModel extends Model {
             rightShin.pitch = blend(rightShin.pitch, .2f + Math.max(0, -kick), swimBlend);
             leftShin.pitch = blend(leftShin.pitch, .2f + Math.max(0, kick), swimBlend);
         }
-        if (combatPhase == StickFigurePowers.Phase.RUSH_WINDUP
+        if (combatPhase == StickFigurePowers.Phase.CROWD_PUSH) {
+            animateCrowdPush(combatTicks + age - (float) Math.floor(age));
+        } else if (combatPhase == StickFigurePowers.Phase.RUSH_WINDUP
                 || combatPhase == StickFigurePowers.Phase.RAGE_TRANSITION) {
             runBounce = 0;
             runLean = combatPhase == StickFigurePowers.Phase.RUSH_WINDUP ? 20 : 8;
@@ -198,6 +202,30 @@ public final class StickFigureModel extends Model {
                 body.yaw = -reach * .2f;
             }
         }
+    }
+
+    private void animateCrowdPush(float ticks) {
+        float release = StickFigurePowers.CROWD_PUSH_RELEASE_TICK;
+        float charge = Math.min(1, ticks / release);
+        float recovery = Math.max(0, ticks - release) / StickFigurePowers.CROWD_PUSH_RECOVERY_TICKS;
+        float crouch =
+                Math.min(1, ticks / 9) * (.72f + .28f * charge) * Math.max(0, 1 - recovery * 4);
+        float spread = ticks < release ? 0 : (float) Math.sin(Math.PI * Math.min(1, recovery));
+        runLean = 23 * crouch - 7 * spread;
+        head.pitch = -.22f * crouch;
+        rightLeg.pitch = leftLeg.pitch = -.66f * crouch;
+        rightShin.pitch = leftShin.pitch = 1.28f * crouch;
+        runBounce =
+                (float)
+                        (8
+                                * MODEL_SCALE
+                                * (Math.cos(rightLeg.pitch)
+                                        + Math.cos(rightLeg.pitch + rightShin.pitch)
+                                        - 2));
+        rightArm.pitch = leftArm.pitch = -.62f * crouch - .5f * spread;
+        rightArm.roll = .1f + .18f * crouch + 1.28f * spread;
+        leftArm.roll = -rightArm.roll;
+        rightForearm.pitch = leftForearm.pitch = -1.2f * crouch;
     }
 
     private static float blend(float from, float to, float amount) {

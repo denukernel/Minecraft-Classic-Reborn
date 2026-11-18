@@ -43,7 +43,6 @@ public class NetworkPlayer extends Player {
         this.renderOffset = 0.6875F;
         (new SkinDownloadThread(this)).start();
         this.allowAlpha = true;
-        this.modelName = "humanoid";
     }
 
     public void aiStep() {

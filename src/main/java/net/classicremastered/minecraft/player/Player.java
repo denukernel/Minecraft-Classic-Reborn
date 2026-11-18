@@ -15,6 +15,7 @@ import net.classicremastered.minecraft.model.HumanoidModel;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.minecraft.render.TextureManager;
+import net.classicremastered.minecraft.render.entity.RenderManager;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.input.Keyboard;
@@ -79,7 +80,6 @@ public class Player extends Mob {
 
         this.heightOffset = 1.62F;
         this.health = 20;
-        this.modelName = "humanoid";
         this.ai = new PlayerInputAI(this);
     }
 
@@ -801,19 +801,6 @@ public class Player extends Mob {
         }
     }
 
-    @Override
-    public void render(TextureManager var1, float var2) {
-        if (spectator) return;
-        if (minecraft != null
-                && minecraft.player == this
-                && minecraft.renderer != null
-                && !minecraft.renderer.shouldRenderLocalPlayer()) return;
-        if (this.getClass() != Player.class
-                || (this.minecraft != null && this.minecraft.cameraMode > 0)) {
-            super.render(var1, var2);
-        }
-    }
-
     // --- Hard kill that bypasses Creative's "no damage" guard ---
     private void killInVoid() {
         // Clear any temporary invulnerability frames
@@ -1135,6 +1122,6 @@ public class Player extends Mob {
     }
 
     public HumanoidModel getModel() {
-        return (HumanoidModel) modelCache.getModel(this.modelName);
+        return (HumanoidModel) RenderManager.getRenderer(this).model(this);
     }
 }

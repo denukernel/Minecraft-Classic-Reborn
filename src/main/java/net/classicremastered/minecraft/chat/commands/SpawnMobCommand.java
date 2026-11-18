@@ -83,11 +83,8 @@ public class SpawnMobCommand implements Command, AliasedCommand {
 
         private Mob create(Type type, float x, float z) {
             Mob mob = MobRegistry.create(type.id(), level, x, y, z);
-            if (mob == null
-                    || mob.getRegistryId() < 0
-                    || RenderManager.getRenderer(mob) == null
-                            && !(mob instanceof CrossbowTurret)
-                            && (mob.modelName == null || mob.modelName.isEmpty())) return null;
+            if (mob == null || mob.getRegistryId() < 0 || RenderManager.getRenderer(mob) == null)
+                return null;
             if (mob instanceof CrossbowTurret turret && type.variant() != null) {
                 turret.variant = type.variant();
                 turret.owner = owner;

@@ -13,7 +13,6 @@ public class Husk extends Zombie {
 
     public Husk(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        this.modelName = "husk";          // reuse zombie model
         this.textureName = "/mob/husk.png"; // your husk texture
         // sound set defaults to zombie’s
         this.coinDrop = 2;

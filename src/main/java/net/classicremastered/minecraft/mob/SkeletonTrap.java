@@ -8,6 +8,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.model.SkeletonTrapBone;
 import net.classicremastered.minecraft.model.Vec3D;
+import net.classicremastered.minecraft.player.DeathMessages;
 import net.classicremastered.minecraft.player.Player;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 import net.classicremastered.nbt.CompoundTag;
@@ -25,7 +26,6 @@ public final class SkeletonTrap extends Skeleton {
 
     public SkeletonTrap(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        modelName = "skeleton_trap";
         textureName = "/mob/skeleton_trap.png";
         soundHurt = soundDeath;
     }
@@ -213,11 +213,15 @@ public final class SkeletonTrap extends Skeleton {
                 || player.level != level
                 || level.isNetworkMode()
                 || isBoneBroken(bone)) return;
+        removeBone(player, bone);
+    }
+
+    private void removeBone(Entity attacker, SkeletonTrapBone bone) {
         brokenBones |= bone.mask();
         persistent = true;
         if (brokenBones == ALL_BONES) {
             health = 0;
-            die(player);
+            die(attacker);
         } else {
             level.playSound(soundDeath, this, 1f, 1f);
         }
@@ -225,7 +229,22 @@ public final class SkeletonTrap extends Skeleton {
 
     @Override
     public void hurt(Entity source, int damage) {
-        if (!isScattered()) super.hurt(source, damage);
+        if (!isScattered()) {
+            super.hurt(source, damage);
+            return;
+        }
+        if (damage <= 0
+                || removed
+                || health <= 0
+                || level.isNetworkMode()
+                || !(DeathMessages.resolveAttacker(source) instanceof Defender defender)
+                || !defender.canAttack(this)) return;
+        for (SkeletonTrapBone bone : BONES) {
+            if (!isBoneBroken(bone)) {
+                removeBone(defender, bone);
+                return;
+            }
+        }
     }
 
     @Override

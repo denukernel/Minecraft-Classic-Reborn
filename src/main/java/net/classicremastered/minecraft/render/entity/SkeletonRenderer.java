@@ -20,6 +20,6 @@ public final class SkeletonRenderer<T extends Skeleton> extends MobRenderer<T> {
         model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
 
         // --- Armor overlay (safe, no double base) ---
-        mob.renderArmorLayer(tm, a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
+        renderLegacyArmor(mob, tm);
     }
 }

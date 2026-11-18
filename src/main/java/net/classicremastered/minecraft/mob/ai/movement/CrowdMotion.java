@@ -3,6 +3,7 @@ package net.classicremastered.minecraft.mob.ai.movement;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.phys.AABB;
@@ -16,6 +17,8 @@ public final class CrowdMotion {
 
     private static final AtomicLong NEXT_ORDER = new AtomicLong();
     private static final AtomicLong NEXT_CLAIM = new AtomicLong();
+    // The navigator can stop 0.4 blocks short of a goal. Leave that room inside melee reach.
+    private static final float DEFENDER_MAX_APPROACH_RADIUS = 1.55f;
     private final long order = NEXT_ORDER.incrementAndGet();
     private Entity approachTarget;
     private float approachAngle;
@@ -43,23 +46,37 @@ public final class CrowdMotion {
             return null;
         if (approachTarget != target) {
             approachTarget = target;
-            preferredAngle = (float) ((Math.atan2(mob.z - target.z, mob.x - target.x) + order * 2.399963229728653)
-                    % (2 * Math.PI));
+            preferredAngle =
+                    (float)
+                            ((Math.atan2(mob.z - target.z, mob.x - target.x)
+                                            + order * 2.399963229728653)
+                                    % (2 * Math.PI));
             approachAssigned = false;
             approachClaim = 0;
         }
         float vertical = target.y - mob.y;
-        float radius = Math.min(1.35f,
-                Math.max(0.65f, (float) Math.sqrt(Math.max(0.36f, 3.8f - vertical * vertical)) - 0.15f));
+        float radius =
+                Math.min(
+                        1.35f,
+                        Math.max(
+                                0.65f,
+                                (float) Math.sqrt(Math.max(0.36f, 3.8f - vertical * vertical))
+                                        - 0.15f));
+        boolean defender = mob instanceof Defender;
+        int angleCount = defender ? 16 : 8;
+        float angleStep = (float) (2 * Math.PI / angleCount);
         // Spread only on clear supported ground. Doorways and stair corridors
         // retain their shared center line until there is room to surround a target.
         for (int ring = 0; ring < 2; ring++)
-            for (int attempt = -1; attempt < 8; attempt++) {
+            for (int attempt = -1; attempt < angleCount; attempt++) {
                 float candidateRadius = radius + ring * 0.85f;
+                if (defender)
+                    candidateRadius = Math.min(candidateRadius, DEFENDER_MAX_APPROACH_RADIUS);
                 boolean current = attempt == -1;
-                if (current && (!approachAssigned || Math.abs(approachRadius - candidateRadius) > 0.1f))
+                if (current
+                        && (!approachAssigned || Math.abs(approachRadius - candidateRadius) > 0.1f))
                     continue;
-                float angle = current ? approachAngle : preferredAngle + attempt * (float) (Math.PI / 4);
+                float angle = current ? approachAngle : preferredAngle + attempt * angleStep;
                 float x = target.x + (float) Math.cos(angle) * candidateRadius,
                         z = target.z + (float) Math.sin(angle) * candidateRadius;
                 if (reserved(mob, target, nearby, x, z, current)

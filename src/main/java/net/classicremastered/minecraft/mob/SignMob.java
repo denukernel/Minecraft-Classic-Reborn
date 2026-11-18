@@ -7,10 +7,10 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.mob.ai.combat.HostileTargets;
 import net.classicremastered.minecraft.player.Player;
-import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 public final class SignMob extends Mob {
+    private static final long serialVersionUID = 3421085076259811026L;
 
     private transient float boardYaw, previousBoardYaw;
 
@@ -29,9 +29,6 @@ public final class SignMob extends Mob {
         this.soundIdle = "random/wood_click";
         this.soundHurt = "random/wood_click";
         this.soundDeath = "random/pop";
-
-        // ✅ must not be null or empty, otherwise SpawnMobCommand skips it
-        this.modelName = "signmob";
     }
 
     @Override
@@ -74,16 +71,12 @@ public final class SignMob extends Mob {
         }
     }
 
-    @Override
-    public void render(TextureManager tm, float partial) {
-        SignEntity.renderStandingSign(
-                tm,
-                level == null || level.minecraft == null ? null : level.minecraft.fontRenderer,
-                xo + (x - xo) * partial,
-                renderFeetY(partial),
-                zo + (z - zo) * partial,
-                previousBoardYaw + (boardYaw - previousBoardYaw) * partial,
-                currentText);
+    public float boardYaw(float partial) {
+        return previousBoardYaw + (boardYaw - previousBoardYaw) * partial;
+    }
+
+    public String currentText() {
+        return currentText;
     }
 
     @Override

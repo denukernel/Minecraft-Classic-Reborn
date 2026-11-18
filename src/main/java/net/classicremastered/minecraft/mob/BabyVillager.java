@@ -13,8 +13,6 @@ public class BabyVillager extends Villager {
 
     public BabyVillager(Level level, float x, float y, float z) {
         super(level, x, y, z);
-
-        this.modelName = "villager_baby";
         this.textureName = "/mob/villager.png";
         makeStepSound = false;
         coinDrop = -9;

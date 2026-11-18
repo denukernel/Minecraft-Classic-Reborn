@@ -19,6 +19,17 @@ public final class BabyZombieRenderer extends MobRenderer<BabyZombie> {
         renderPose(mob, tm, animInputs(mob, partial), yaw, pitch);
     }
 
+    @Override
+    protected void renderBase(
+            BabyZombie mob,
+            TextureManager tm,
+            float partial,
+            float yaw,
+            float pitch,
+            float brightness) {
+        render(mob, tm, partial, yaw, pitch);
+    }
+
     private void renderPose(
             BabyZombie mob, TextureManager tm, AnimInputs a, float yaw, float pitch) {
         bind(tm, texture);

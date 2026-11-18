@@ -69,7 +69,6 @@ public class Villager extends Mob {
         this.heightOffset = 1.62F;
         this.health = 20;
         this.textureName = "/mob/villager.png";
-        this.modelName = "villager";
         initSounds();
 
         this.coinDrop = -2;

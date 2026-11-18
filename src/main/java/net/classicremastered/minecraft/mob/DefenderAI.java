@@ -20,6 +20,8 @@ import net.classicremastered.minecraft.player.Player;
 import java.util.ArrayList;
 
 public final class DefenderAI extends BasicAttackAI {
+    private static final float DEFENDER_SIGHT_RANGE = 30;
+    private static final float CONVERTED_MOB_SIGHT_RANGE = 16;
     private static final int BOW_SHOT_INTERVAL = 25;
     private static final float BOW_RANGE = 14;
     private static final float GRAVITY_RANGE = 8;
@@ -79,6 +81,13 @@ public final class DefenderAI extends BasicAttackAI {
     }
 
     @Override
+    public float getSightRange() {
+        return mob == null || mob instanceof Defender
+                ? DEFENDER_SIGHT_RANGE
+                : CONVERTED_MOB_SIGHT_RANGE;
+    }
+
+    @Override
     public void tick(Level level, Mob mob) {
         if (mob instanceof Defender defender && attackTarget != null) {
             if (!hasLineOfSight(mob, attackTarget)) {
@@ -115,17 +124,18 @@ public final class DefenderAI extends BasicAttackAI {
             if (experience >= 2 && dodgeIncomingArrow(defender)) return;
         }
         if (retryTicks > 0 && --retryTicks == 0) stalledTarget = null;
-        Player followPlayer =
+        Player owner =
                 defender != null
                         ? defender.ownerPlayer()
                         : level.player instanceof Player p ? p : null;
+        Player followPlayer = followTarget(owner);
         boolean resumingPearlAttack =
                 mob.tickCount < pearlAttackUntil
                         && validEnemy(pearlAttackTarget)
                         && hasLineOfSight(mob, pearlAttackTarget);
         if (!resumingPearlAttack) pearlAttackTarget = null;
         if (defender != null) {
-            if (mob.tickCount >= retreatUntil && helpBurningAlly(defender, followPlayer)) return;
+            if (mob.tickCount >= retreatUntil && helpBurningAlly(defender, owner)) return;
             if (usePearl(defender, followPlayer, false)
                     || defender.isEating()
                     || mob.tickCount < retreatUntil) {
@@ -133,7 +143,6 @@ public final class DefenderAI extends BasicAttackAI {
                 return;
             }
             if (followPlayer != null
-                    && !followPlayer.isSpectator()
                     && !resumingPearlAttack
                     && mob.distanceToSqr(followPlayer) > OWNER_LEASH_DISTANCE_SQUARED) {
                 attackTarget = null;
@@ -145,11 +154,11 @@ public final class DefenderAI extends BasicAttackAI {
         if (resumingPearlAttack) {
             attackTarget = pearlAttackTarget;
         } else if (defender != null
-                && followPlayer != null
+                && owner != null
                 && (attackTarget == null || MobBattle.target(defender) != attackTarget)) {
-            Mob ownerTarget = followPlayer.recentMobAttacker();
+            Mob ownerTarget = owner.recentMobAttacker();
             if (!canAssistOwner(defender, ownerTarget)) {
-                ownerTarget = followPlayer.recentMobAttack();
+                ownerTarget = owner.recentMobAttack();
             }
             if (ownerTarget != attackTarget && canAssistOwner(defender, ownerTarget)) {
                 attackTarget = ownerTarget;
@@ -163,17 +172,22 @@ public final class DefenderAI extends BasicAttackAI {
                 && hasLineOfSight(mob, lastSeenEnemy)) {
             attackTarget = lastSeenEnemy;
         }
-        if (!validEnemy(attackTarget) || mob.distanceToSqr(attackTarget) > 256) {
+        float sightRange = getSightRange();
+        float sightRangeSquared = sightRange * sightRange;
+        if (!validEnemy(attackTarget) || mob.distanceToSqr(attackTarget) > sightRangeSquared) {
             attackTarget = null;
             progressTicks = 0;
-            float nearest = 256;
+            float nearest = sightRangeSquared;
+            float verticalRange = defender != null ? sightRange : 8;
             for (Object candidate :
-                    new ArrayList<>(level.findEntities(mob, mob.bb.grow(16, 8, 16)))) {
+                    new ArrayList<>(
+                            level.findEntities(
+                                    mob, mob.bb.grow(sightRange, verticalRange, sightRange)))) {
                 if (candidate instanceof Mob enemy
                         && enemy != stalledTarget
                         && (defender == null ? validEnemy(enemy) : Defender.isEnemy(enemy))) {
                     float distance = mob.distanceToSqr(enemy);
-                    if (distance < nearest
+                    if ((distance < nearest || attackTarget == null && distance == nearest)
                             && (defender == null || hasLineOfSight(defender, enemy))) {
                         nearest = distance;
                         attackTarget = enemy;
@@ -259,7 +273,6 @@ public final class DefenderAI extends BasicAttackAI {
         } else if (defender != null && checkLastSeenPosition()) {
             return;
         } else if (followPlayer != null
-                && !followPlayer.isSpectator()
                 && followPlayer.health > 0
                 && (defender != null || mob.distanceToSqr(followPlayer) > 9)) {
             followOwner(followPlayer);
@@ -363,6 +376,16 @@ public final class DefenderAI extends BasicAttackAI {
         }
     }
 
+    private Player followTarget(Player owner) {
+        // Ground navigation cannot reach a hovering player.
+        return level.doDefendersFollowPlayer
+                        && owner != null
+                        && !owner.isSpectator()
+                        && !owner.isFlying
+                ? owner
+                : null;
+    }
+
     @Override
     protected Entity waterPursuitTarget() {
         Entity target = super.waterPursuitTarget();
@@ -371,7 +394,8 @@ public final class DefenderAI extends BasicAttackAI {
                 mob instanceof Defender defender
                         ? defender.ownerPlayer()
                         : level.player instanceof Player player ? player : null;
-        return owner != null && !owner.isSpectator() && owner.health > 0 ? owner : null;
+        owner = followTarget(owner);
+        return owner != null && owner.health > 0 ? owner : null;
     }
 
     private boolean followStalled(Player owner) {
@@ -691,9 +715,10 @@ public final class DefenderAI extends BasicAttackAI {
     }
 
     private boolean canAssistOwner(Defender defender, Mob target) {
+        float sightRange = getSightRange();
         return target != stalledTarget
                 && defender.canAttack(target)
-                && defender.distanceToSqr(target) <= 256
+                && defender.distanceToSqr(target) <= sightRange * sightRange
                 && hasLineOfSight(defender, target);
     }
 

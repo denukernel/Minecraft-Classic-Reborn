@@ -235,6 +235,15 @@ public class CraftingManager {
 
         // 2 Planks -> 4 Sticks (Example)
         int stick = Equipment.STICK.id + 256;
+        addRecipe(
+                new ItemStack(Block.TNT.id, 1),
+                "gsg",
+                "sgs",
+                "gsg",
+                'g',
+                Item.GUNPOWDER_ID + 256,
+                's',
+                Block.SAND.id);
         addRecipe(new ItemStack(Block.SANDSTONE.id, 1), "ss", "ss", 's', Block.SAND.id);
         addRecipe(new ItemStack(Block.CUT_SANDSTONE.id, 4), "ss", "ss", 's', Block.SANDSTONE.id);
         addRecipe(

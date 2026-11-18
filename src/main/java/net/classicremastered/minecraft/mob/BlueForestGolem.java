@@ -11,7 +11,6 @@ public final class BlueForestGolem extends Mob {
 
     public BlueForestGolem(Level level, float x, float y, float z) {
         super(level);
-        modelName = "blue_forest_golem";
         textureName = "/mob/blue-forest-golem.png";
         setSize(0.85f, 1.5f);
         heightOffset = 0.75f;

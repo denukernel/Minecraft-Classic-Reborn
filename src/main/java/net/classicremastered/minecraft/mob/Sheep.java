@@ -8,10 +8,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.model.AnimalModel;
-import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.nbt.CompoundTag;
-import org.lwjgl.opengl.GL11;
 
 public class Sheep extends QuadrupedMob {
 
@@ -29,7 +26,6 @@ public class Sheep extends QuadrupedMob {
         this.setSize(1.4F, 1.72F);
         this.setPos(var2, var3, var4);
         this.heightOffset = 1.72F;
-        this.modelName = "sheep";
         this.soundIdle = "mob/sheep/say";
         this.soundHurt = "mob/sheep/say";
         this.soundDeath = "mob/sheep/say";
@@ -108,46 +104,5 @@ public class Sheep extends QuadrupedMob {
     public void loadPersistence(CompoundTag tag) {
         super.loadPersistence(tag);
         hasFur = !tag.getBoolean("Sheared");
-    }
-
-    public void renderModel(
-            TextureManager var1,
-            float var2,
-            float var3,
-            float var4,
-            float var5,
-            float var6,
-            float var7) {
-        AnimalModel var8;
-        float var9 = (var8 = (AnimalModel) modelCache.getModel(this.modelName)).head.y;
-        float var10 = var8.head.z;
-        var8.head.y += (this.grazeO + (this.graze - this.grazeO) * var3) * 8.0F;
-        var8.head.z -= this.grazeO + (this.graze - this.grazeO) * var3;
-        super.renderModel(var1, var2, var3, var4, var5, var6, var7);
-        if (this.hasFur) {
-            GL11.glBindTexture(3553, var1.load("/mob/sheep_fur.png"));
-            GL11.glDisable(2884);
-            AnimalModel var11;
-            (var11 = (AnimalModel) modelCache.getModel("sheep.fur")).head.yaw = var8.head.yaw;
-            var11.head.pitch = var8.head.pitch;
-            var11.head.y = var8.head.y;
-            var11.head.x = var8.head.x;
-            var11.head.z = var8.head.z;
-            var11.body.yaw = var8.body.yaw;
-            var11.body.pitch = var8.body.pitch;
-            var11.leg1.pitch = var8.leg1.pitch;
-            var11.leg2.pitch = var8.leg2.pitch;
-            var11.leg3.pitch = var8.leg3.pitch;
-            var11.leg4.pitch = var8.leg4.pitch;
-            var11.head.render(var7);
-            var11.body.render(var7);
-            var11.leg1.render(var7);
-            var11.leg2.render(var7);
-            var11.leg3.render(var7);
-            var11.leg4.render(var7);
-        }
-
-        var8.head.y = var9;
-        var8.head.z = var10;
     }
 }

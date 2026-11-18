@@ -7,8 +7,6 @@ import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.SaddleItem;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
-import net.classicremastered.minecraft.model.CowModel;
-import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.nbt.CompoundTag;
 
 public final class Cow extends QuadrupedMob {
@@ -22,7 +20,6 @@ public final class Cow extends QuadrupedMob {
         setPos(x, y, z);
         health = lastHealth = healthLimit();
         persistent = true;
-        modelName = "cow";
         textureName = "/mob/cow.png";
         initSounds();
     }
@@ -76,14 +73,6 @@ public final class Cow extends QuadrupedMob {
                     SaddleItem.ID));
         saddled = false;
         super.die(killer);
-    }
-
-    @Override
-    public void renderModel(TextureManager textures, float limb, float run, float age, float yaw,
-            float pitch, float scale) {
-        super.renderModel(textures, limb, run, age, yaw, pitch, scale);
-        if (saddled && modelCache.getModel(modelName) instanceof CowModel model)
-            model.renderSaddle(textures, scale);
     }
 
     @Override

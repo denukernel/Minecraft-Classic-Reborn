@@ -198,6 +198,11 @@ public final class MobRegistry {
 
         // --- Hostiles / undead / bosses ---
         tryRegister((short) 1, "Zombie", Zombie.class, (l, x, y, z) -> new Zombie(l, x, y, z));
+        register(
+                DarkCobblestoneZombie.REGISTRY_ID,
+                "DarkCobblestoneZombie",
+                DarkCobblestoneZombie.class,
+                DarkCobblestoneZombie::new);
         tryRegister(
                 (short) 2, "Skeleton", Skeleton.class, (l, x, y, z) -> new Skeleton(l, x, y, z));
         tryRegister(

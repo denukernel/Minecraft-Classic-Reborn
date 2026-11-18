@@ -11,7 +11,6 @@ public final class BabySkeleton extends Skeleton {
 
     public BabySkeleton(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        modelName = "skeleton_baby";
         textureName = "/mob/skeleton.png";
         setSize(.44f, 1.26f);
         heightOffset = .63f;

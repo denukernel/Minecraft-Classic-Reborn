@@ -9,6 +9,8 @@ public final class ModelManager {
     private final SkeletonTrapModel skeletonTrap = new SkeletonTrapModel();
     private BabySkeletonModel babySkeleton = new BabySkeletonModel();
     private ZombieModel zombie = new ZombieModel();
+    private final DarkCobblestoneZombieModel darkCobblestoneZombie =
+            new DarkCobblestoneZombieModel();
     private final FrostbiteModel frostbite = new FrostbiteModel();
     private final FrostbiteModel babyFrostbite = new FrostbiteModel("frostbite_baby", true);
     private final FrostbiteModel babyHusk = new FrostbiteModel("husk_baby", true);
@@ -92,6 +94,8 @@ public final class ModelManager {
             case "zombie":
             case "zombie_teen":
                 return this.zombie;
+            case "dark_cobblestone_zombie":
+                return darkCobblestoneZombie;
             case "zombiebuilder":
                 return this.zombie;
             case "irongolem":

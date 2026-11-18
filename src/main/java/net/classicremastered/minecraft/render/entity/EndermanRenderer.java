@@ -9,6 +9,16 @@ public final class EndermanRenderer extends MobRenderer<Enderman> {
     public EndermanRenderer(EndermanModel model) { super(model, "/mob/enderman.png"); }
 
     @Override
+    protected float groundOffset(Enderman mob) {
+        return 23f;
+    }
+
+    @Override
+    protected boolean usesSharedDamageOverlay() {
+        return false;
+    }
+
+    @Override
     public void render(Enderman mob, TextureManager tm, float partial) {
         AnimInputs a = animInputs(mob, partial);
 

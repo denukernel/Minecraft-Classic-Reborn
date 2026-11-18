@@ -10,7 +10,6 @@ public final class LongNeckMan extends Mob {
     public LongNeckMan(Level level, float x, float y, float z) {
         super(level);
         this.setPos(x, y, z);
-        this.modelName = "longneckman";
         this.textureName = "/mob/long_neck_man.png";
         this.heightOffset = 1.62F;
         this.ai = new BasicAttackAI(true, true);

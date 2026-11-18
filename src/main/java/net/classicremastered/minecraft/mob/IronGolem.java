@@ -16,8 +16,6 @@ public final class IronGolem extends Mob {
 
     public IronGolem(Level level, float x, float y, float z) {
         super(level);
-
-        this.modelName = "irongolem"; // mapped in ModelManager
         this.textureName = "/mob/iron_golem.png"; // 128×128 texture atlas
 
         this.health = this.lastHealth = 100;

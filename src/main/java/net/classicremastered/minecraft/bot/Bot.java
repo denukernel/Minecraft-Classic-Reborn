@@ -41,7 +41,6 @@ public class Bot extends HumanoidMob {
 
     public Bot(Level level, float x, float y, float z, Type type) {
         super(level, x, y, z);
-        modelName = "humanoid";
         textureName = "/char.png";
         allowAlpha = true;
         health = lastHealth = 20;

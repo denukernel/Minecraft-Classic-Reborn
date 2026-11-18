@@ -9,6 +9,7 @@ import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.level.tile.SandBlock;
 import net.classicremastered.minecraft.level.tile.TNTBlock;
 import net.classicremastered.minecraft.mob.*;
+import net.classicremastered.minecraft.mob.ai.BasicAI;
 import net.classicremastered.minecraft.model.StickFigureModel;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
@@ -36,12 +37,18 @@ public final class StickFigurePowers implements java.io.Serializable {
         RAGE_TRANSITION,
         RUSH_WINDUP,
         RUSH,
-        STAGGER
+        STAGGER,
+        CROWD_PUSH
     }
 
     public static final int THROW_RELEASE_TICK = 12;
     public static final int THROW_END_TICK = 20;
     public static final int RAGE_TRANSITION_TICKS = 24;
+    public static final int CROWD_PUSH_RELEASE_TICK = 80;
+    public static final int CROWD_PUSH_RECOVERY_TICKS = 10;
+    private static final int CROWD_PUSH_MIN_ATTACKERS = 5;
+    private static final float NEARBY_ATTACKER_RANGE = 5.5f;
+    private static final String CROWD_PUSH_SOUND = "block/glass/break";
     private static final int BARRAGE_HIT_INTERVAL = 12;
     private static final int BARRAGE_HITS = 4;
     private static final int ESCAPE_START_TICK = 2 * BARRAGE_HIT_INTERVAL;
@@ -62,6 +69,7 @@ public final class StickFigurePowers implements java.io.Serializable {
     private float anchorX, anchorY, anchorZ;
     private float rushX, rushZ;
     private int breakCooldown;
+    private int crowdPushCooldown;
 
     private record BlockThrow(int id, int size, List<int[]> cells) {}
 
@@ -186,6 +194,7 @@ public final class StickFigurePowers implements java.io.Serializable {
         if (comboCooldown > 0) comboCooldown--;
         if (fireballCooldown > 0) fireballCooldown--;
         if (breakCooldown > 0) breakCooldown--;
+        if (crowdPushCooldown > 0) crowdPushCooldown--;
         if (boss.isEnraged()) throwCooldown = Math.min(throwCooldown, boss.attackInterval(60));
         if (boss.health <= 0
                 || boss.removed
@@ -203,6 +212,7 @@ public final class StickFigurePowers implements java.io.Serializable {
             return true;
         }
         if (phase == Phase.RUSH_WINDUP || phase == Phase.RUSH) return tickRush(boss, target);
+        if (phase == Phase.CROWD_PUSH) return tickCrowdPush(boss);
         if (phase == Phase.IDLE && boss.isEnraged() && !rageIntroduced) {
             phase = Phase.RAGE_TRANSITION;
             phaseTicks = 0;
@@ -387,6 +397,7 @@ public final class StickFigurePowers implements java.io.Serializable {
             }
             return true;
         }
+        if (beginCrowdPush(boss, random)) return true;
         if (target == null || target.removed || CreativeModeHelper.shouldIgnoreTarget(target))
             return false;
         if (target instanceof Player player && beginPhysicsGun(boss, player)) return true;
@@ -454,6 +465,74 @@ public final class StickFigurePowers implements java.io.Serializable {
             return true;
         }
         return false;
+    }
+
+    private boolean beginCrowdPush(StickFigure boss, Random random) {
+        if (crowdPushCooldown > 0 || !boss.onGround || boss.level.isNetworkMode()) return false;
+        crowdPushCooldown = 10;
+        if (nearbyAttackers(boss).size() < CROWD_PUSH_MIN_ATTACKERS) return false;
+        crowdPushCooldown = 160;
+        if (!random.nextBoolean()) return false;
+        phase = Phase.CROWD_PUSH;
+        phaseTicks = 0;
+        boss.strikeTicks = 0;
+        stopMoving(boss);
+        sound(boss, CROWD_PUSH_SOUND, .55f);
+        return true;
+    }
+
+    public static List<Mob> nearbyAttackers(StickFigure boss) {
+        List<Mob> attackers = new ArrayList<>();
+        for (Object entity :
+                boss.level.findEntities(
+                        boss, boss.bb.grow(NEARBY_ATTACKER_RANGE, 3, NEARBY_ATTACKER_RANGE))) {
+            if (!(entity instanceof Mob mob)
+                    || mob.health <= 0
+                    || !mob.isPushable()
+                    || !StickmansHouse.canFightBoss(boss.level, mob)
+                    || CreativeModeHelper.shouldIgnoreTarget(mob)) continue;
+            boolean attacking =
+                    mob instanceof Player player
+                            ? player.recentMobAttack() == boss
+                            : mob.ai instanceof BasicAI ai && ai.attackTarget == boss;
+            if (attacking
+                    && boss.distanceToSqr(mob) <= NEARBY_ATTACKER_RANGE * NEARBY_ATTACKER_RANGE
+                    && visible(boss, mob)) attackers.add(mob);
+        }
+        return attackers;
+    }
+
+    private boolean tickCrowdPush(StickFigure boss) {
+        stopMoving(boss);
+        phaseTicks++;
+        switch (phaseTicks) {
+            case 22, 39, 52, 62, 69, 74, 77, 79, CROWD_PUSH_RELEASE_TICK ->
+                    sound(
+                            boss,
+                            CROWD_PUSH_SOUND,
+                            .55f + 1.2f * phaseTicks / CROWD_PUSH_RELEASE_TICK);
+        }
+        if (phaseTicks == CROWD_PUSH_RELEASE_TICK) {
+            for (Mob attacker : nearbyAttackers(boss)) {
+                float dx = attacker.x - boss.x;
+                float dz = attacker.z - boss.z;
+                float distance = (float) Math.hypot(dx, dz);
+                if (distance < .001f) {
+                    double yaw = Math.toRadians(boss.yRot);
+                    dx = -(float) Math.sin(yaw);
+                    dz = (float) Math.cos(yaw);
+                } else {
+                    dx /= distance;
+                    dz /= distance;
+                }
+                float force = 2.55f - .1f * distance;
+                attacker.xd = dx * force;
+                attacker.zd = dz * force;
+                attacker.yd = Math.max(attacker.yd, .92f);
+            }
+        }
+        if (phaseTicks >= CROWD_PUSH_RELEASE_TICK + CROWD_PUSH_RECOVERY_TICKS) cancel(boss);
+        return true;
     }
 
     private static boolean jumpDown(Player player) {

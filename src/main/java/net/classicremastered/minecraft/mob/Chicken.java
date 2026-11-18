@@ -36,7 +36,6 @@ public class Chicken extends Mob {
 
     public Chicken(Level level, float x, float y, float z) {
         super(level);
-        this.modelName = "chicken";
         this.textureName = "/mob/chicken.png";
         this.setSize(WIDTH, HEIGHT);
         this.setPos(x, y, z);

@@ -8,7 +8,6 @@ public final class HuskIgniter extends ZombieIgniter {
 
     public HuskIgniter(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        modelName = "husk";
         textureName = "/mob/husk.png";
         coinDrop = 2;
     }

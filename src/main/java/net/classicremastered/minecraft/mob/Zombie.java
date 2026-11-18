@@ -61,7 +61,6 @@ public class Zombie extends HumanoidMob {
 
     public Zombie(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        this.modelName = "zombie";
         this.textureName = "/mob/zombie.png";
         this.heightOffset = 1.62F;
         this.ai = new net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI(true, true, true);

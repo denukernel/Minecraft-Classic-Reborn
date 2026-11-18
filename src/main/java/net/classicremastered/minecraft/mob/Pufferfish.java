@@ -10,6 +10,7 @@ import net.classicremastered.nbt.CompoundTag;
 import java.util.ArrayList;
 
 public final class Pufferfish extends Fish {
+    private static final long serialVersionUID = 2852893256850357582L;
     public static final short REGISTRY_ID = 90;
     private int puffState;
     private int inflateTicks;
@@ -85,14 +86,12 @@ public final class Pufferfish extends Fish {
 
     private void setPuffState(int state) {
         puffState = state;
-        modelName =
-                switch (state) {
-                    case 1 -> "pufferfish_mid";
-                    case 2 -> "pufferfish_full";
-                    default -> "pufferfish";
-                };
         float size = sizeForState(state);
         resizeFish(size, size);
+    }
+
+    public int puffState() {
+        return puffState;
     }
 
     private static float sizeForState(int state) {

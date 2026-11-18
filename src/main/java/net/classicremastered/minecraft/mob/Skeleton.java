@@ -22,7 +22,6 @@ public class Skeleton extends Zombie {
 
     public Skeleton(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        this.modelName = "skeleton";
         this.textureName = "/mob/skeleton.png";
         this.ai =
                 new net.classicremastered.minecraft.mob.ai.skeleton.SkeletonAI(); // use skeleton AI

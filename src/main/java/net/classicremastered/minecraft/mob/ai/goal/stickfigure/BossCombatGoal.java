@@ -2,10 +2,12 @@ package net.classicremastered.minecraft.mob.ai.goal.stickfigure;
 
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Difficulty;
+import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.StickFigure;
 import net.classicremastered.minecraft.mob.ai.goal.MobGoal;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
+import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers;
 import net.classicremastered.minecraft.util.CreativeModeHelper;
 
 public final class BossCombatGoal extends MobGoal<StickFigureAI> {
@@ -49,14 +51,8 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
         if (boss.strikeTicks <= 6
                 && boss.strikeTicks >= 3
                 && !ai.hitThisStrike
-                && ai.attackTarget != null
-                && !CreativeModeHelper.shouldIgnoreTarget(ai.attackTarget)
-                && ai.withinMeleeReach(ai.attackTarget, boss.kicking ? 2.7f : 2.2f)
-                && ai.hasLineOfSight(ai.mob, ai.attackTarget)) {
-            int before = ai.attackTarget instanceof Mob victim ? victim.health : 0;
-            ai.attackTarget.hurt(ai.mob, boss.kicking ? 7 : 5);
-            if (!(ai.attackTarget instanceof Mob victim) || victim.health < before)
-                finishStrike(boss);
+                && ai.attackTarget != null) {
+            resolveStrike(boss, ai.attackTarget);
         }
         ai.defaultAttack();
         if (swimming) {
@@ -70,18 +66,40 @@ public final class BossCombatGoal extends MobGoal<StickFigureAI> {
         }
     }
 
-    private void finishStrike(StickFigure boss) {
-        ai.hitThisStrike = true;
-        ai.combatSound(
-                boss.kicking ? "mob/irongolem/hit" : "damage/hurtflesh",
-                .9f,
-                boss.kicking ? .8f : 1.15f);
-        float dx = ai.attackTarget.x - boss.x, dz = ai.attackTarget.z - boss.z;
+    private void resolveStrike(StickFigure boss, Entity target) {
+        boolean hit = strike(boss, target, boss.kicking ? 7 : 5, boss.kicking ? .55f : .2f);
+        if (boss.isEnraged() && boss.kicking) {
+            float forwardX = target.x - boss.x, forwardZ = target.z - boss.z;
+            for (Mob attacker : StickFigurePowers.nearbyAttackers(boss)) {
+                float dx = attacker.x - boss.x, dz = attacker.z - boss.z;
+                if (attacker != target
+                        && forwardX * dx + forwardZ * dz >= 0
+                        && strike(boss, attacker, 4, .55f)) hit = true;
+            }
+        }
+        if (hit) {
+            ai.hitThisStrike = true;
+            ai.combatSound(
+                    boss.kicking ? "mob/irongolem/hit" : "damage/hurtflesh",
+                    .9f,
+                    boss.kicking ? .8f : 1.15f);
+        }
+    }
+
+    private boolean strike(StickFigure boss, Entity target, int damage, float force) {
+        if (target.removed
+                || CreativeModeHelper.shouldIgnoreTarget(target)
+                || !ai.withinMeleeReach(target, boss.kicking ? 2.7f : 2.2f)
+                || !ai.hasLineOfSight(boss, target)) return false;
+        int before = target instanceof Mob victim ? victim.health : 0;
+        target.hurt(boss, damage);
+        if (target instanceof Mob victim && victim.health >= before) return false;
+        float dx = target.x - boss.x, dz = target.z - boss.z;
         float distance = (float) Math.hypot(dx, dz);
         if (distance > .01f) {
-            float force = boss.kicking ? .55f : .2f;
-            ai.attackTarget.xd += dx / distance * force;
-            ai.attackTarget.zd += dz / distance * force;
+            target.xd += dx / distance * force;
+            target.zd += dz / distance * force;
         }
+        return true;
     }
 }

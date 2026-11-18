@@ -8,6 +8,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.mob.DarkCobblestoneZombie;
 import net.classicremastered.minecraft.mob.Ironmock;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.Steve;
@@ -30,10 +31,14 @@ public final class StickmansHouse {
     private static final int LEFT = 30, RIGHT = 66, FRONT = 12, GATE = 40, BACK = 80;
     private static final int WAVE = 0, GATE_OPEN = 1, BOSS_SPAWNED = 2;
     private static final int STEVE_CHECK_INTERVAL = 200;
+    private static final int DARK_ZOMBIE_SPAWN_DISTANCE = 100;
+    private static final int DARK_ZOMBIE_CHECK_INTERVAL = 100;
+    private static final int DARK_ZOMBIE_LOCAL_CAP = 3;
     private final Level home;
     private final Level arena;
     private Arrival returnPoint;
     private int steveCheckTicks;
+    private int darkZombieSpawnCooldown;
     private int caveSoundDelay;
 
     private record Arrival(
@@ -99,6 +104,7 @@ public final class StickmansHouse {
         level.keepInventory = home.keepInventory;
         level.doMobSpawning = home.doMobSpawning;
         level.doMobLoot = home.doMobLoot;
+        level.doDefendersFollowPlayer = home.doDefendersFollowPlayer;
         level.doDayNightCycle = home.doDayNightCycle;
         for (int offset : new int[] {-6, -4, -2, 2, 4, 6}) {
             Ironmock ironmock =
@@ -115,14 +121,18 @@ public final class StickmansHouse {
 
     public void tickExploration() {
         if (caveSoundDelay > 0) caveSoundDelay--;
-        if (!(arena.player instanceof Player player)
-                || player.health <= 0
-                || player.isSpectator()) {
+        if (!(arena.player instanceof Player player) || player.removed || player.health <= 0) {
             steveCheckTicks = 0;
+            darkZombieSpawnCooldown = 0;
             return;
         }
 
         double distance = distanceFromArena(player.x, player.z);
+        tickDarkZombieSpawning(player, distance);
+        if (player.isSpectator()) {
+            steveCheckTicks = 0;
+            return;
+        }
         if (distance > 200
                 && caveSoundDelay == 0
                 && arena.minecraft != null
@@ -165,6 +175,48 @@ public final class StickmansHouse {
                     && arena.clip(eyes, new Vec3D(steve.x, steve.y, steve.z), true) != null)
                 continue;
             arena.addEntity(steve);
+            return;
+        }
+    }
+
+    private void tickDarkZombieSpawning(Player player, double distance) {
+        if (distance < DARK_ZOMBIE_SPAWN_DISTANCE
+                || !arena.doMobSpawning
+                || arena.isNetworkMode()
+                || CombatRules.difficulty(arena) == Difficulty.PEACEFUL) {
+            darkZombieSpawnCooldown = 0;
+            return;
+        }
+        if (darkZombieSpawnCooldown > 0 && --darkZombieSpawnCooldown > 0) return;
+        darkZombieSpawnCooldown = DARK_ZOMBIE_CHECK_INTERVAL;
+
+        int nearby = 0;
+        for (Object entity : arena.findEntities(player, player.bb.grow(48, arena.depth, 48))) {
+            if (entity instanceof DarkCobblestoneZombie zombie
+                    && !zombie.removed
+                    && zombie.health > 0
+                    && ++nearby >= DARK_ZOMBIE_LOCAL_CAP) return;
+        }
+        int ground = arena.getHighestTile((int) Math.floor(player.x), (int) Math.floor(player.z));
+        double facing = Math.toRadians(-player.yRot);
+        for (int attempt = 0; attempt < 8; attempt++) {
+            double angle =
+                    attempt < 4
+                            ? facing + Math.toRadians(arena.random.nextDouble() * 80 - 40)
+                            : arena.random.nextDouble() * Math.PI * 2;
+            double radius = 14 + arena.random.nextDouble() * 10;
+            int x = (int) Math.floor(player.x + Math.sin(angle) * radius);
+            int z = (int) Math.floor(player.z + Math.cos(angle) * radius);
+            if (distanceFromArena(x + .5f, z + .5f) < DARK_ZOMBIE_SPAWN_DISTANCE) continue;
+            int feet = arena.getHighestTile(x, z);
+            if (feet + 1 >= arena.depth
+                    || Math.abs(feet - ground) > 8
+                    || !arena.isSolidTile(x, feet - 1, z)) continue;
+            var zombie = new DarkCobblestoneZombie(arena, x + .5f, feet + .9f, z + .5f);
+            if (!arena.getCubes(zombie.bb).isEmpty()
+                    || arena.containsAnyLiquid(zombie.bb)
+                    || !arena.findEntities(zombie, zombie.bb).isEmpty()) continue;
+            arena.addEntity(zombie);
             return;
         }
     }

@@ -118,10 +118,11 @@ public class Level implements Serializable {
     public int dayLength = 24000; // world time units per full day
     public int timeOfDay = 2000; // 8:00 AM start
     public boolean doMobSpawning = true;
-    private int gameRulesVersion = 1;
+    private int gameRulesVersion = 2;
     public boolean doMobLoot = true;
     public boolean keepInventory = false;
     public boolean doDayNightCycle = true;
+    public boolean doDefendersFollowPlayer = true;
     private transient StickmansHouse stickmansHouse;
     boolean stickmansHouseArena;
     int stickmansHouseStage;
@@ -2202,7 +2203,10 @@ public class Level implements Serializable {
         if (gameRulesVersion == 0) {
             doMobSpawning = doMobLoot = true;
             keepInventory = false;
-            gameRulesVersion = 1;
+        }
+        if (gameRulesVersion < 2) {
+            doDefendersFollowPlayer = true;
+            gameRulesVersion = 2;
         }
 
         try {

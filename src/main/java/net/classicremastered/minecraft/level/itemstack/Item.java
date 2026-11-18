@@ -25,6 +25,7 @@ public class Item {
     public static Item FLINT_AND_STEEL;
     public static final int REDSTONE_DUST_ID = 44;
     public static final int COAL_ID = 45;
+    public static final int GUNPOWDER_ID = 79;
 
     public static final int LEVER_ICON_ID = 46;
     static final int TORCH_ICON_ID = 74;

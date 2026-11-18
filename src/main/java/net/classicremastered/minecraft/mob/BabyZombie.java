@@ -21,7 +21,6 @@ public class BabyZombie extends Zombie {
         super(level, x, y, z);
 
         // Use baby model (see ModelManager)
-        this.modelName = "zombie_baby";
         this.textureName = "/mob/zombie.png"; // reuse texture
 
         configureBaby(this, x, y, z);

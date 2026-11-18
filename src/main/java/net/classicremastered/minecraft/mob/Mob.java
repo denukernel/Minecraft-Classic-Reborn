@@ -6,18 +6,11 @@ import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.tile.Block;
 import net.classicremastered.minecraft.mob.ai.AI;
 import net.classicremastered.minecraft.mob.ai.BasicAI;
-import net.classicremastered.minecraft.model.MD3Cache;
-import net.classicremastered.minecraft.model.MD3Model;
-import net.classicremastered.minecraft.model.MD3Renderer;
-import net.classicremastered.minecraft.model.Model;
 import net.classicremastered.minecraft.model.ModelManager;
-import net.classicremastered.minecraft.model.SkeletonModel;
 import net.classicremastered.minecraft.player.DeathMessages;
 import net.classicremastered.minecraft.player.Player;
-import net.classicremastered.minecraft.render.ShapeRenderer;
 import net.classicremastered.minecraft.render.TextureManager;
-import net.classicremastered.minecraft.render.entity.BabyZombieRenderer;
-import net.classicremastered.minecraft.render.entity.MobRenderer;
+import net.classicremastered.minecraft.render.entity.RenderManager;
 import net.classicremastered.util.MathHelper;
 
 import org.lwjgl.opengl.GL11;
@@ -136,11 +129,9 @@ public abstract class Mob extends Entity {
     protected String textureName = "/char.png";
     public boolean allowAlpha = true;
     public float rotOffs = 0.0F;
-    public String modelName = null;
     protected float bobStrength = 1.0F;
     protected int deathScore = 0;
     public float renderOffset = 0.0F;
-    public float modelGroundOffset = 23.0F;
 
     public int[] equipment = new int[5];
     public int[] armorWear;
@@ -484,7 +475,7 @@ public abstract class Mob extends Entity {
         }
     }
 
-    protected void bindTexture(TextureManager tm) {
+    public void bindTexture(TextureManager tm) {
         if (textureName == null || textureName.isEmpty()) {
             System.err.println("[Mob] Missing textureName for " + this.getClass().getSimpleName());
             return;
@@ -494,366 +485,17 @@ public abstract class Mob extends Entity {
     }
 
     @Override
-    public void render(TextureManager tm, float partial) {
-        // Use registered renderer if available
-        net.classicremastered.minecraft.render.entity.MobRenderer<Mob> r =
-                net.classicremastered.minecraft.render.entity.RenderManager.getRenderer(this);
-        if (r == null && this.modelName == null) return;
-
-        // ---- orientation interpolation ----
-        while (this.yBodyRotO - this.yBodyRot < -180.0F) this.yBodyRotO += 360.0F;
-        while (this.yBodyRotO - this.yBodyRot >= 180.0F) this.yBodyRotO -= 360.0F;
-        while (this.xRotO - this.xRot < -180.0F) this.xRotO += 360.0F;
-        while (this.xRotO - this.xRot >= 180.0F) this.xRotO -= 360.0F;
-        while (this.yRotO - this.yRot < -180.0F) this.yRotO += 360.0F;
-        while (this.yRotO - this.yRot >= 180.0F) this.yRotO -= 360.0F;
-
-        float bodyRot = renderBodyYaw(partial);
-        float runAmt = this.oRun + (this.run - this.oRun) * partial;
-        float yaw = renderHeadYaw(partial);
-        float pitch = renderHeadPitch(partial);
-        float modelYawOffset = rotOffs;
-        if (this instanceof net.classicremastered.minecraft.player.Player) {
-            modelYawOffset = 0f;
-            if (riding instanceof Mob mount) {
-                bodyRot =
-                        mount.yBodyRotO
-                                + (float) Math.IEEEremainder(mount.yBodyRot - mount.yBodyRotO, 360f)
-                                        * partial
-                                - mount.rotOffs;
-            } else if (riding instanceof net.classicremastered.minecraft.entity.BoatEntity boat) {
-                bodyRot = boat.renderYaw(partial);
-            }
-            float look =
-                    (float) Math.IEEEremainder(yRotO + (yRot - yRotO) * partial - bodyRot, 360f);
-            yaw = Math.max(-75f, Math.min(75f, look));
-        } else if (this instanceof Zombie
-                && isBaby()
-                && !(this instanceof Skeleton)
-                && riding instanceof Mob mount) {
-            float look = bodyRot + yaw;
-            bodyRot = mount.renderBodyYaw(partial) - mount.rotOffs;
-            yaw = (float) Math.IEEEremainder(look - bodyRot, 360);
-            yaw = Math.max(-75f, Math.min(75f, yaw));
-        }
-
-        GL11.glPushMatrix();
-        float anim = this.animStepO + (this.animStep - this.animStepO) * partial;
-
-        // ---- base brightness color ----
-        float baseBright = this.getRenderBrightness(partial);
-        GL11.glColor3f(baseBright, baseBright, baseBright);
-
-        float scale = 0.0625F;
-
-        // ---- model ground lift ----
-        float groundLift = 23.0F;
-        boolean groundSkeletonStride = false;
-        if (this.modelName != null && this.modelName.endsWith(".md3")) {
-            groundLift = this.modelGroundOffset;
-        } else if (modelCache != null && this.modelName != null) {
-            Model mm = modelCache.getModel(this.modelName);
-            if (mm != null) groundLift = mm.groundOffset;
-            if (mm instanceof SkeletonModel skeletonModel && riding == null && health > 0) {
-                groundSkeletonStride = true;
-                if (onGround)
-                    groundLift -= skeletonModel.groundedStrideOffset(anim, runAmt, isBaby());
-            }
-        }
-
-        float walkBob =
-                groundSkeletonStride
-                        ? 0f
-                        : Math.abs(MathHelper.cos(anim * .6662F))
-                                * 5.0F
-                                * runAmt
-                                * this.bobStrength;
-        float bob = -walkBob - groundLift;
-
-        // ---- move to entity ----
-        float renderHeightOffset =
-                riding == null
-                                && this
-                                        instanceof
-                                        net.classicremastered.minecraft.player.Player player
-                        ? player.getRenderHeightOffset(partial)
-                        : this.heightOffset;
-        float anchorY =
-                this instanceof net.classicremastered.minecraft.player.Player || riding != null
-                        ? this.yo + (this.y - this.yo) * partial - renderHeightOffset
-                        : renderFeetY(partial);
-        if (riding instanceof net.classicremastered.minecraft.entity.BoatEntity
-                && (this instanceof HumanoidMob
-                        || this instanceof net.classicremastered.minecraft.player.Player)) {
-            anchorY -= isBaby() ? .19f : .30f;
-        } else if (riding != null
-                && !(riding instanceof Cow)
-                && !(this instanceof Skeleton && riding instanceof Spider)
-                && (this instanceof Zombie
-                        || this instanceof net.classicremastered.minecraft.player.Player)) {
-            anchorY -= isBaby() ? .43f : .62f;
-        }
-        GL11.glTranslatef(
-                this.xo + (this.x - this.xo) * partial,
-                anchorY + this.renderOffset,
-                this.zo + (this.z - this.zo) * partial);
-
-        boolean showFireOverlay = remainingFireTicks > 0 && !isWetForFire();
-        if (this instanceof Zombie zombie && zombie.sunlightFlameTicks > 0 && !isWetForFire())
-            showFireOverlay = true;
-
-        if (showFireOverlay) {
-            GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_TEXTURE_BIT | GL11.GL_CURRENT_BIT);
-            try {
-                GL11.glEnable(GL11.GL_ALPHA_TEST);
-                GL11.glDisable(GL11.GL_LIGHTING);
-                GL11.glBindTexture(
-                        GL11.GL_TEXTURE_2D,
-                        tm.load(net.classicremastered.minecraft.render.BlockTextureAtlas.RESOURCE));
-                float width = Math.max(.65f, this.bbWidth * 1.35f);
-                float layerHeight = Math.min(1f, this.bbHeight);
-                ShapeRenderer flames = ShapeRenderer.instance;
-                flames.begin();
-                flames.color(1, 1, 1);
-                for (float layer = 0; layer < this.bbHeight * .8f; layer += .55f) {
-                    net.classicremastered.minecraft.level.tile.FireBlock.renderFlames(
-                            flames, -width * .5f, layer, -width * .5f, width, layerHeight);
-                    width *= .85f;
-                }
-                flames.end();
-            } finally {
-                GL11.glPopAttrib();
-            }
-        }
-
-        // ---- hurt/death wobble ----
-        float ht = (float) this.hurtTime - partial;
-        if (ht > 0.0F || this.health <= 0) {
-            if (ht < 0.0F) ht = 0.0F;
-            else
-                ht =
-                        MathHelper.sin(
-                                        (ht /= (float) this.hurtDuration)
-                                                * ht
-                                                * ht
-                                                * ht
-                                                * (float) Math.PI)
-                                * 14.0F;
-
-            if (this.health <= 0) {
-                float deathF = ((float) this.deathTime + partial) / 20.0F;
-                ht += deathF * deathF * 800.0F;
-                if (ht > 90.0F) ht = 90.0F;
-            }
-
-            float dir = this.hurtDir;
-            GL11.glRotatef(180.0F - bodyRot + modelYawOffset, 0.0F, 1.0F, 0.0F);
-            GL11.glRotatef(-dir, 0.0F, 1.0F, 0.0F);
-            GL11.glRotatef(-ht, 0.0F, 0.0F, 1.0F);
-            GL11.glRotatef(dir, 0.0F, 1.0F, 0.0F);
-            GL11.glRotatef(-(180.0F - bodyRot + modelYawOffset), 0.0F, 1.0F, 0.0F);
-        }
-
-        float modelScale = modelScale();
-        GL11.glScalef(modelScale, modelScale, modelScale);
-        GL11.glTranslatef(0.0F, -bob * scale, 0.0F);
-        GL11.glScalef(1.0F, -1.0F, 1.0F);
-        GL11.glRotatef(180.0F - bodyRot + modelYawOffset, 0.0F, 1.0F, 0.0F);
-
-        // Alpha/Cull state
-        if (!this.allowAlpha) GL11.glDisable(GL11.GL_ALPHA_TEST);
-        else GL11.glDisable(GL11.GL_CULL_FACE);
-
-        // ==== Delegated render ====
-        GL11.glScalef(-1.0F, 1.0F, 1.0F);
-
-        if (this instanceof BabyZombie baby
-                && (MobRenderer<?>) r instanceof BabyZombieRenderer babyRenderer) {
-            // Keep the visible head and the hurt passes on the same pose while tracking a
-            // target.
-            babyRenderer.render(baby, tm, partial, yaw, pitch);
-        } else if (r != null) {
-            r.render(this, tm, partial);
-        } else {
-            // fallback legacy path
-            this.bindTexture(tm);
-            if (this.modelName != null && this.modelName.endsWith(".md3")) {
-                MD3Model m = MD3Cache.getModel(this.modelName);
-                if (m != null) MD3Renderer.render(m, this.textureName, tm, scale);
-            } else if (this.modelName != null) {
-                var humanoid =
-                        this instanceof net.classicremastered.minecraft.player.Player
-                                        && modelCache != null
-                                        && modelCache.getModel(modelName)
-                                                instanceof
-                                                net.classicremastered.minecraft.model.HumanoidModel
-                                                                model
-                                ? model
-                                : null;
-                if (humanoid != null) humanoid.setAttachmentTextures(tm);
-                try {
-                    this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
-                } finally {
-                    if (humanoid != null) humanoid.setAttachmentTextures(null);
-                }
-                if (modelCache != null
-                        && modelCache.getModel(this.modelName)
-                                instanceof
-                                net.classicremastered.minecraft.model.StickFigureModel
-                                                stickFigure) {
-                    stickFigure.renderHeldBlock(tm, scale, baseBright);
-                }
-            }
-        }
-
-        if (modelCache != null
-                && modelName != null
-                && modelCache.getModel(modelName)
-                        instanceof net.classicremastered.minecraft.model.HumanoidModel h) {
-            net.classicremastered.minecraft.render.EquipmentRenderer.armor(
-                    this, h, tm, scale, baseBright);
-            if (this instanceof net.classicremastered.minecraft.player.Player player) {
-                net.classicremastered.minecraft.render.HeldItemRenderer.renderInHand(
-                        player, h, tm, scale, baseBright);
-            } else {
-                net.classicremastered.minecraft.render.EquipmentRenderer.held(
-                        this, h, tm, scale, baseBright);
-            }
-        }
-        // === Hurt/dying overlay (with null-safe modelName) ===
-        float hurtLeft = (float) this.hurtTime - partial;
-        boolean hurtNow = (hurtLeft > 0.0F && this.hurtDuration > 0);
-        boolean dying = (this.health <= 0);
-
-        if (hurtNow || dying) {
-            float s;
-            if (hurtNow) {
-                float t = hurtLeft / (float) this.hurtDuration;
-                s = t * t;
-            } else {
-                float t = 1.0f - Math.min(1.0f, ((float) this.deathTime + partial) / 10.0f);
-                s = 0.7f * t;
-            }
-
-            boolean alphaWas = GL11.glIsEnabled(GL11.GL_ALPHA_TEST);
-            if (alphaWas) GL11.glDisable(GL11.GL_ALPHA_TEST);
-
-            GL11.glEnable(GL11.GL_BLEND);
-            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            GL11.glColor4f(1.0f, 0.2f, 0.2f, Math.min(0.75f, 0.55f * s));
-
-            if (this instanceof Skeleton
-                    || this instanceof Zombie && (isBaby() || modelScale != 1.0F)) {
-                this.bindTexture(tm);
-            }
-            if (this.modelName != null && this.modelName.endsWith(".md3")) {
-                MD3Model m = MD3Cache.getModel(this.modelName);
-                if (m != null) MD3Renderer.render(m, this.textureName, tm, scale);
-            } else if (this.modelName != null) {
-                this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
-            }
-
-            try {
-                int overlayTex = tm.load("/misc/hurt_overlay.png");
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, overlayTex);
-                GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
-                GL11.glColor4f(0.95f, 0.25f, 0.15f, 0.50f * s);
-
-                if (this.modelName != null && this.modelName.endsWith(".md3")) {
-                    MD3Model m = MD3Cache.getModel(this.modelName);
-                    if (m != null) MD3Renderer.render(m, this.textureName, tm, scale);
-                } else if (this.modelName != null) {
-                    this.renderModel(tm, anim, partial, runAmt, yaw, pitch, scale);
-                }
-            } catch (Throwable ignore) {
-            }
-
-            GL11.glDisable(GL11.GL_BLEND);
-            if (alphaWas) GL11.glEnable(GL11.GL_ALPHA_TEST);
-            GL11.glColor4f(1f, 1f, 1f, 1f);
-        }
-
-        GL11.glEnable(GL11.GL_ALPHA_TEST);
-        if (this.allowAlpha) GL11.glEnable(GL11.GL_CULL_FACE);
-        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-        GL11.glPopMatrix();
+    public final void render(TextureManager textures, float partial) {
+        var renderer = RenderManager.getRenderer(this);
+        if (renderer != null) renderer.renderWorld(this, textures, partial);
     }
 
-    public void renderModel(
-            TextureManager tm,
-            float anim,
-            float partial,
-            float runAmt,
-            float yaw,
-            float pitch,
-            float scale) {
-        // MD3 path unchanged
-        if (modelName != null && modelName.endsWith(".md3")) {
-            MD3Model md3 = MD3Cache.getModel(modelName);
-            if (md3 != null) MD3Renderer.render(md3, textureName, tm, scale);
-            return;
-        }
+    public final float renderScale() {
+        return modelScale();
+    }
 
-        // special: sync chicken flapping state
-
-        // Classic model path
-        if (modelCache == null || this.modelName == null) return;
-        Model m = modelCache.getModel(this.modelName);
-        if (m == null) return;
-        if (m instanceof net.classicremastered.minecraft.model.SkeletonModel skeletonModel) {
-            skeletonModel.setRenderTextures(tm);
-            skeletonModel.setRenderPartial(partial);
-        }
-        if (m instanceof net.classicremastered.minecraft.model.SkeletonTrapModel trapModel)
-            trapModel.setRenderContext(tm, partial);
-        if (this instanceof net.classicremastered.minecraft.mob.Chicken
-                && m instanceof net.classicremastered.minecraft.model.ChickenModel) {
-            ((net.classicremastered.minecraft.model.ChickenModel) m)
-                    .syncFromEntity((net.classicremastered.minecraft.mob.Chicken) this);
-        }
-        // Let models (e.g., ZombieModel) read per-entity flags (builder poses, etc.)
-        m.preAnimate(this);
-        if (m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid) {
-            humanoid.setSneakProgress(
-                    this instanceof net.classicremastered.minecraft.player.Player player
-                            ? player.getSneakProgress(partial)
-                            : 0);
-        }
-
-        // Drive animation BEFORE render (walk cycles, arms, head)
-        float ageInTicks = (float) this.tickCount + partial;
-        m.setRotationAngles(anim, runAmt, ageInTicks, yaw, pitch, scale);
-
-        // Draw
-        if (this instanceof net.classicremastered.minecraft.player.Player player
-                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
-                && net.classicremastered.minecraft.model.GunModel.isGun(
-                        player.inventory.getSelected() - 256)) {
-            humanoid.renderHoldingGun(anim, runAmt, ageInTicks, yaw, pitch, scale);
-        } else if (this instanceof net.classicremastered.minecraft.player.Player player
-                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
-                && player.inventory.getSelected() == 262) {
-            var bow =
-                    (net.classicremastered.minecraft.level.itemstack.BowItem)
-                            net.classicremastered.minecraft.level.itemstack.Item.BOW;
-            humanoid.renderHoldingBow(
-                    yaw, pitch, scale, bow.isDrawing(player), handSwingProgress(partial));
-        } else if (m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid
-                && this instanceof Defender defender) {
-            defender.renderHandAction(humanoid, yaw, pitch, scale, partial);
-        } else if (this instanceof net.classicremastered.minecraft.player.Player player
-                && m instanceof net.classicremastered.minecraft.model.HumanoidModel humanoid) {
-            int selected = player.inventory.getSelected();
-            humanoid.renderHandAction(
-                    scale,
-                    selected > 0,
-                    handSwingProgress(partial),
-                    player.developerPowers().swordPose(player, selected, partial),
-                    net.classicremastered.minecraft.render.HeldItemRenderer.eatingTime(
-                            player, partial));
-        } else {
-            m.render(anim, runAmt, ageInTicks, yaw, pitch, scale);
-        }
+    public final float renderBobStrength() {
+        return bobStrength;
     }
 
     protected int healthLimit() {

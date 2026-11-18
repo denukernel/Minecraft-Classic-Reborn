@@ -8,7 +8,6 @@ public final class Ironmock extends Mob {
     public static final short REGISTRY_ID = 62;
     public Ironmock(Level level, float x, float y, float z) {
         super(level);
-        modelName = "ironmock";
         textureName = "/mob/ironmock.png";
         setSize(.8f, 1.5f);
         heightOffset = .75f;

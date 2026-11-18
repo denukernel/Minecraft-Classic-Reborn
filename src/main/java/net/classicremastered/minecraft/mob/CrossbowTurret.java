@@ -5,27 +5,23 @@ import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.itemstack.TurretUpgrade;
-import net.classicremastered.minecraft.model.CrossbowTurretModel;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.player.Player;
-import net.classicremastered.minecraft.render.TextureManager;
 import net.classicremastered.nbt.CompoundTag;
 
-import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** Tier 1 crossbow turret from Turret Mod Rebirth. */
 public final class CrossbowTurret extends Mob {
+    private static final long serialVersionUID = 3720698048762175934L;
     public static final short REGISTRY_ID = 77;
     public static final int MAX_HEALTH = 20;
     public static final int AMMO_CAPACITY = 256;
 
     private static final int RANGE_ABOVE = 4;
     private static final int RANGE_BELOW = 8;
-    private static final java.util.Map<TurretVariant, CrossbowTurretModel> MODELS =
-            new java.util.EnumMap<>(TurretVariant.class);
     public TurretVariant variant = TurretVariant.CROSSBOW;
     private transient Mob trackedTarget;
     private transient boolean aligned;
@@ -501,41 +497,28 @@ public final class CrossbowTurret extends Mob {
         }
     }
 
-    @Override
-    public void render(TextureManager textures, float partial) {
-        var model = MODELS.computeIfAbsent(variant, CrossbowTurretModel::new);
-        GL11.glPushMatrix();
-        try {
-            boolean harpoon = variant == TurretVariant.HARPOON;
-            float hurt = hurtDuration > 0 ? Math.max(0, (hurtTime - partial) / hurtDuration) : 0;
-            float collapse = health <= 0 ? Math.min(1, (deathTime + partial) / 20f) : 0;
-            float jolt = (float) Math.sin((1 - hurt) * Math.PI * 3) * hurt;
-            float renderX = hasTicked ? xo + (x - xo) * partial : x;
-            float renderY = renderFeetY(partial);
-            float renderZ = hasTicked ? zo + (z - zo) * partial : z;
-            GL11.glTranslatef(renderX, renderY, renderZ);
-            GL11.glRotatef(9 * jolt + 20 * collapse * collapse, 0, 0, 1);
-            GL11.glTranslatef(0, (harpoon ? .45f : 1.5f) - .22f * collapse, 0);
-            GL11.glScalef(1, harpoon ? 1 : -1, harpoon ? 1 : -1);
-            GL11.glColor4f(
-                    1 - .5f * collapse,
-                    1 - .6f * hurt - .35f * collapse,
-                    1 - .6f * hurt - .35f * collapse,
-                    1);
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, textures.load(variant.texture()));
-            float yaw = previousAimYaw + (aimYaw - previousAimYaw) * partial;
-            float pitch = previousAimPitch + (aimPitch - previousAimPitch) * partial;
-            pitch = pitch * (1 - collapse) + 55 * collapse + 12 * jolt;
-            model.render(
-                    harpoon ? yaw + 180 : -yaw,
-                    harpoon ? -pitch : pitch,
-                    drive == null ? 0f : drive.chassisYaw(partial),
-                    drive == null ? 0f : drive.wheelPitch(partial),
-                    !headless);
-        } finally {
-            GL11.glColor4f(1, 1, 1, 1);
-            GL11.glPopMatrix();
-        }
+    public float renderX(float partial) {
+        return hasTicked ? xo + (x - xo) * partial : x;
+    }
+
+    public float renderZ(float partial) {
+        return hasTicked ? zo + (z - zo) * partial : z;
+    }
+
+    public float renderAimYaw(float partial) {
+        return previousAimYaw + (aimYaw - previousAimYaw) * partial;
+    }
+
+    public float renderAimPitch(float partial) {
+        return previousAimPitch + (aimPitch - previousAimPitch) * partial;
+    }
+
+    public float renderChassisYaw(float partial) {
+        return drive == null ? 0 : drive.chassisYaw(partial);
+    }
+
+    public float renderWheelPitch(float partial) {
+        return drive == null ? 0 : drive.wheelPitch(partial);
     }
 
     @Override

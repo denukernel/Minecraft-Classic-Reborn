@@ -18,6 +18,20 @@ public final class RanaRenderer extends MobRenderer<Rana> {
 
     @Override
     public void render(Rana mob, TextureManager tm, float partial) {
+        drawMesh(tm);
+    }
+
+    @Override
+    protected float groundOffset(Rana mob) {
+        return 1.5f;
+    }
+
+    @Override
+    protected void renderPose(Rana mob, TextureManager tm, float partial, float yaw, float pitch) {
+        drawMesh(tm);
+    }
+
+    private void drawMesh(TextureManager tm) {
         MD3Model m = MD3Cache.getModel(md3Path);
         if (m != null) {
             MD3Renderer.render(m, texture, tm, MODEL_SCALE);

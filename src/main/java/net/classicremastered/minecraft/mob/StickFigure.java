@@ -108,18 +108,8 @@ public final class StickFigure extends Mob {
         return true;
     }
 
-    @Override
-    public void render(net.classicremastered.minecraft.render.TextureManager tm, float partial) {
-        super.render(tm, partial);
-        if (ai instanceof StickFigureAI special)
-            special.powers.renderPhysicsGun(this, partial);
-        if (isEnraged() && !removed)
-            net.classicremastered.minecraft.render.RageAuraRenderer.render(this, partial);
-    }
-
     public StickFigure(Level level, float x, float y, float z) {
         super(level);
-        modelName = "stickfigure";
         textureName = "/mob/stick-figure.png";
         setSize(.65f, STANDING_HEIGHT);
         heightOffset = 1f;

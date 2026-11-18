@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 
 public final class GameRulesScreen extends GuiScreen {
     private static final String[] LABELS = {
-        "Daylight Cycle", "Mob Spawning", "Mob Loot", "Keep Inventory"
+        "Daylight Cycle", "Mob Spawning", "Mob Loot", "Keep Inventory", "Defenders Follow Player"
     };
     private final GuiScreen parent;
     private final Map<String, Boolean> rules;
@@ -41,11 +41,16 @@ public final class GameRulesScreen extends GuiScreen {
     @Override
     public void onOpen() {
         buttons.clear();
-        int top = Math.max(30, height / 2 - 58);
+        int top = rulesTop();
         for (int i = 0; i < GameruleCommand.RULES.size(); i++)
             buttons.add(new Button(i, width / 2 - 100, top + 24 * i, label(i)));
-        buttons.add(new Button(10, width / 2 - 100, top + 102, 98, 20, "Done"));
-        buttons.add(new Button(11, width / 2 + 2, top + 102, 98, 20, "Cancel"));
+        int bottom = top + 24 * GameruleCommand.RULES.size() + 6;
+        buttons.add(new Button(10, width / 2 - 100, bottom, 98, 20, "Done"));
+        buttons.add(new Button(11, width / 2 + 2, bottom, 98, 20, "Cancel"));
+    }
+
+    private int rulesTop() {
+        return Math.max(30, (height - 24 * GameruleCommand.RULES.size() - 20) / 2);
     }
 
     private String label(int i) {
@@ -70,8 +75,7 @@ public final class GameRulesScreen extends GuiScreen {
     public void render(int mouseX, int mouseY) {
         if (minecraft.level == null) drawMenuBackground();
         drawFadingBox(0, 0, width, height, 0x60000000, 0xA0000000);
-        drawCenteredString(
-                fontRenderer, "Game Rules", width / 2, Math.max(10, height / 2 - 78), 0xFFFFFF);
+        drawCenteredString(fontRenderer, "Game Rules", width / 2, rulesTop() - 20, 0xFFFFFF);
         super.render(mouseX, mouseY);
     }
 }

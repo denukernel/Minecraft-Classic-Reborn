@@ -591,6 +591,10 @@ public final class HUDScreen extends Screen {
             case RUSH_WINDUP -> "Charge incoming";
             case RUSH -> "Charging";
             case STAGGER -> "Staggered";
+            case CROWD_PUSH ->
+                    ai.powers.phaseTicks < StickFigurePowers.CROWD_PUSH_RELEASE_TICK
+                            ? "Crowd push incoming"
+                            : "Recovering";
         };
     }
 

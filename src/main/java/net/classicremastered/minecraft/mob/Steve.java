@@ -8,7 +8,6 @@ public final class Steve extends Mob {
 
     public Steve(Level level, float x, float y, float z) {
         super(level);
-        modelName = "humanoid";
         textureName = "/char.png";
         setSize(.6f, 1.8f);
         heightOffset = .9f;

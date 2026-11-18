@@ -1,9 +1,6 @@
 package net.classicremastered.minecraft.mob;
 
-import net.classicremastered.minecraft.Entity;
-import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.tile.Block;
 
 public class Pig extends QuadrupedMob {
     public static final long serialVersionUID = 0L;
@@ -12,7 +9,6 @@ public class Pig extends QuadrupedMob {
         super(var1, var2, var3, var4);
         this.health = this.lastHealth = healthLimit();
         this.heightOffset = 1.72F;
-        this.modelName = "pig";
         this.textureName = "/mob/pig.png";
         initSounds();
     }

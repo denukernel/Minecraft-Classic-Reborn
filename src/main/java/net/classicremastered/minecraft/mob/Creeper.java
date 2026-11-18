@@ -1,9 +1,12 @@
 package net.classicremastered.minecraft.mob;
 
 import net.classicremastered.minecraft.*;
+import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.entity.ProjectileSweep;
 import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.mob.ai.*;
 import net.classicremastered.minecraft.mob.ai.combat.BasicAttackAI;
 import net.classicremastered.minecraft.mob.ai.creeper.CreeperAI;
@@ -21,7 +24,6 @@ public class Creeper extends Mob {
     public Creeper(Level level, float x, float y, float z) {
         super(level);
         heightOffset = 1.62f;
-        modelName = "creeper";
         textureName = "/mob/creeper.png";
         ai = new CreeperAI();
         deathScore = 200;
@@ -93,6 +95,16 @@ public class Creeper extends Mob {
         remove();
         level.playExplosionEffects(x, bb.y0, z, 3f);
         level.explode(this, x, bb.y0, z, 3f);
+    }
+
+    @Override
+    public void die(Entity killer) {
+        if (dead || removed) return;
+        super.die(killer);
+        if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
+        ItemRegistry.bootstrap();
+        level.addEntity(
+                new DroppedItem(level, x, y, z, Item.GUNPOWDER_ID, 1 + level.random.nextInt(2)));
     }
 
     public boolean igniteFuse() {

@@ -65,6 +65,13 @@ public final class Classic3DMapEditorApp {
             Minecraft.mcDir = appDir();
             textures = new TextureManager(new GameSettings(null, appDir()));
             Mob.modelCache = new ModelManager();
+            net.classicremastered.minecraft.render.entity.EntityRenderBootstrap.init(
+                    Mob.modelCache);
+            var renderers =
+                    net.classicremastered.minecraft.render.entity.RenderManager.getRenderer(
+                            Player.class);
+            net.classicremastered.minecraft.render.entity.RenderManager.register(
+                    PreviewPlayer.class, renderers);
             opaqueList = GL11.glGenLists(2);
             translucentList = opaqueList + 1;
             if (args.length > 0) document.open(new File(args[0]));

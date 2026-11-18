@@ -11,9 +11,8 @@ public final class TeenZombie extends Zombie {
         configureTeen(this, "zombie_teen");
     }
 
-    static void configureTeen(Zombie mob, String model) {
-        mob.modelName = model;
-        mob.textureName = "/mob/" + model + ".png";
+    static void configureTeen(Zombie mob, String skin) {
+        mob.textureName = "/mob/" + skin + ".png";
         mob.setSize(mob.bbWidth * SCALE, mob.bbHeight * SCALE);
         mob.heightOffset *= SCALE;
         mob.setPos(mob.x, mob.y, mob.z);

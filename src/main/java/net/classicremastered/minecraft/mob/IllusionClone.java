@@ -8,7 +8,6 @@ public final class IllusionClone extends Mob {
 
     public IllusionClone(Level l, float x, float y, float z) {
         super(l);
-        this.modelName  = "zombie";          // keep boss look; swap to "humanoid" if preferred
         this.textureName= "/mob/zombie.png"; // or "/char.png"
         this.heightOffset = 1.62F;
         this.setPos(x, y, z);

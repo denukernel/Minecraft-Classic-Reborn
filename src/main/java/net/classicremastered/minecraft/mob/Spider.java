@@ -11,8 +11,6 @@ public class Spider extends QuadrupedMob {
 
     public Spider(Level level, float x, float y, float z) {
         super(level, x, y, z);
-
-        this.modelName = "spider";
         this.textureName = "/mob/spider.png";
         this.setSize(1.4F, 0.9F);
 

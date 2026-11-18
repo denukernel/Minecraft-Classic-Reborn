@@ -17,10 +17,9 @@ public abstract class Fish extends Mob {
     private transient Fish schoolLeader;
 
     protected Fish(
-            Level level, float x, float y, float z, String model, float width, float height) {
+            Level level, float x, float y, float z, String skin, float width, float height) {
         super(level);
-        modelName = model;
-        textureName = "/mob/fish/" + model + ".png";
+        textureName = "/mob/fish/" + skin + ".png";
         health = 3;
         ai = null;
         footSize = 0;

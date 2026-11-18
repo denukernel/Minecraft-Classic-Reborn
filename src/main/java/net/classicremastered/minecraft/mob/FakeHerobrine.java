@@ -26,7 +26,6 @@ public class FakeHerobrine extends Mob {
 
     public FakeHerobrine(Level level) {
         super(level);
-        this.modelName = "humanoid";
         this.heightOffset = 1.62F;
         this.bbHeight = 1.8F;
         this.bbWidth = 0.6F;

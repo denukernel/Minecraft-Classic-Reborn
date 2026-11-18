@@ -27,6 +27,7 @@ import net.classicremastered.nbt.ListTag;
 
 /** A hired, persistent companion. Equipment transfers always move real inventory items. */
 public final class Defender extends HumanoidMob {
+    private static final long serialVersionUID = -3007143288636179014L;
     public static final short REGISTRY_ID = 78;
     public static final int PRICE = 30;
     public static final int PACK_SIZE = 9;
@@ -91,7 +92,6 @@ public final class Defender extends HumanoidMob {
     public Defender(Level level, float x, float y, float z) {
         super(level, x, y, z);
         ItemRegistry.bootstrap();
-        modelName = "humanoid";
         textureName = "/char.png";
         allowAlpha = true;
         customName = "Defender";
@@ -138,6 +138,7 @@ public final class Defender extends HumanoidMob {
                 && (!(enemy instanceof Spider)
                         || enemy.level != null && enemy.getBrightness(0) < .5f)
                 && (MobRegistry.isTurretHostile(enemy)
+                        || enemy instanceof SkeletonTrap
                         || enemy instanceof IronGolem
                         || enemy instanceof Villager villager && villager.isHostile());
     }
@@ -762,24 +763,6 @@ public final class Defender extends HumanoidMob {
             return false;
         Equipment.equip(this, slot, 0, 0);
         return true;
-    }
-
-    @Override
-    public void renderModel(
-            net.classicremastered.minecraft.render.TextureManager textures,
-            float swing,
-            float amount,
-            float age,
-            float yaw,
-            float pitch,
-            float scale) {
-        org.lwjgl.opengl.GL11.glPushAttrib(org.lwjgl.opengl.GL11.GL_ENABLE_BIT);
-        try {
-            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_ALPHA_TEST);
-            super.renderModel(textures, swing, amount, age, yaw, pitch, scale);
-        } finally {
-            org.lwjgl.opengl.GL11.glPopAttrib();
-        }
     }
 
     @Override

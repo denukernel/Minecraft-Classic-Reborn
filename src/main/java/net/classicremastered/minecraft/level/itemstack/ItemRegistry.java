@@ -69,6 +69,7 @@ public final class ItemRegistry {
         new Item(Item.LADDER_ICON_ID, "Ladder", "/textures/block/tower_ladder.png");
         new Item(Item.REDSTONE_DUST_ID, "Redstone Dust", "/items/redstone.png");
         new Item(Item.COAL_ID, "Coal", "/items/coal.png");
+        new Item(Item.GUNPOWDER_ID, "Gunpowder", "/items/gunpowder.png");
         OreMaterials.register();
         new SaddleItem();
         for (MobWandItem.Power power : MobWandItem.Power.values())

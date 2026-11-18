@@ -10,7 +10,6 @@ public final class LeggedMonster extends Mob {
     public LeggedMonster(Level level, float x, float y, float z) {
         super(level);
         this.setPos(x, y, z);
-        this.modelName = "leggedmonster";
         this.textureName = "/mob/legged_monster.png";
         this.heightOffset = 1.62F;
         this.ai = new BasicAttackAI(true, true);

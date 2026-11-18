@@ -1,10 +1,11 @@
 package net.classicremastered.minecraft.render.entity;
 
-import org.lwjgl.opengl.GL11;
 import net.classicremastered.minecraft.mob.Sheep;
-import net.classicremastered.minecraft.model.SheepModel;
 import net.classicremastered.minecraft.model.SheepFurModel;
+import net.classicremastered.minecraft.model.SheepModel;
 import net.classicremastered.minecraft.render.TextureManager;
+
+import org.lwjgl.opengl.GL11;
 
 public final class SheepRenderer extends MobRenderer<Sheep> {
     private final SheepFurModel fur;
@@ -16,28 +17,38 @@ public final class SheepRenderer extends MobRenderer<Sheep> {
 
     @Override
     public void render(Sheep mob, TextureManager tm, float partial) {
+        bindSkin(mob, tm);
+        drawPose(mob, tm, partial, mob.renderHeadYaw(partial), mob.renderHeadPitch(partial), true);
+    }
+
+    @Override
+    protected void renderPose(Sheep mob, TextureManager tm, float partial, float yaw, float pitch) {
+        drawPose(mob, tm, partial, yaw, pitch, false);
+    }
+
+    private void drawPose(
+            Sheep mob, TextureManager tm, float partial, float yaw, float pitch, boolean basePass) {
         SheepModel s = (SheepModel) model;
         float interpGraze = mob.grazeO + (mob.graze - mob.grazeO) * partial;
         float oldY = s.head.y, oldZ = s.head.z;
 
         AnimInputs a = animInputs(mob, partial);
-        bind(tm, texture);
 
         // animate
         model.preAnimate(mob);
-        model.setRotationAngles(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
+        model.setRotationAngles(a.anim, a.runAmt, a.age, yaw, pitch, MODEL_SCALE);
 
-        // grazing offsets (like your Sheep.renderModel)
+        // Keep the body and wool in the same grazing pose.
         s.head.y += interpGraze * 8.0F;
         s.head.z -= interpGraze;
 
         // base body
-        model.render(a.anim, a.runAmt, a.age, a.yaw, a.pitch, MODEL_SCALE);
+        model.render(a.anim, a.runAmt, a.age, yaw, pitch, MODEL_SCALE);
 
         // fur pass
         if (mob.hasFur) {
-            bind(tm, "/mob/sheep_fur.png");
-            GL11.glDisable(GL11.GL_CULL_FACE); // match old behavior
+            if (basePass) bind(tm, "/mob/sheep_fur.png");
+            GL11.glDisable(GL11.GL_CULL_FACE);
 
             // copy pose from s → fur (subset needed for shape match)
             fur.head.yaw = s.head.yaw;

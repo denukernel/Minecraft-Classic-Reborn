@@ -8,7 +8,6 @@ public class Frostbite extends Zombie {
 
     public Frostbite(Level level, float x, float y, float z) {
         super(level, x, y, z);
-        modelName = "frostbite";
         textureName = "/mob/frostbite.png";
         health = lastHealth = MAX_HEALTH;
     }

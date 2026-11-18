@@ -19,7 +19,6 @@ public final class Bee extends Mob {
         this.setSize(WIDTH, HEIGHT);
         this.heightOffset = HEIGHT * 0.5F;
         this.setPos(x, y, z);
-        this.modelName = "bee";
         this.textureName = "/mob/bee.png";
         this.ai = null;
         this.footSize = 0.0F;

@@ -13,7 +13,6 @@ public final class ShulkerMan extends Mob {
         setPos(x, y, z);
 
         textureName = "/mob/stuckerman.png";
-        modelName = "shulkerman";
         health = 20;
         coinDrop = 2;
         heightOffset = 1.7F;
