@@ -1,5 +1,6 @@
 package net.classicremastered.minecraft.level.infinite;
 
+import net.classicremastered.minecraft.level.RedstoneEngine.Pos;
 import net.classicremastered.minecraft.level.tile.Block;
 
 public final class SimpleChunk {
@@ -11,6 +12,8 @@ public final class SimpleChunk {
 
     public final java.util.List<Runnable> residents = new java.util.ArrayList<>();
     public boolean residentsPublished;
+    // Pending inventory for the generated house chest in this chunk, if present.
+    public Pos houseChest;
     public net.classicremastered.minecraft.level.structure.CobblestoneTower.Entrance
             cobblestoneTower;
     public final java.util.List<net.classicremastered.minecraft.level.GeneratedOccupant>
@@ -111,6 +114,7 @@ public final class SimpleChunk {
     }
 
     public void resetArrays() {
+        this.houseChest = null;
         this.blocks = new byte[SIZE * height * SIZE];
         this.light = new byte[SIZE * height * SIZE];
         this.emissiveBlocks = null;

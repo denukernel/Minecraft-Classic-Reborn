@@ -260,6 +260,13 @@ public final class SimpleChunkManager {
         int idx = SimpleChunk.idx(lx, y, lz, height);
         byte old = c.blocks[idx];
         if (old != id) {
+            var chest = c.houseChest;
+            if (chest != null && chest.x() == x && chest.y() == y && chest.z() == z) {
+                if (level != null && (old & 255) == Block.CHEST.id) {
+                    level.redstone().state(x, y, z);
+                }
+                c.houseChest = null;
+            }
             c.blocks[idx] = id;
             Block previous = Block.blocks[old & 0xFF];
             Block next = Block.blocks[id & 0xFF];

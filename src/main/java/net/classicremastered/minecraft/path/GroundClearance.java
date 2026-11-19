@@ -6,6 +6,7 @@ import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
 import net.classicremastered.minecraft.level.itemstack.BucketItem;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.Block;
+import net.classicremastered.minecraft.level.tile.BuilderDoorBlock;
 import net.classicremastered.minecraft.level.tile.LadderBlock;
 import net.classicremastered.minecraft.level.tile.StairBlock;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
@@ -13,6 +14,7 @@ import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.MobHazards;
 import net.classicremastered.minecraft.mob.StickFigure;
+import net.classicremastered.minecraft.mob.Worker;
 import net.classicremastered.minecraft.phys.AABB;
 
 import java.util.ArrayList;
@@ -29,6 +31,7 @@ final class GroundClearance {
     final float maxDrop;
     private final int minFeet;
     final boolean waterClutch;
+    private final boolean opensDoors;
     private final Predicate<Pos> removableFire;
 
     GroundClearance(Level level, float width, float height) {
@@ -57,6 +60,7 @@ final class GroundClearance {
                 nearbyTurrets(level, mob),
                 Pathfinder.supportsLadders(mob),
                 mob instanceof Defender defender && defender.hasWaterClutchReady(),
+                mob instanceof Defender || mob instanceof Worker,
                 mob instanceof StickFigure && level.isStickmansHouse()
                         ? StickmansHouse.BOSS_FLOOR_FEET
                         : 1,
@@ -64,7 +68,7 @@ final class GroundClearance {
     }
 
     GroundClearance(Level level, float width, float height, boolean swimming, float maxDrop) {
-        this(level, width, height, swimming, maxDrop, List.of(), false, false, 1, null);
+        this(level, width, height, swimming, maxDrop, List.of(), false, false, false, 1, null);
     }
 
     private GroundClearance(
@@ -76,6 +80,7 @@ final class GroundClearance {
             List<AABB> turrets,
             boolean climbing,
             boolean waterClutch,
+            boolean opensDoors,
             int minFeet,
             Predicate<Pos> removableFire) {
         this.level = level;
@@ -86,6 +91,7 @@ final class GroundClearance {
         this.turrets = turrets;
         this.climbing = climbing;
         this.waterClutch = waterClutch;
+        this.opensDoors = opensDoors;
         this.minFeet = minFeet;
         this.removableFire = removableFire;
         offset = Pathfinder.offset(width);
@@ -146,6 +152,7 @@ final class GroundClearance {
                     int id = level.getTile(bx, by, bz);
                     if (hazardous(id, bx, by, bz)) return false;
                     if (id > 0) {
+                        if (opensDoors && BuilderDoorBlock.isClosed(Block.blocks[id])) continue;
                         if (Block.blocks[id] instanceof StairBlock stairs) {
                             List<AABB> boxes = new ArrayList<>(2);
                             stairs.addCollisionBoxes(level, bx, by, bz, body, boxes);
@@ -296,6 +303,7 @@ final class GroundClearance {
                     if (!level.isInBounds(bx, by, bz)) continue;
                     int id = level.getTile(bx, by, bz);
                     if (id == 0) continue;
+                    if (opensDoors && BuilderDoorBlock.isClosed(Block.blocks[id])) continue;
                     if (Block.blocks[id] instanceof StairBlock stairs) {
                         List<AABB> boxes = new ArrayList<>(2);
                         stairs.addCollisionBoxes(

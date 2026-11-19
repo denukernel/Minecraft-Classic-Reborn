@@ -3,7 +3,7 @@ package net.classicremastered.minecraft.chat.commands;
 import net.classicremastered.minecraft.Minecraft;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.mob.CrossbowTurret;
-import net.classicremastered.minecraft.mob.Defender;
+import net.classicremastered.minecraft.mob.Companion;
 import net.classicremastered.minecraft.mob.Fish;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.MobRegistry;
@@ -90,7 +90,7 @@ public class SpawnMobCommand implements Command, AliasedCommand {
                 turret.owner = owner;
                 turret.setGuardPost();
             }
-            if (mob instanceof Defender defender) defender.owner = owner;
+            if (mob instanceof Companion companion) companion.assignOwner(client.player);
             if (mob instanceof Fish) mob.persistent = true;
             return mob;
         }

@@ -1,12 +1,14 @@
 package net.classicremastered.minecraft.mob;
 
+import java.util.function.ToIntFunction;
+
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.entity.Arrow;
 import net.classicremastered.minecraft.entity.DroppedBlock;
 import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.entity.ThrownEnderPearl;
 import net.classicremastered.minecraft.level.Level;
-import net.classicremastered.minecraft.level.tile.CactusBlock;
+import net.classicremastered.minecraft.level.tile.BuilderDoorBlock;
 import net.classicremastered.minecraft.level.itemstack.BowItem;
 import net.classicremastered.minecraft.level.itemstack.BucketItem;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
@@ -26,7 +28,7 @@ import net.classicremastered.nbt.CompoundTag;
 import net.classicremastered.nbt.ListTag;
 
 /** A hired, persistent companion. Equipment transfers always move real inventory items. */
-public final class Defender extends HumanoidMob {
+public final class Defender extends HumanoidMob implements Companion {
     private static final long serialVersionUID = -3007143288636179014L;
     public static final short REGISTRY_ID = 78;
     public static final int PRICE = 30;
@@ -118,17 +120,19 @@ public final class Defender extends HumanoidMob {
                 : null;
     }
 
+    @Override
     public boolean canControl(Player player) {
-        return player != null
-                && level != null
-                && !level.isNetworkMode()
-                && player.level == level
-                && player.health > 0
-                && !player.isSpectator()
-                && !removed
-                && health > 0
-                && distanceToSqr(player) <= 25
-                && owner.equals(CrossbowTurret.playerName(player));
+        return Companion.canControl(this, owner, player);
+    }
+
+    @Override
+    public Mob mob() {
+        return this;
+    }
+
+    @Override
+    public void assignOwner(Player player) {
+        owner = CrossbowTurret.playerName(player);
     }
 
     public static boolean isEnemy(Entity entity) {
@@ -153,6 +157,10 @@ public final class Defender extends HumanoidMob {
                 && !enemy.corruptedToDefendPlayer;
     }
 
+    static boolean isWorkerEnemy(Mob enemy) {
+        return isEnemy(enemy) || isAttackable(enemy) && MobRegistry.isTurretHostile(enemy);
+    }
+
     boolean canRespondTo(Entity entity) {
         return entity instanceof Mob enemy && enemy.level == level && isAttackable(enemy);
     }
@@ -166,7 +174,9 @@ public final class Defender extends HumanoidMob {
                         && (player.recentMobAttacker() == entity
                                 || player.recentMobAttack() == entity
                                         && isNeutralEnemy((Mob) entity))
-                || ai instanceof DefenderAI defend && defend.isRetaliatingAgainst(entity);
+                || ai instanceof DefenderAI defend
+                        && (defend.isRetaliatingAgainst(entity)
+                                || defend.isProtectingWorkerFrom(entity));
     }
 
     private static boolean isNeutralEnemy(Mob enemy) {
@@ -177,39 +187,7 @@ public final class Defender extends HumanoidMob {
     }
 
     public static boolean purchase(Player player) {
-        if (player == null
-                || player.level == null
-                || player.level.isNetworkMode()
-                || player.level.creativeMode
-                || player.isSpectator()
-                || player.health <= 0
-                || player.coins < PRICE) return false;
-        Level level = player.level;
-        Defender defender = new Defender(level, player.x, player.y, player.z);
-        int baseY = (int) Math.floor(player.bb.y0);
-        int baseX = (int) Math.floor(player.x), baseZ = (int) Math.floor(player.z);
-        for (int radius = 2; radius <= 4; radius++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue;
-                    for (int dy = 1; dy >= -2; dy--) {
-                        int x = baseX + dx, y = baseY + dy, z = baseZ + dz;
-                        if (!level.isInBounds(x, y + 2, z) || !level.isSolidTile(x, y - 1, z))
-                            continue;
-                        defender.setPos(x + .5f, y + defender.bbHeight / 2f, z + .5f);
-                        if (!level.getCubes(defender.bb).isEmpty()
-                                || CactusBlock.nearSpawn(level, defender.bb)
-                                || level.containsAnyLiquid(defender.bb)
-                                || !level.isFree(defender.bb)) continue;
-                        defender.owner = CrossbowTurret.playerName(player);
-                        level.addEntity(defender);
-                        player.coins -= PRICE;
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return Companion.hire(player, REGISTRY_ID, PRICE);
     }
 
     public Inventory pack() {
@@ -218,6 +196,13 @@ public final class Defender extends HumanoidMob {
 
     public int skillLevel(Skill skill) {
         return skillLevels[skill.ordinal()];
+    }
+
+    public void initializeSpawnSkills(ToIntFunction<Skill> ranks) {
+        for (Skill skill : Skill.values()) {
+            skillLevels[skill.ordinal()] = Math.max(0, Math.min(ranks.applyAsInt(skill), skillLimit(skill)));
+        }
+        restoreHealth(maxHealth());
     }
 
     public int upgradeCost(Skill skill) {
@@ -284,6 +269,18 @@ public final class Defender extends HumanoidMob {
         return equipment[4] == Item.BOW.id + 256;
     }
 
+    boolean hasSword() {
+        for (int sword : Equipment.SWORDS) {
+            if (equipment[4] == sword + 256) return true;
+        }
+        return false;
+    }
+
+    @Override
+    public String activity() {
+        return ai instanceof DefenderAI defenderAI ? defenderAI.escortActivity() : "";
+    }
+
     public int bowDrawTicks() {
         return health > 0
                         && !removed
@@ -339,27 +336,9 @@ public final class Defender extends HumanoidMob {
         return player != null && equip(player, player.inventory, inventorySlot);
     }
 
+    @Override
     public boolean equip(Player player, Inventory inventory, int inventorySlot) {
-        if (!canControl(player)
-                || (inventory != player.inventory && inventory != pack)
-                || inventorySlot < 0
-                || inventorySlot >= inventory.totalSize()) return false;
-        int raw = inventory.getId(inventorySlot);
-        int count = inventory.getCount(inventorySlot);
-        int slot = equipmentSlot(raw);
-        if (slot < 0 || count <= 0) return false;
-        int previous = equipment[slot];
-        int previousWear = Equipment.wear(this, slot);
-        int wear = inventory.armorWear(inventorySlot);
-        if (count == 1) {
-            inventory.setIdCount(inventorySlot, previous, previous > 0 ? 1 : 0);
-            inventory.setArmorWear(inventorySlot, previousWear);
-        } else {
-            if (previous > 0 && !inventory.addResource(previous, previousWear)) return false;
-            inventory.setIdCount(inventorySlot, raw, count - 1);
-        }
-        Equipment.equip(this, slot, raw, wear);
-        return true;
+        return Companion.super.equip(player, inventory, inventorySlot);
     }
 
     @Override
@@ -393,6 +372,9 @@ public final class Defender extends HumanoidMob {
         if (bucketAimTicks > 0 && dy < 0) {
             dx = xd = 0;
             dz = zd = 0;
+        }
+        if (health > 0 && !isInKnockback() && dx * dx + dz * dz > .0001f) {
+            BuilderDoorBlock.openFor(this, dx, dz);
         }
         super.move(dx, dy, dz);
     }
@@ -754,15 +736,9 @@ public final class Defender extends HumanoidMob {
         lastHealth = (int) Math.min(maxHealth(), (long) lastHealth + restored);
     }
 
+    @Override
     public boolean unequip(Player player, int slot) {
-        if (!canControl(player)
-                || slot < 0
-                || slot >= equipment.length
-                || equipment[slot] <= 0
-                || !player.inventory.addResource(equipment[slot], Equipment.wear(this, slot)))
-            return false;
-        Equipment.equip(this, slot, 0, 0);
-        return true;
+        return Companion.super.unequip(player, slot);
     }
 
     @Override

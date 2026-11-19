@@ -67,7 +67,7 @@ public class Item {
     public static Item BUCKET_EMPTY, BUCKET_WATER, BUCKET_LAVA;
     public static GravityGunItem GRAVITYGUN;
     public static PhysicsGunItem PHYSICS_GUN;
-    public static Item SNOWBALL, EGG, OAK_SIGN;
+    public static Item SNOWBALL, EGG, OAK_SIGN, OAK_DOOR;
     public static Item BAG_OF_SALT,
             HEALTH_DRINK,
             DAMAGE_BOTTLE,

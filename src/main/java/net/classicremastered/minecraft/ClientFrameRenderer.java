@@ -33,7 +33,7 @@ final class ClientFrameRenderer {
     private ClientFrameRenderer() {}
 
     static int crackTexture(float progress) {
-        return 240 + Math.min(9, Math.max(0, (int) (progress * 10.0F)));
+        return BlockCracksRenderer.texture(progress);
     }
 
     static void render(Minecraft mc) {
@@ -301,6 +301,7 @@ final class ClientFrameRenderer {
                                 mc.settings);
                         r2.setLighting(false);
                         r2.updateFog(cameraLiquid);
+                        BlockCracksRenderer.renderMiners(levelRef, lr.textureManager, camVec);
                         if (!fabulous) renderParticles(pm, renderPartial);
                         GL11.glDisable(3553);
                         r2.updateFog(cameraLiquid);
@@ -327,8 +328,6 @@ final class ClientFrameRenderer {
                                 && (!mc.hudHidden || lr.cracks > 0.0F)
                                 && lr.level.getTile(pick.x, pick.y, pick.z) != Block.FIRE.id) {
                             GL11.glDisable(3008);
-                            LevelRenderer lrPick = lr;
-                            ShapeRenderer sr1 = ShapeRenderer.instance;
                             GL11.glEnable(3042);
                             GL11.glEnable(3008);
                             GL11.glBlendFunc(770, 1);
@@ -341,69 +340,8 @@ final class ClientFrameRenderer {
                                                     + 0.4F)
                                             * 0.5F);
                             if (lr.cracks > 0.0F) {
-                                GL11.glBlendFunc(774, 768);
-                                int terrainTex =
-                                        lr.textureManager.load(
-                                                net.classicremastered.minecraft.render
-                                                        .BlockTextureAtlas.RESOURCE);
-                                GL11.glBindTexture(3553, terrainTex);
-                                GL11.glColor4f(1, 1, 1, 0.5F);
-                                GL11.glPushMatrix();
-                                int pickId = lr.level.getTile(pick.x, pick.y, pick.z);
-                                Block pickBlock = pickId > 0 ? Block.blocks[pickId] : null;
-                                if (pickBlock == null) pickBlock = Block.STONE;
-                                GL11.glDepthMask(false);
-                                int stageTexture = crackTexture(lrPick.cracks);
-                                if (pickBlock
-                                        instanceof
-                                        net.classicremastered.minecraft.level.tile.LadderBlock
-                                                        ladder) {
-                                    GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
-                                    GL11.glPolygonOffset(-1, -1);
-                                    sr1.begin();
-                                    sr1.noColor();
-                                    ladder.renderCracks(sr1, pick.x, pick.y, pick.z, stageTexture);
-                                    sr1.end();
-                                    GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
-                                    pickBlock = null;
-                                }
-                                if (pickBlock
-                                        instanceof
-                                        net.classicremastered.minecraft.level.tile.CircuitBlock
-                                                        circuit) {
-                                    GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
-                                    GL11.glPolygonOffset(-1, -1);
-                                    sr1.begin();
-                                    sr1.noColor();
-                                    boolean drawn =
-                                            circuit.renderTorchCracks(
-                                                    lr.level,
-                                                    pick.x,
-                                                    pick.y,
-                                                    pick.z,
-                                                    sr1,
-                                                    stageTexture);
-                                    sr1.end();
-                                    GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
-                                    if (drawn) pickBlock = null;
-                                }
-                                if (pickBlock != null) {
-                                    float cx = (pickBlock.x1 + pickBlock.x2) / 2.0F;
-                                    float cy = (pickBlock.y1 + pickBlock.y2) / 2.0F;
-                                    float cz = (pickBlock.z1 + pickBlock.z2) / 2.0F;
-                                    GL11.glTranslatef(pick.x + cx, pick.y + cy, pick.z + cz);
-                                    GL11.glScalef(1.01F, 1.01F, 1.01F);
-                                    GL11.glTranslatef(
-                                            -(pick.x + cx), -(pick.y + cy), -(pick.z + cz));
-                                    sr1.begin();
-                                    sr1.noColor();
-                                    for (int face = 0; face < 6; ++face)
-                                        pickBlock.renderSide(
-                                                sr1, pick.x, pick.y, pick.z, face, stageTexture);
-                                    sr1.end();
-                                }
-                                GL11.glDepthMask(true);
-                                GL11.glPopMatrix();
+                                BlockCracksRenderer.render(lr.level, lr.textureManager, pick.x, pick.y,
+                                        pick.z, crackTexture(lr.cracks));
                             }
                             GL11.glDisable(3042);
                             GL11.glDisable(3008);
@@ -494,6 +432,7 @@ final class ClientFrameRenderer {
                                     mc.level, camVec, renderPartial);
                         }
                         ClientWeatherRenderer.render(r2, renderPartial);
+                        MobNameRenderer.render(mc, camera, fr, renderPartial);
                         net.classicremastered.minecraft.render.DeveloperPowerRenderer.render(
                                 mc, renderPartial);
 

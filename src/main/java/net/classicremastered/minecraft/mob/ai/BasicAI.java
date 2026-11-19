@@ -435,7 +435,8 @@ public class BasicAI extends AI {
     }
 
     private boolean escapeHazard() {
-        if (!navigationAllowed()) return false;
+        if (mob.isInKnockback() || !navigationAllowed())
+            return false;
         boolean besideHazard = MobHazards.near(level, mob.bb, null);
         if (!besideHazard && !leavingLava) return false;
         boolean inLava = level.containsLiquid(mob.bb, LiquidType.LAVA);
@@ -803,10 +804,12 @@ public class BasicAI extends AI {
             net.classicremastered.minecraft.path.PathNavigator.Result result,
             float speed,
             float maxTurn) {
-        routeDriven = result.forward;
-        routeYaw = result.targetYaw;
         xxa = yya = yRotA = 0;
         jumping = false;
+        if (mob.isInKnockback())
+            return false;
+        routeDriven = result.forward;
+        routeYaw = result.targetYaw;
         if (result.ladder) {
             ladderStep = result;
             return true;

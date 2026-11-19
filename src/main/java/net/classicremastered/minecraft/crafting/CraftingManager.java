@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.level.itemstack.DarkStickItem;
 import net.classicremastered.minecraft.level.itemstack.Equipment;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
+import net.classicremastered.minecraft.level.itemstack.NameTagItem;
 import net.classicremastered.minecraft.level.itemstack.OreMaterials;
 import net.classicremastered.minecraft.level.itemstack.StructureLocatorItem.Filter;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
@@ -44,6 +45,33 @@ public class CraftingManager {
         // Log -> 4 Planks (Shapeless / 1x1)
         addRecipe(new ItemStack(Block.WOOD.id, 4), "#", '#', Block.LOG.id);
         addRecipe(new ItemStack(BoatItem.ID + 256, 1), "w w", "www", 'w', Block.WOOD.id);
+
+        addRecipe(
+                new ItemStack(Block.DIAMOND_BLOCK_NEW.id, 1),
+                "###",
+                "###",
+                "###",
+                '#',
+                OreMaterials.DIAMOND + 256);
+        addRecipe(
+                new ItemStack(Block.IRON_BLOCK.id, 1),
+                "###",
+                "###",
+                "###",
+                '#',
+                OreMaterials.RAW_IRON + 256);
+        addRecipe(
+                new ItemStack(Block.GOLD_BLOCK.id, 1),
+                "###",
+                "###",
+                "###",
+                '#',
+                OreMaterials.RAW_GOLD + 256);
+
+        addRecipe(
+                new ItemStack(OreMaterials.DIAMOND + 256, 9), "#", '#', Block.DIAMOND_BLOCK_NEW.id);
+        addRecipe(new ItemStack(OreMaterials.RAW_IRON + 256, 9), "#", '#', Block.IRON_BLOCK.id);
+        addRecipe(new ItemStack(OreMaterials.RAW_GOLD + 256, 9), "#", '#', Block.GOLD_BLOCK.id);
 
         int upgrade =
                 net.classicremastered.minecraft.level.itemstack.TurretItems.FIRST_UPGRADE + 256;
@@ -409,6 +437,14 @@ public class CraftingManager {
                 Equipment.LEATHER.id + 256,
                 'I',
                 OreMaterials.RAW_IRON + 256);
+        addRecipe(
+                new ItemStack(NameTagItem.ID + 256, 1),
+                "S",
+                "L",
+                'S',
+                Equipment.STRING.id + 256,
+                'L',
+                Equipment.LEATHER.id + 256);
         for (int t = 0; t < armorMaterials.length; t++) {
             int mat = armorMaterials[t];
             int[] armor = Equipment.ARMOR[t];

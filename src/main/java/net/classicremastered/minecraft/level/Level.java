@@ -1381,13 +1381,15 @@ public class Level implements Serializable {
 
     /** True during the day. If you prefer a softer cutoff, gate on getDaylightBrightness(). */
     public boolean isDaytime() {
+        if (isStickmansHouse()) return false;
         // Sun above horizon => day. Cos(angle) > 0 means between sunrise and sunset.
         float a = getCelestialAngle(0f) * (float) Math.PI * 2f;
         return MathHelper.cos(a) > 0f;
     }
 
-    /** Returns true if the position is directly exposed to the sky (no opaque blocks above). */
+    /** Returns true if the dimension has sunlight and the position is exposed to the sky. */
     public boolean isSunlitAt(float fx, float fy, float fz) {
+        if (isStickmansHouse()) return false;
         int x = (int) Math.floor(fx);
         int y = (int) Math.floor(fy);
         int z = (int) Math.floor(fz);
@@ -1401,6 +1403,7 @@ public class Level implements Serializable {
     }
 
     public boolean hasDirectSun(float x, float headY, float z) {
+        if (isStickmansHouse()) return false;
         int bx = MathHelper.floor(x), bz = MathHelper.floor(z);
         for (int y = Math.max(0, MathHelper.floor(headY)); y < depth; y++) {
             Block block = Block.blocks[getTile(bx, y, bz)];

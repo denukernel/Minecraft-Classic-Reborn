@@ -63,11 +63,14 @@ public final class InfiniteLevelNbtCodec {
         ListTag chunks = new ListTag("Chunks", (byte) 10);
         if (map != null) {
             for (Map.Entry<Long, SimpleChunk> e : map.entrySet()) {
+                SimpleChunk chunk = e.getValue();
                 CompoundTag chunkTag = new CompoundTag(null);
                 chunkTag.putLong("Key", e.getKey());
-                chunkTag.putBoolean("Loaded", e.getValue().loaded);
-                chunkTag.putByteArray("Blocks", e.getValue().blocks);
-                GeneratedOccupant.save(e.getValue().generatedOccupants, chunkTag);
+                chunkTag.putBoolean("Loaded", chunk.loaded);
+                chunkTag.putByteArray("Blocks", chunk.blocks);
+                GeneratedOccupant.save(chunk.generatedOccupants, chunkTag);
+                // Materialize pending loot so it is included in the circuit state below.
+                if (chunk.houseChest != null) level.redstone().initializeHouseChest(chunk, seed);
                 chunks.add(chunkTag);
             }
         }

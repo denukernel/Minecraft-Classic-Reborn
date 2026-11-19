@@ -3,6 +3,8 @@ package net.classicremastered.minecraft.model;
 public final class ModelManager {
 
     private HumanoidModel human = new HumanoidModel(0.0F);
+    private final WorkerModel builder = new WorkerModel();
+    private final WorkerModel miner = new WorkerModel();
     private HumanoidModel armoredHuman = new HumanoidModel(1.0F);
     private CreeperModel creeper = new CreeperModel();
     private SkeletonModel skeleton = new SkeletonModel();
@@ -71,6 +73,10 @@ public final class ModelManager {
                 return this.stickFigure;
             case "humanoid":
                 return this.human;
+            case "builder":
+                return builder;
+            case "miner":
+                return miner;
             case "humanoid.armor":
                 return this.armoredHuman;
             case "creeper":

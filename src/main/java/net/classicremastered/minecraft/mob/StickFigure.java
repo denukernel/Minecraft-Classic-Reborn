@@ -5,10 +5,12 @@ import java.util.Comparator;
 import java.util.List;
 import net.classicremastered.minecraft.CombatRules;
 import net.classicremastered.minecraft.Entity;
+import net.classicremastered.minecraft.entity.DroppedItem;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.dimensions.StickmansHouse;
-import net.classicremastered.minecraft.player.DeathMessages;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigureAI;
+import net.classicremastered.minecraft.player.DeathMessages;
 import net.classicremastered.minecraft.player.Player;
 
 public final class StickFigure extends Mob {
@@ -34,6 +36,28 @@ public final class StickFigure extends Mob {
         if (StickmansHouse.canFightBoss(level, DeathMessages.resolveAttacker(source))) {
             super.hurt(source, damage);
         }
+    }
+
+    @Override
+    public void die(Entity killer) {
+        if (dead || removed) return;
+        super.die(killer);
+        if (level == null || level.isNetworkMode() || !level.doMobLoot) return;
+
+        ItemRegistry.bootstrap();
+        dropPart(ItemRegistry.STICK_FIGURE_HEAD_ID);
+        dropPart(ItemRegistry.STICK_FIGURE_BODY_ID);
+        for (int limb = 0; limb < 4; limb++) {
+            dropPart(ItemRegistry.STICK_FIGURE_LIMB_ID);
+        }
+    }
+
+    private void dropPart(int itemId) {
+        DroppedItem drop = new DroppedItem(level, x, y, z, itemId);
+        drop.xd = (level.random.nextFloat() - 0.5f) * 0.2f;
+        drop.yd = 0.2f;
+        drop.zd = (level.random.nextFloat() - 0.5f) * 0.2f;
+        level.addEntity(drop);
     }
 
     public int attackDamage(int damage) {

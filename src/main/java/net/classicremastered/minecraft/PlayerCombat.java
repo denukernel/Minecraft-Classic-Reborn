@@ -142,6 +142,7 @@ final class PlayerCombat {
             float boost = (float) (.5 / horizontal);
             target.xd += direction.x * boost;
             target.zd += direction.z * boost;
+            target.markKnockback();
         }
         player.xd *= .6f;
         player.zd *= .6f;

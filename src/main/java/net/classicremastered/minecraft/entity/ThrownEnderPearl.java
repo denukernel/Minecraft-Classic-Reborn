@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.mob.Defender;
+import net.classicremastered.minecraft.mob.DefenderAI;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.particle.SmokeParticle;
@@ -200,18 +201,12 @@ public class ThrownEnderPearl extends Entity {
     protected void onImpact(Mob victim, Vec3D impact) {
         if (owner instanceof Defender defender) {
             remove();
-            Vec3D feet = defenderLanding;
-            if (feet != null
-                    && victim == null
-                    && !level.isNetworkMode()
-                    && defender.health > 0
-                    && nearLanding(feet, impact)
-                    && Pathfinder.canStandAt(level, defender, feet.x, feet.y, feet.z)
-                    && level.findEntities(defender, landingBox(defender, feet)).stream()
-                            .noneMatch(
-                                    e -> e instanceof Mob mob && mob.health > 0 && !mob.removed)) {
+            if (level.isNetworkMode() || defender.health <= 0)
+                return;
+            Vec3D feet = defenderDestination(defender, victim, impact);
+            if (feet != null) {
                 moveOwner(defender, feet);
-                if (defender.ai instanceof net.classicremastered.minecraft.mob.DefenderAI ai)
+                if (defender.ai instanceof DefenderAI ai)
                     ai.clearNavigation();
             }
             return;
@@ -220,6 +215,62 @@ public class ThrownEnderPearl extends Entity {
             victim.hurt(owner, 1);
         }
         teleport();
+    }
+
+    private Vec3D defenderDestination(Defender defender, Mob victim, Vec3D impact) {
+        if (victim instanceof Defender other) {
+            return landingBesideDefender(defender, other, impact);
+        }
+        Vec3D feet = defenderLanding;
+        if (victim != null || feet == null || !nearLanding(feet, impact))
+            return null;
+        if (canDefenderLand(defender, feet))
+            return feet;
+
+        // A teammate may have stepped into the destination while the pearl was in
+        // flight.
+        for (Object entity : level.findEntities(defender, landingBox(defender, feet))) {
+            if (entity instanceof Defender other && other.health > 0 && !other.removed) {
+                Vec3D nearby = landingBesideDefender(defender, other, impact);
+                if (nearby != null)
+                    return nearby;
+            }
+        }
+        return null;
+    }
+
+    private Vec3D landingBesideDefender(Defender defender, Defender other, Vec3D impact) {
+        // Start on the side the pearl hit, then look around the other defender for
+        // room.
+        double heading = Math.atan2(impact.z - other.z, impact.x - other.x);
+        float radius = (defender.bbWidth + other.bbWidth) * .5f + .05f;
+        float baseY = Math.round(other.bb.y0 * 2) * .5f;
+        Vec3D origin = new Vec3D(defender.x, defender.bb.y0, defender.z);
+        // Keep these local so a debugger hot swap needs no static initialization.
+        float[] heights = {0, -.5f, .5f, -1, 1};
+        float[] distances = {radius, radius + .5f};
+        int[] turns = {0, 1, -1, 2, -2, 3, -3, 4};
+        for (float height : heights) {
+            for (float distance : distances) {
+                for (int turn : turns) {
+                    double angle = heading + turn * Math.PI / 4;
+                    Vec3D feet = new Vec3D(other.x + (float) Math.cos(angle) * distance, baseY + height,
+                            other.z + (float) Math.sin(angle) * distance);
+                    if (origin.distanceSquared(feet) > .25f * .25f && canDefenderLand(defender, feet)
+                            && level.clip(new Vec3D(impact.x, impact.y, impact.z),
+                                    feet.add(0, defender.bbHeight * .5f, 0), true) == null) {
+                        return feet;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean canDefenderLand(Defender defender, Vec3D feet) {
+        return Pathfinder.canStandAt(level, defender, feet.x, feet.y, feet.z)
+                && level.findEntities(defender, landingBox(defender, feet)).stream()
+                        .noneMatch(e -> e instanceof Mob mob && mob.health > 0 && !mob.removed);
     }
 
     protected Item projectileItem() {

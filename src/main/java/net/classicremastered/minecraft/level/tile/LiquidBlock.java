@@ -13,6 +13,7 @@ public class LiquidBlock extends Block {
     private static final int FALLING_WATER = 8;
     private static final int NO_WATER = 9;
     private static final int SLOPE_RANGE = 4;
+    private static final float LAVA_SURFACE_HEIGHT = 0.91F;
     private static final int[] STEP_X = { -1, 1, 0, 0 };
     private static final int[] STEP_Z = { 0, 0, -1, 1 };
 
@@ -31,12 +32,8 @@ public class LiquidBlock extends Block {
         Block.liquid[var1] = true;
         this.movingId = var1;
         this.stillId = var1 + 1;
-        float var4 = 0.01F;
-        float var3 = 0.1F;
-        this.setBounds(var4 + 0.0F, 0.0F - var3 + var4, var4 + 0.0F, var4 + 1.0F, 1.0F - var3 + var4, var4 + 1.0F);
-        if (var2 == LiquidType.WATER) {
-            this.setBounds(0, 0, 0, 1, 8.0F / 9.0F, 1);
-        }
+        float surfaceHeight = var2 == LiquidType.LAVA ? LAVA_SURFACE_HEIGHT : 8.0F / 9.0F;
+        this.setBounds(0, 0, 0, 1, surfaceHeight, 1);
         this.setPhysics(true);
 
     }
@@ -402,38 +399,32 @@ public class LiquidBlock extends Block {
 
     @Override
     public boolean render(Level level, int x, int y, int z, ShapeRenderer renderer) {
-        if (this.type != LiquidType.WATER) {
-            return super.render(level, x, y, z, renderer);
-        }
-
-        // A solid ceiling can only hide a water surface that reaches its underside.
-        boolean top = level.isInBounds(x, y + 1, z) && !level.hasVisibleWater(x, y + 1, z);
+        // A solid ceiling can only hide a liquid surface that reaches its underside.
+        boolean top = level.isInBounds(x, y + 1, z) && !hasSameLiquid(level, x, y + 1, z);
         boolean north = canRenderSide(level, x, y, z - 1, 2);
         boolean south = canRenderSide(level, x, y, z + 1, 3);
         boolean west = canRenderSide(level, x - 1, y, z, 4);
         boolean east = canRenderSide(level, x + 1, y, z, 5);
         boolean bottom = canRenderSide(level, x, y - 1, z, 0);
         if (bottom) {
-            colorWater(renderer, level, x, y - 1, z, 0.5F);
+            colorLiquid(renderer, level, x, y - 1, z, 0.5F);
             super.renderInside(renderer, x, y, z, 0);
         }
         if (!top && !north && !south && !west && !east) {
             return bottom;
         }
 
-        float nw = cornerWaterHeight(level, x, y, z, -1, -1);
-        float ne = cornerWaterHeight(level, x, y, z, 1, -1);
-        float sw = cornerWaterHeight(level, x, y, z, -1, 1);
-        float se = cornerWaterHeight(level, x, y, z, 1, 1);
+        float nw = cornerHeight(level, x, y, z, -1, -1);
+        float ne = cornerHeight(level, x, y, z, 1, -1);
+        float sw = cornerHeight(level, x, y, z, -1, 1);
+        float se = cornerHeight(level, x, y, z, 1, 1);
         float u0 = (textureId % 16) / 16.0F;
         float v0 = (textureId / 16) / 16.0F;
         float uvSize = 15.99F / 256.0F;
-        boolean renderTop =
-                top
-                        && (Math.min(Math.min(nw, ne), Math.min(sw, se)) < 1.0F
-                                || canRenderSide(level, x, y + 1, z, 1));
+        boolean renderTop = top
+                && (Math.min(Math.min(nw, ne), Math.min(sw, se)) < 1.0F || canRenderSide(level, x, y + 1, z, 1));
         if (renderTop) {
-            colorWater(renderer, level, x, y + 1, z, 1.0F);
+            colorLiquid(renderer, level, x, y + 1, z, 1.0F);
             renderer.vertexUV(x + 1, y + se, z + 1, u0 + uvSize, v0 + uvSize);
             renderer.vertexUV(x + 1, y + ne, z, u0 + uvSize, v0);
             renderer.vertexUV(x, y + nw, z, u0, v0);
@@ -444,22 +435,46 @@ public class LiquidBlock extends Block {
             renderer.vertexUV(x, y + sw, z + 1, u0, v0 + uvSize);
         }
         if (north) {
-            colorWater(renderer, level, x, y, z - 1, 0.8F);
-            renderWaterWall(renderer, x, z, nw, x + 1, z, ne, y, u0, v0, uvSize);
+            colorLiquid(renderer, level, x, y, z - 1, 0.8F);
+            renderLiquidWall(renderer, x, z, nw, x + 1, z, ne, y, u0, v0, uvSize);
         }
         if (south) {
-            colorWater(renderer, level, x, y, z + 1, 0.8F);
-            renderWaterWall(renderer, x + 1, z + 1, se, x, z + 1, sw, y, u0, v0, uvSize);
+            colorLiquid(renderer, level, x, y, z + 1, 0.8F);
+            renderLiquidWall(renderer, x + 1, z + 1, se, x, z + 1, sw, y, u0, v0, uvSize);
         }
         if (west) {
-            colorWater(renderer, level, x - 1, y, z, 0.6F);
-            renderWaterWall(renderer, x, z + 1, sw, x, z, nw, y, u0, v0, uvSize);
+            colorLiquid(renderer, level, x - 1, y, z, 0.6F);
+            renderLiquidWall(renderer, x, z + 1, sw, x, z, nw, y, u0, v0, uvSize);
         }
         if (east) {
-            colorWater(renderer, level, x + 1, y, z, 0.6F);
-            renderWaterWall(renderer, x + 1, z, ne, x + 1, z + 1, se, y, u0, v0, uvSize);
+            colorLiquid(renderer, level, x + 1, y, z, 0.6F);
+            renderLiquidWall(renderer, x + 1, z, ne, x + 1, z + 1, se, y, u0, v0, uvSize);
         }
         return renderTop || bottom || north || south || west || east;
+    }
+
+    private boolean hasSameLiquid(Level level, int x, int y, int z) {
+        return type == LiquidType.WATER ? level.hasVisibleWater(x, y, z) : level.getLiquid(x, y, z) == type;
+    }
+
+    private float cornerHeight(Level level, int x, int y, int z, int dx, int dz) {
+        if (type == LiquidType.WATER) {
+            return cornerWaterHeight(level, x, y, z, dx, dz);
+        }
+
+        // Join the lower surface to any stacked lava column sharing this corner.
+        boolean connected = hasSameLiquid(level, x + dx, y, z) || hasSameLiquid(level, x, y, z + dz);
+        for (int ox = 0; ox <= 1; ox++) {
+            int nx = x + ox * dx;
+            for (int oz = 0; oz <= 1; oz++) {
+                int nz = z + oz * dz;
+                if ((ox == 0 || oz == 0 || connected) && hasSameLiquid(level, nx, y, nz)
+                        && hasSameLiquid(level, nx, y + 1, nz)) {
+                    return 1.0F;
+                }
+            }
+        }
+        return LAVA_SURFACE_HEIGHT;
     }
 
     public static float waterSurface(Level level, int x, int y, int z) {
@@ -514,13 +529,12 @@ public class LiquidBlock extends Block {
         return samples == 0 ? 0 : total / (samples * 9.0F);
     }
 
-    private static void colorWater(
-            ShapeRenderer renderer, Level level, int x, int y, int z, float shade) {
+    private static void colorLiquid(ShapeRenderer renderer, Level level, int x, int y, int z, float shade) {
         float light = level.getRenderBrightness(x, y, z) * shade;
         renderer.color(light, light, light);
     }
 
-    private static void renderWaterWall(ShapeRenderer renderer, int x0, int z0, float h0, int x1, int z1, float h1,
+    private static void renderLiquidWall(ShapeRenderer renderer, int x0, int z0, float h0, int x1, int z1, float h1,
             int y, float u, float v, float size) {
         renderer.vertexUV(x0, y + h0, z0, u, v + (1 - h0) * size);
         renderer.vertexUV(x1, y + h1, z1, u + size, v + (1 - h1) * size);

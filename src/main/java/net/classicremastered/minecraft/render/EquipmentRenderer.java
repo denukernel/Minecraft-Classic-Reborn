@@ -155,12 +155,16 @@ public final class EquipmentRenderer {
 
     public static void held(
             Mob mob, HumanoidModel base, TextureManager tm, float scale, float brightness) {
-        int stackId =
-                mob instanceof Defender defender
-                        ? defender.heldItem()
-                        : mob instanceof ZombieBuilder builder
-                                ? builder.hasStolenHead() ? TurretItems.HEAD + 256 : Block.STONE.id
-                                : mob.equipment[4];
+        int stackId = mob instanceof Defender defender
+                ? defender.heldItem()
+                : mob instanceof ZombieBuilder builder
+                        ? builder.hasStolenHead() ? TurretItems.HEAD + 256 : Block.STONE.id
+                        : mob instanceof net.classicremastered.minecraft.mob.Miner miner
+                                ? miner.displayedTool()
+                                : mob instanceof net.classicremastered.minecraft.mob.Builder worker
+                                        && worker.displayedBlock() > 0
+                                                ? worker.displayedBlock()
+                                                : mob.equipment[4];
         if (stackId <= 0) return;
         GL11.glPushMatrix();
         try {

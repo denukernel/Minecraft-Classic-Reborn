@@ -63,6 +63,10 @@ public final class SurvivalGameMode extends GameMode {
 
     @Override
     public void hitBlock(int x, int y, int z, int side) {
+        if (!canMineWithHeldItem()) {
+            resetHits();
+            return;
+        }
         final int type = minecraft.level.getTile(x, y, z);
         if (type == Block.FIRE.id) {
             breakBlock(x, y, z);
@@ -98,6 +102,10 @@ public final class SurvivalGameMode extends GameMode {
 
     @Override
     public void breakBlock(int x, int y, int z) {
+        if (!canMineWithHeldItem()) {
+            resetHits();
+            return;
+        }
         int block = minecraft.level.getTile(x, y, z);
         if (block == 0) return;
         if (block == Block.FIRE.id) {

@@ -6,6 +6,9 @@ import net.classicremastered.minecraft.mob.MobRegistry;
 public final class ItemRegistry {
 
     private static final int SPAWN_EGG_BASE_ID = 100;
+    public static final int STICK_FIGURE_HEAD_ID = 244;
+    public static final int STICK_FIGURE_BODY_ID = 245;
+    public static final int STICK_FIGURE_LIMB_ID = 246;
     private static boolean bootstrapped = false;
 
     private ItemRegistry() {}
@@ -44,6 +47,7 @@ public final class ItemRegistry {
         Item.ENDER_PEARL = new EnderPearlItem(20);
         Item.SNOWBALL = new SnowballItem(72);
         Item.OAK_SIGN = new SignItem(73);
+        Item.OAK_DOOR = new BuilderDoorItem(247);
         for (StructureLocatorItem.Filter filter : StructureLocatorItem.Filter.values())
             new StructureLocatorItem(filter);
         Item.RAW_PORKCHOP = new RawMeatItem(225, "Raw Porkchop", "/items/porkchop.png", 2);
@@ -57,6 +61,9 @@ public final class ItemRegistry {
         Item.EGG = new EggItem(241);
         new BoatItem();
         new DarkStickItem();
+        new Item(STICK_FIGURE_HEAD_ID, "Stick Figure Head", "/items/stick_figure_head.png");
+        new Item(STICK_FIGURE_BODY_ID, "Stick Figure Body", "/items/stick_figure_body.png");
+        new Item(STICK_FIGURE_LIMB_ID, "Stick Figure Limb", "/items/stick_figure_limb.png");
 
         Equipment.register();
         TurretItems.register();
@@ -72,6 +79,7 @@ public final class ItemRegistry {
         new Item(Item.GUNPOWDER_ID, "Gunpowder", "/items/gunpowder.png");
         OreMaterials.register();
         new SaddleItem();
+        new NameTagItem();
         for (MobWandItem.Power power : MobWandItem.Power.values())
             new MobWandItem(80 + power.ordinal(), power);
         // --- Spawn eggs ---

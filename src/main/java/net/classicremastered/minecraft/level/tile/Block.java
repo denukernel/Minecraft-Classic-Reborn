@@ -82,6 +82,9 @@ public class Block {
             CHEST,
             REDSTONE_ORE;
     public static final Block WORKBENCH;
+    public static final Block SPAWN_EGG_RANDOMIZER;
+    public static final Block BUILDER_DOOR, BUILDER_DOOR_TOP, BUILDER_DOOR_OPEN, BUILDER_DOOR_TOP_OPEN;
+    public static final Block BUILDER_SCAFFOLD;
     public static final Block DIRT;
     public static final Block COBBLESTONE;
     public static final Block BLACK_COBBLESTONE;
@@ -643,6 +646,7 @@ public class Block {
                 || this == DIAMOND_BLOCK_NEW
                 || this == REDSTONE_BLOCK
                 || this == FURNACE
+                || this == SPAWN_EGG_RANDOMIZER
                 || this == STONE_BRICKS
                 || this == SANDSTONE
                 || this == CUT_SANDSTONE
@@ -820,6 +824,13 @@ public class Block {
         STRUCTURE_DELTA = new StructureBlock(63, 211, "Structure Delta", StructureBlock.Type.DELTA);
         JUKEBOX = (new Block(212, 212, "Jukebox")).setData(Tile$SoundType.wood, 1.0F, 1.0F, 2.0F);
         WORKBENCH = new WorkbenchBlock(228);
+        SPAWN_EGG_RANDOMIZER = new SpawnEggRandomizerBlock(90);
+        BUILDER_DOOR = new BuilderDoorBlock(231, false, false, 0);
+        BUILDER_DOOR_TOP = new BuilderDoorBlock(232, true, false, 0);
+        BUILDER_DOOR_OPEN = new BuilderDoorBlock(233, false, true, 0);
+        BUILDER_DOOR_TOP_OPEN = new BuilderDoorBlock(234, true, true, 0);
+        BUILDER_SCAFFOLD = new BuilderScaffoldBlock(235);
+        BuilderDoorBlock.registerOtherFacings();
         var1 = var10000;
         var10000.explodes = false;
         GOLD_BLOCK = var1;

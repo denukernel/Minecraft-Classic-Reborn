@@ -283,6 +283,7 @@ public final class GravityGunItem extends ToolItem {
         mob.yd = direction.y * strength;
         mob.zd = direction.z * strength;
         mob.fallDistance = 0;
+        mob.markKnockback();
     }
 
     private static MovingObjectPosition pickWall(Level level, Vec3D start, Vec3D direction) {

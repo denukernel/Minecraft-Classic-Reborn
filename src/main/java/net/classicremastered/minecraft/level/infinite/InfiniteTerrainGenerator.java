@@ -4,6 +4,7 @@ import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.generator.noise.CombinedNoise;
 import net.classicremastered.minecraft.level.generator.noise.OctaveNoise;
 import net.classicremastered.minecraft.level.generator.noise.PerlinNoise;
+import net.classicremastered.minecraft.level.structure.HouseStructure;
 import net.classicremastered.minecraft.level.tile.Block;
 
 import java.util.Random;
@@ -428,6 +429,11 @@ public final class InfiniteTerrainGenerator {
                 int doorZ = hz;
                 c.blocks[SimpleChunk.idx(doorX & 15, padY + 1, doorZ & 15, height)] = 0;
                 c.blocks[SimpleChunk.idx(doorX & 15, padY + 2, doorZ & 15, height)] = 0;
+
+                var chest = HouseStructure.chestPosition(hx, padY, hz);
+                c.blocks[SimpleChunk.idx(chest.x() & 15, chest.y(), chest.z() & 15, height)] =
+                        (byte) Block.CHEST.id;
+                c.houseChest = chest;
 
                 net.classicremastered.minecraft.level.GeneratedOccupant.offerHouse(c.generatedOccupants,
                         seed, hx + W / 2, padY + 1, hz + D / 2);

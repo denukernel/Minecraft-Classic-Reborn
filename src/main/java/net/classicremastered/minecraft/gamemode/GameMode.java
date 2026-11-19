@@ -8,6 +8,7 @@ import net.classicremastered.minecraft.level.tile.FireBlock;
 import net.classicremastered.minecraft.level.tile.FlowerBlock;
 import net.classicremastered.minecraft.level.tile.Tile$SoundType;
 import net.classicremastered.minecraft.phys.AABB;
+import net.classicremastered.minecraft.player.DeveloperPowers;
 import net.classicremastered.minecraft.player.Player;
 
 public class GameMode {
@@ -213,10 +214,15 @@ public class GameMode {
         return true;
     }
 
+    protected boolean canMineWithHeldItem() {
+        return minecraft == null
+                || minecraft.player == null
+                || !DeveloperPowers.isSword(minecraft.player.inventory.getSelected());
+    }
+
     // Infinite-safe block breaking
     public void breakBlock(int x, int y, int z) {
-        if (isSpectator())
-            return;
+        if (isSpectator() || !canMineWithHeldItem()) return;
         if (this.level == null) this.level = minecraft.level;
         if (this.level == null) return;
 

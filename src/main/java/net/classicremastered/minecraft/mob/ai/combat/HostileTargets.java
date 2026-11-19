@@ -8,6 +8,7 @@ import net.classicremastered.minecraft.level.tile.LadderBlock;
 import net.classicremastered.minecraft.mob.Defender;
 import net.classicremastered.minecraft.mob.Mob;
 import net.classicremastered.minecraft.mob.StickFigure;
+import net.classicremastered.minecraft.mob.Worker;
 import net.classicremastered.minecraft.mob.ai.stickfigure.StickFigurePowers;
 import net.classicremastered.minecraft.model.Vec3D;
 import net.classicremastered.minecraft.path.Pathfinder;
@@ -28,6 +29,7 @@ public final class HostileTargets {
                 && !living.removed
                 && living.health > 0
                 && (target instanceof Defender
+                        || target instanceof Worker
                         || target instanceof Player
                                 && !CreativeModeHelper.shouldIgnoreTarget(target));
     }
@@ -80,7 +82,7 @@ public final class HostileTargets {
     public static boolean canLocate(Mob mob, Entity target) {
         return target.level == mob.level
                 && (!(mob instanceof StickFigure) || StickmansHouse.canFightBoss(mob.level, target))
-                && (!(target instanceof Player)
+                && (!(target instanceof Player || target instanceof Worker)
                         || hasLineOfSight(mob, target)
                         || mob instanceof StickFigure boss
                                 && StickFigurePowers.findSupport(boss, target) != null

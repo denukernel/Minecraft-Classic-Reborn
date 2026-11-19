@@ -1,0 +1,36 @@
+{
+  "name": "Miner",
+  "registryId": 94,
+  "modelKey": "miner",
+  "texture": "/char.png",
+  "spawnCommand": "/spawn Miner 1",
+  "price": 30,
+  "defaultHelmet": "Golden Helmet",
+  "ownedFiles": [
+    "src/main/java/net/classicremastered/minecraft/mob/Miner.java",
+    "src/main/java/net/classicremastered/minecraft/mob/MinerAI.java",
+    "src/main/resources/items/spawn_eggs/miner.png",
+    "mob-prototypes/miner/miner.mmdl",
+    "mob-prototypes/miner/steve.png",
+    "mob-prototypes/miner/manifest.json"
+  ],
+  "sharedIntegrationFiles": [
+    "src/main/java/net/classicremastered/minecraft/mob/Worker.java",
+    "src/main/java/net/classicremastered/minecraft/mob/WorkerAI.java",
+    "src/main/java/net/classicremastered/minecraft/mob/Companion.java",
+    "src/main/java/net/classicremastered/minecraft/model/WorkerModel.java",
+    "src/main/java/net/classicremastered/minecraft/model/ModelManager.java",
+    "src/main/java/net/classicremastered/minecraft/render/entity/EntityRenderBootstrap.java",
+    "src/main/java/net/classicremastered/minecraft/mob/MobRegistry.java",
+    "src/main/java/net/classicremastered/minecraft/gui/ShopScreen.java",
+    "src/main/java/net/classicremastered/minecraft/gui/DefenderEquipmentScreen.java",
+    "src/main/java/net/classicremastered/minecraft/gui/HUDScreen.java",
+    "src/main/java/net/classicremastered/minecraft/InputManager.java",
+    "src/main/java/net/classicremastered/minecraft/chat/commands/SpawnMobCommand.java",
+    "src/main/java/net/classicremastered/minecraft/level/itemstack/ItemSpawnEgg.java",
+    "src/main/java/net/classicremastered/minecraft/level/itemstack/Equipment.java",
+    "src/main/java/net/classicremastered/minecraft/render/EquipmentRenderer.java"
+  ],
+  "integration": "registry, creative egg, marketplace, owner equipment menu, and world persistence",
+  "animation": "classic Steve UVs with mirrored limbs; equipped golden helmet uses the regular armor renderer and can be removed"
+}

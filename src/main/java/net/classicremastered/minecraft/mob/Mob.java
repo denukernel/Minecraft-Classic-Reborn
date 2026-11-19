@@ -16,7 +16,9 @@ import net.classicremastered.util.MathHelper;
 import org.lwjgl.opengl.GL11;
 
 public abstract class Mob extends Entity {
+    private static final int KNOCKBACK_TICKS = 10;
     private transient Entity forcedFallAttacker;
+    private transient int knockbackTicks;
 
     public transient net.classicremastered.minecraft.level.itemstack.MobBattle.Fight battle;
     public boolean persistent;
@@ -249,6 +251,7 @@ public abstract class Mob extends Entity {
         super.setPos(x, y, z);
         hasPreviousFeetY = false;
         forcedFallAttacker = null;
+        knockbackTicks = 0;
     }
 
     public void markForcedFall(Entity attacker) {
@@ -394,6 +397,9 @@ public abstract class Mob extends Entity {
                 && !net.classicremastered.minecraft.mob.ai.MobRiding.driveMount(this)) {
             this.aiStep();
             net.classicremastered.minecraft.mob.ai.MobRiding.findJockeyMount(this);
+        }
+        if (knockbackTicks > 0) {
+            knockbackTicks--;
         }
 
         if (remainingFireTicks > 0 && isWetForFire()) extinguishFire();
@@ -764,9 +770,19 @@ public abstract class Mob extends Entity {
         if (mag > 0.0F && Float.isFinite(mag)) {
             this.xd -= dx / mag * power;
             this.zd -= dz / mag * power;
+            markKnockback();
         }
         this.yd += 0.4F;
-        if (this.yd > 0.4F) this.yd = 0.4F;
+        if (this.yd > 0.4F)
+            this.yd = 0.4F;
+    }
+
+    public final void markKnockback() {
+        knockbackTicks = KNOCKBACK_TICKS;
+    }
+
+    public final boolean isInKnockback() {
+        return knockbackTicks > 0;
     }
 
     public void animateHurt(float dx, float dz) {

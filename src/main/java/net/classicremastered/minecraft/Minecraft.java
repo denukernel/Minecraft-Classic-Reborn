@@ -1402,7 +1402,7 @@ public final class Minecraft implements Runnable {
     }
 
     /** True if the target entity is within attack reach of the player. */
-    boolean entityWithinReach(Entity e) {
+    public boolean entityWithinReach(Entity e) {
         if (e == null || this.player == null) return false;
 
         // Distance from player position to entity position

@@ -1,6 +1,11 @@
 package net.classicremastered.minecraft.gui;
 
 import net.classicremastered.minecraft.level.itemstack.*;
+import net.classicremastered.minecraft.mob.Builder;
+import net.classicremastered.minecraft.mob.Companion;
+import net.classicremastered.minecraft.mob.Defender;
+import net.classicremastered.minecraft.mob.Miner;
+import net.classicremastered.minecraft.mob.Worker;
 import net.classicremastered.minecraft.player.Player;
 
 import java.util.*;
@@ -30,7 +35,9 @@ public final class ShopScreen extends GuiScreen {
         }
         ItemRegistry.bootstrap();
         offers.clear();
-        offers.add(new Offer(-78, 1, 30, "Defender"));
+        offers.add(new Offer(-Defender.REGISTRY_ID, 1, Defender.PRICE, "Defender"));
+        offers.add(new Offer(-Builder.REGISTRY_ID, 1, Worker.PRICE, "Builder"));
+        offers.add(new Offer(-Miner.REGISTRY_ID, 1, Worker.PRICE, "Miner"));
         offers.add(new Offer(Item.BOW.id + 256, 1, 20, "Bow"));
         offers.add(new Offer(Equipment.ARROW.id + 256, 5, 5, "5 Arrows"));
         for (Equipment.Gear gear : Equipment.GEAR.values())
@@ -109,11 +116,9 @@ public final class ShopScreen extends GuiScreen {
         int n = page * 5 + b.id;
         if (n < 0 || n >= offers.size()) return;
         Offer o = offers.get(n);
-        minecraft.hud.addChat(
-                (o.raw == -78
-                                ? net.classicremastered.minecraft.mob.Defender.purchase(
-                                        minecraft.player)
-                                : purchase(minecraft.player, o.raw, o.count, o.price))
+        minecraft.hud.addChat((o.raw < 0
+                ? Companion.hire(minecraft.player, (short) -o.raw, o.price)
+                : purchase(minecraft.player, o.raw, o.count, o.price))
                         ? "&aPurchased " + o.name
                         : "&cNot enough coins, inventory space, or safe ground nearby.");
     }

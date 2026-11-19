@@ -114,6 +114,7 @@ public final class BlockSelectScreen extends InventoryScreen {
                             || b == Block.CHEST
                             || b == Block.JUKEBOX
                             || b == Block.WORKBENCH
+                            || b == Block.SPAWN_EGG_RANDOMIZER
                             || b
                                     instanceof
                                     net.classicremastered.minecraft.level.tile.StructureBlock
@@ -163,6 +164,8 @@ public final class BlockSelectScreen extends InventoryScreen {
                         item instanceof ToolItem && !gear
                                 || item == Item.ENDER_PEARL
                                 || item == Item.OAK_SIGN
+                                || item == Item.OAK_DOOR
+                                || item instanceof NameTagItem
                                 || item.id == Item.REDSTONE_DUST_ID
                                 || turretSupply;
                 if ((tab == 0

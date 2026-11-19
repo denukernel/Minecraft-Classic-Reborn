@@ -15,12 +15,13 @@ public final class Equipment {
     public static Item STICK, LEATHER, STRING, ARROW;
     public static final int[] SWORDS = {21, 22, 2, 38, 39}, AXES = {23, 24, 25, 40, 41};
     public static final int DIAMOND_SHOVEL = 42, GOLDEN_SHOVEL = 43;
+    public static final int GOLDEN_HELMET = 200;
     public static final int[] PICKAXES = {211, 212, 3, 213, 214};
     public static final int[] SHOVELS = {215, 216, 4, DIAMOND_SHOVEL, GOLDEN_SHOVEL};
     public static final int[][] ARMOR = {
         {26, 27, 28, 29},
         {30, 31, 32, 33},
-        {200, 201, 202, 203},
+        {GOLDEN_HELMET, 201, 202, 203},
         {204, 205, 206, 207},
         {217, 218, 219, 220},
         {221, 222, 223, 224},
@@ -335,7 +336,7 @@ public final class Equipment {
             int raw = e.getInt("Slot" + s);
             Gear g = gear(raw);
             boolean valid =
-                    m instanceof Defender
+                    m instanceof net.classicremastered.minecraft.mob.Companion
                             ? Defender.equipmentSlot(raw) == s
                             : g != null && (s == 4 ? g.slot < 0 : g.slot == s);
             int equipped = valid ? raw : 0;

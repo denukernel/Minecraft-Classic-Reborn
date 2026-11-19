@@ -83,6 +83,7 @@ public final class CreativeInventoryBlocks {
         allowedBlocks.add(Block.LUCKY_BLOCK);
         allowedBlocks.add(Block.GRASS);
         allowedBlocks.add(Block.WORKBENCH);
+        allowedBlocks.add(Block.SPAWN_EGG_RANDOMIZER);
         allowedBlocks.add(Block.JUKEBOX);
         allowedBlocks.add(Block.STRUCTURE_ALPHA);
         allowedBlocks.add(Block.STRUCTURE_BETA);

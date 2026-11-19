@@ -382,6 +382,11 @@ public final class HUDScreen extends Screen {
             // Crosshair
             // --------------------------------------------------------------------
             drawHudSprite(tm.load("/gui/hud/crosshair.png"), width / 2 - 7, height / 2 - 7, 16);
+            if (mc.currentScreen == null && !showDebug && mc.selected != null
+                    && mc.selected.entity instanceof net.classicremastered.minecraft.mob.Companion companion
+                    && companion.canControl(mc.player)) {
+                renderCompanionStatus(font, companion);
+            }
             if (mc.currentScreen == null && mc.input != null) {
                 float charge = mc.input.attackCharge(partial);
                 if (charge < 1) {
@@ -651,5 +656,23 @@ public final class HUDScreen extends Screen {
                         ? net.classicremastered.minecraft.util.FileOpener.editImage(file)
                         : net.classicremastered.minecraft.util.FileOpener.openImage(file);
         if (!opened) addChat("&cCould not open " + file.getName());
+    }
+
+    private void renderCompanionStatus(FontRenderer font,
+            net.classicremastered.minecraft.mob.Companion companion) {
+        var mob = companion.mob();
+        String name = mob.customName == null
+                ? net.classicremastered.minecraft.mob.MobRegistry.displayName(mob.getRegistryId())
+                : mob.customName;
+        String stats = name + "  " + mob.health + "/" + companion.maxHealth();
+        String work = companion.activity();
+        int center = width / 2, y = height / 2 + 16;
+        int half = Math.max(font.getWidth(stats), font.getWidth(work)) / 2 + 5;
+        drawBox(center - half, y, center + half, y + (work.isEmpty() ? 15 : 25), 0xA0181818);
+        drawCenteredString(font, stats, center, y + 4, 0xFFFFFF);
+        if (!work.isEmpty())
+            drawCenteredString(font, work, center, y + 14, 0xD8D8D8);
+        GL11.glColor4f(1, 1, 1, 1);
+        GL11.glEnable(GL11.GL_BLEND);
     }
 }

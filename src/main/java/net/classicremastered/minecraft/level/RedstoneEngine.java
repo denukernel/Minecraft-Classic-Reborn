@@ -2,6 +2,7 @@ package net.classicremastered.minecraft.level;
 
 import net.classicremastered.minecraft.Entity;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
+import net.classicremastered.minecraft.level.structure.HouseStructure;
 import net.classicremastered.minecraft.level.tile.*;
 import net.classicremastered.minecraft.phys.AABB;
 import net.classicremastered.nbt.*;
@@ -110,6 +111,12 @@ public final class RedstoneEngine {
     public State state(int x, int y, int z) {
         Pos p = new Pos(x, y, z);
         int id = level.getTile(x, y, z);
+        if (id == Block.CHEST.id && level instanceof LevelInfiniteTerrain terrain) {
+            SimpleChunk chunk = terrain.chunks().tryGet(x >> 4, z >> 4);
+            if (chunk != null && p.equals(chunk.houseChest)) {
+                initializeHouseChest(chunk, terrain.randomSeed);
+            }
+        }
         State state = states.get(p);
         if (state == null || state.block != id) {
             state = new State(id);
@@ -120,6 +127,18 @@ public final class RedstoneEngine {
             net.classicremastered.minecraft.level.structure.DesertPyramid.fillLoot(level, p, state);
         }
         return state;
+    }
+
+    void initializeHouseChest(SimpleChunk chunk, long seed) {
+        Pos chest = chunk.houseChest;
+        if (chest == null) return;
+        int index = SimpleChunk.idx(chest.x() & 15, chest.y(), chest.z() & 15, chunk.height);
+        if ((chunk.blocks[index] & 255) == Block.CHEST.id) {
+            State inventory = new State(Block.CHEST.id);
+            HouseStructure.fillChest(chest, inventory, seed);
+            states.put(chest, inventory);
+        }
+        chunk.houseChest = null;
     }
 
     public void changed(int x, int y, int z) {

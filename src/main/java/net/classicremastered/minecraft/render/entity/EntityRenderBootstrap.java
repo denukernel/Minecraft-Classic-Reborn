@@ -16,6 +16,8 @@ public final class EntityRenderBootstrap {
         RenderManager.register(NetworkPlayer.class, player);
         RenderManager.register(Bot.class, new ModelMobRenderer<>(human));
         RenderManager.register(Defender.class, new ModelMobRenderer<>(human));
+        RenderManager.register(Builder.class, new ModelMobRenderer<>(mm.getModel("builder")));
+        RenderManager.register(Miner.class, new ModelMobRenderer<>(mm.getModel("miner")));
         RenderManager.register(Steve.class, new ModelMobRenderer<>(human));
         RenderManager.register(FakeHerobrine.class, new ModelMobRenderer<>(human));
         RenderManager.register(FakePlayerClone.class, new ModelMobRenderer<>(human));

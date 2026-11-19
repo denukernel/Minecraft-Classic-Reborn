@@ -2,9 +2,14 @@ package net.classicremastered.minecraft.level.structure;
 
 import java.util.Arrays;
 import java.util.Random;
+import net.classicremastered.minecraft.level.GeneratedOccupant;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.RedstoneEngine.Pos;
+import net.classicremastered.minecraft.level.RedstoneEngine.State;
+import net.classicremastered.minecraft.level.itemstack.Equipment;
+import net.classicremastered.minecraft.level.itemstack.Item;
+import net.classicremastered.minecraft.level.itemstack.ItemRegistry;
 import net.classicremastered.minecraft.level.tile.Block;
-import net.classicremastered.minecraft.mob.ai.BasicAI;
 
 public final class HouseStructure implements Structure {
 
@@ -15,6 +20,49 @@ public final class HouseStructure implements Structure {
 
     // Footprint (outer): 7×7×5 Interior: 5×5×3
     private static final int W = 7, D = 7, H = 5;
+
+    public static Pos chestPosition(int x, int floor, int z) {
+        return new Pos(x + W - 2, floor + 1, z + D - 2);
+    }
+
+    public static void fillChest(Pos pos, State chest, long seed) {
+        ItemRegistry.bootstrap();
+        Random loot =
+                new Random(
+                        seed
+                                ^ pos.x() * 341873128712L
+                                ^ pos.y() * 104729L
+                                ^ pos.z() * 132897987541L
+                                ^ 0x484F555345L);
+        int[] supplies = {
+            Item.BEETROOT.id + 256,
+            Equipment.STICK.id + 256,
+            Item.COAL_ID + 256,
+            Equipment.STRING.id + 256,
+            Equipment.ARROW.id + 256,
+            Block.TORCH.id
+        };
+        chest.facing = 2;
+        putLoot(chest, loot, Item.APPLE.id + 256);
+        int stacks = 2 + loot.nextInt(4);
+        for (int i = 0; i < stacks; i++) {
+            int pick = i + loot.nextInt(supplies.length - i);
+            int item = supplies[pick];
+            supplies[pick] = supplies[i];
+            supplies[i] = item;
+            putLoot(chest, loot, item);
+        }
+        chest.lootInitialized = true;
+    }
+
+    private static void putLoot(State chest, Random random, int item) {
+        int slot;
+        do {
+            slot = random.nextInt(chest.counts.length);
+        } while (chest.counts[slot] != 0);
+        chest.items[slot] = item;
+        chest.counts[slot] = 1 + random.nextInt(Math.min(4, Item.stackLimit(item)));
+    }
 
     private static boolean isLiquid(int id) {
         return id == Block.WATER.id || id == Block.STATIONARY_WATER.id || id == Block.LAVA.id
@@ -171,10 +219,14 @@ public final class HouseStructure implements Structure {
         level.setTile(doorX, padY + 1, doorZ, 0);
         level.setTile(doorX, padY + 2, doorZ, 0);
 
-        var occupants =
-                new java.util.ArrayList<net.classicremastered.minecraft.level.GeneratedOccupant>();
-        net.classicremastered.minecraft.level.GeneratedOccupant.offerHouse(occupants, rand.nextLong(),
-                x + W / 2, padY + 1, z + D / 2);
+        long houseSeed = rand.nextLong();
+        Pos chest = chestPosition(x, padY, z);
+        if (level.setTile(chest.x(), chest.y(), chest.z(), Block.CHEST.id)) {
+            fillChest(chest, level.redstone().state(chest.x(), chest.y(), chest.z()), houseSeed);
+        }
+
+        var occupants = new java.util.ArrayList<GeneratedOccupant>();
+        GeneratedOccupant.offerHouse(occupants, houseSeed, x + W / 2, padY + 1, z + D / 2);
         for (var occupant : occupants) occupant.spawn(level);
         return true;
     }

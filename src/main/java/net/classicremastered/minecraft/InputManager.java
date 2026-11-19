@@ -5,6 +5,7 @@ import net.classicremastered.minecraft.chat.ChatInputScreen;
 import net.classicremastered.minecraft.entity.BossFireball;
 import net.classicremastered.minecraft.entity.SignEntity;
 import net.classicremastered.minecraft.gamemode.CreativeGameMode;
+import net.classicremastered.minecraft.gui.NameTagScreen;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.itemstack.BowItem;
 import net.classicremastered.minecraft.level.itemstack.DarkStickItem;
@@ -14,6 +15,7 @@ import net.classicremastered.minecraft.level.itemstack.GrapplingHookItem;
 import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.level.itemstack.Item;
 import net.classicremastered.minecraft.level.itemstack.MobWandItem;
+import net.classicremastered.minecraft.level.itemstack.NameTagItem;
 import net.classicremastered.minecraft.level.itemstack.PhysicsGunItem;
 import net.classicremastered.minecraft.level.itemstack.TurretItems;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -250,6 +252,7 @@ public class InputManager {
                 || item instanceof PhysicsGunItem
                 || item instanceof GrapplingHookItem
                 || item instanceof MobWandItem
+                || item instanceof NameTagItem
                 || item instanceof net.classicremastered.minecraft.level.itemstack.BoatItem);
     }
 
@@ -319,12 +322,19 @@ public class InputManager {
         if (button == 0) swingHeldItem();
 
         if (button == 1 && mc.selected != null) {
+            if (selId == NameTagItem.ID + 256 && mc.selected.entity instanceof Mob mob
+                    && !(mob instanceof Player)) {
+                NameTagItem tag = (NameTagItem) Item.items[NameTagItem.ID];
+                if (tag.canApply(mc, mob))
+                    mc.setCurrentScreen(new NameTagScreen(tag, mob));
+                return;
+            }
             if (mc.selected.entity
-                    instanceof net.classicremastered.minecraft.mob.Defender defender) {
-                if (mc.entityWithinReach(defender) && defender.canControl(mc.player))
+                    instanceof net.classicremastered.minecraft.mob.Companion companion) {
+                if (mc.entityWithinReach(companion.mob()) && companion.canControl(mc.player))
                     mc.setCurrentScreen(
                             new net.classicremastered.minecraft.gui.DefenderEquipmentScreen(
-                                    defender));
+                                    companion));
                 return;
             }
             if (mc.selected.entity instanceof Villager villager) {
@@ -445,6 +455,12 @@ public class InputManager {
                 int tid = mc.level.getTile(ox, oy, oz);
                 Block tgt = tid > 0 ? Block.blocks[tid] : null;
                 if (tgt != null && tgt.onRightClick(mc.level, ox, oy, oz, mc.player, face)) return;
+                if (Item.OAK_DOOR instanceof net.classicremastered.minecraft.level.itemstack.BuilderDoorItem door
+                        && selId == door.id + 256) {
+                    if (door.place(mc.player, ox, oy, oz, face))
+                        swingHeldItem();
+                    return;
+                }
                 if (Item.OAK_SIGN
                                 instanceof
                                 net.classicremastered.minecraft.level.itemstack.SignItem sign

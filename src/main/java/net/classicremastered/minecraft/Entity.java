@@ -3,6 +3,7 @@ package net.classicremastered.minecraft;
 import net.classicremastered.minecraft.entity.BoatEntity;
 import net.classicremastered.minecraft.level.BlockMap;
 import net.classicremastered.minecraft.level.Level;
+import net.classicremastered.minecraft.level.itemstack.GravityGunItem;
 import net.classicremastered.minecraft.level.liquid.LiquidType;
 import net.classicremastered.minecraft.level.tile.LiquidBlock;
 import net.classicremastered.minecraft.level.tile.Block;
@@ -473,7 +474,7 @@ public abstract class Entity implements Serializable {
 
     private ArrayList<AABB> movementColliders(AABB swept) {
         ArrayList<AABB> collisions = level.getCubes(swept);
-        if (this instanceof Mob mob && mob.health > 0 && !(mob instanceof Player)) {
+        if (this instanceof Mob mob && mob.health > 0 && !(mob instanceof Player) && !mob.isInKnockback()) {
             MobHazards.addCactusClearance(level, swept, collisions);
         }
         if (level.blockMap == null) {
@@ -515,12 +516,11 @@ public abstract class Entity implements Serializable {
     }
 
     private void addMobHeatClearance(ArrayList<AABB> collisions, float dx, float dz, float lift) {
-        if ((dx != 0 || dz != 0)
-                && this instanceof Mob mob
-                && mob.health > 0
-                && !(mob instanceof Player)) {
-            MobHazards.addHorizontalHeatClearance(
-                    level, bb, bb.expand(dx, 0, dz), collisions, lift);
+        if ((dx != 0 || dz != 0) && this instanceof Mob mob && mob.health > 0 && !(mob instanceof Player)
+                && !mob.isInKnockback()) {
+            // Lava clearance is for voluntary movement, so let the gravity gun pull a held mob through it.
+            boolean avoidLava = !GravityGunItem.grabbedMobs.containsValue(mob);
+            MobHazards.addHorizontalHeatClearance(level, bb, bb.expand(dx, 0, dz), collisions, lift, avoidLava);
         }
     }
 

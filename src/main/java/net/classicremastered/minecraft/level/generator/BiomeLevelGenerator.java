@@ -3,13 +3,16 @@ package net.classicremastered.minecraft.level.generator;
 import net.classicremastered.minecraft.level.GeneratedOccupant;
 import net.classicremastered.minecraft.level.Level;
 import net.classicremastered.minecraft.level.LevelInfiniteTerrain;
+import net.classicremastered.minecraft.level.RedstoneEngine.Pos;
 import net.classicremastered.minecraft.level.infinite.SimpleChunk;
 import net.classicremastered.minecraft.level.structure.DesertPyramid;
+import net.classicremastered.minecraft.level.structure.HouseStructure;
 import net.classicremastered.minecraft.level.tile.Block;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 
 /** Seeded terrain with coherent climate regions and biome vegetation. */
 public final class BiomeLevelGenerator {
@@ -292,7 +295,8 @@ public final class BiomeLevelGenerator {
                 flat,
                 chunk.generatedOccupants,
                 read,
-                write);
+                write,
+                chest -> chunk.houseChest = chest);
         coverVegetationAndSnow(worldX, worldZ, 16, chunk.height, flat, read, write);
         chunk.meshed = false;
     }
@@ -356,7 +360,8 @@ public final class BiomeLevelGenerator {
             boolean flat,
             List<GeneratedOccupant> occupants,
             ReadBlock read,
-            WriteBlock write) {
+            WriteBlock write,
+            Consumer<Pos> houseChest) {
         int sea = seaLevel(depth);
         for (int cz = Math.floorDiv(minZ, 64); cz <= Math.floorDiv(maxZ - 1, 64); cz++) {
             for (int cx = Math.floorDiv(minX, 64); cx <= Math.floorDiv(maxX - 1, 64); cx++) {
@@ -405,6 +410,14 @@ public final class BiomeLevelGenerator {
                             write.set(wx, y, wz, id);
                         }
                     }
+                }
+                Pos chest = HouseStructure.chestPosition(x, floor, z);
+                if (chest.x() >= minX
+                        && chest.x() < maxX
+                        && chest.z() >= minZ
+                        && chest.z() < maxZ) {
+                    write.set(chest.x(), chest.y(), chest.z(), Block.CHEST.id);
+                    houseChest.accept(chest);
                 }
             }
         }
@@ -552,7 +565,20 @@ public final class BiomeLevelGenerator {
         level.largeBiomes = largeBiomes;
         DesertPyramid.placeInFinite(level, seed);
         decorateSurface(
-                0, 0, size, size, depth, flat, occupants, level::getTile, level::setTileNoUpdate);
+                0,
+                0,
+                size,
+                size,
+                depth,
+                flat,
+                occupants,
+                level::getTile,
+                level::setTileNoUpdate,
+                chest ->
+                        HouseStructure.fillChest(
+                                chest,
+                                level.redstone().state(chest.x(), chest.y(), chest.z()),
+                                seed));
         if (!flat) {
             net.classicremastered.minecraft.level.structure.CobblestoneTower.placeFinite(
                     level, seed);

@@ -163,6 +163,7 @@ public final class MobRegistry {
         if (entry == null
                 || entry.type == CrossbowTurret.class
                 || Defender.class.isAssignableFrom(entry.type)
+                || Worker.class.isAssignableFrom(entry.type)
                 || net.classicremastered.minecraft.player.Player.class.isAssignableFrom(entry.type)
                 || Bot.class.isAssignableFrom(entry.type)) return null;
         if (hostileTurretType(entry.type)) return TargetGroup.HOSTILE;
@@ -195,6 +196,8 @@ public final class MobRegistry {
         if (bootstrapped) return;
 
         register(Defender.REGISTRY_ID, "Defender", Defender.class, Defender::new);
+        register(Builder.REGISTRY_ID, "Builder", Builder.class, Builder::new);
+        register(Miner.REGISTRY_ID, "Miner", Miner.class, Miner::new);
 
         // --- Hostiles / undead / bosses ---
         tryRegister((short) 1, "Zombie", Zombie.class, (l, x, y, z) -> new Zombie(l, x, y, z));
